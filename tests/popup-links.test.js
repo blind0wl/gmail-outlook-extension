@@ -1,32 +1,30 @@
 import test from "node:test";
 import assert from "node:assert";
 import {
-  gmailAccountOrder,
   gmailThreadUrl,
   outlookThreadUrl,
   threadUrl,
   searchUrl,
+  outlookSearchUrl,
+  isCardSelfKeydown,
   messageIdOf,
   GMAIL_SEARCH_URL,
-  OUTLOOK_SEARCH_URL,
 } from "../src/popup/links.js";
 
-const GMAIL_ACCOUNTS = ["work@gmail.com", "personal@gmail.com"];
-
-test("gmail thread urls carry the authuser slot per configured account", () => {
+test("gmail thread urls pin the mailbox with authuser email", () => {
   assert.equal(
-    gmailThreadUrl("work@gmail.com", "abc", GMAIL_ACCOUNTS),
-    "https://mail.google.com/mail/u/0/#inbox/abc",
+    gmailThreadUrl("work@gmail.com", "abc"),
+    "https://mail.google.com/mail/?authuser=work%40gmail.com#inbox/abc",
   );
   assert.equal(
-    gmailThreadUrl("personal@gmail.com", "abc", GMAIL_ACCOUNTS),
-    "https://mail.google.com/mail/u/1/#inbox/abc",
+    gmailThreadUrl("personal@gmail.com", "abc"),
+    "https://mail.google.com/mail/?authuser=personal%40gmail.com#inbox/abc",
   );
 });
 
 test("gmail thread url falls back to slot-less url for unknown account", () => {
   assert.equal(
-    gmailThreadUrl("other@gmail.com", "abc", GMAIL_ACCOUNTS),
+    gmailThreadUrl("", "abc"),
     "https://mail.google.com/mail/#inbox/abc",
   );
 });
@@ -45,42 +43,46 @@ test("outlook thread url falls back to slot 0 without an account", () => {
   );
 });
 
-test("threadUrl keys off provider plus id and routes per account", () => {
+test("every built link carries the account address", () => {
+  const cases = [
+    threadUrl({ key: "gmail:abc", provider: "gmail", account: "work@gmail.com" }),
+    threadUrl({ key: "gmail:abc", provider: "gmail", account: "personal@gmail.com" }),
+    threadUrl({ key: "outlook:A1", provider: "outlook", account: "you@outlook.com" }),
+    outlookSearchUrl("you@outlook.com"),
+    searchUrl("outlook", "you@outlook.com"),
+  ];
   assert.equal(
-    threadUrl(
-      { key: "gmail:abc", provider: "gmail", account: "personal@gmail.com" },
-      GMAIL_ACCOUNTS,
-    ),
-    "https://mail.google.com/mail/u/1/#inbox/abc",
-  );
-  assert.equal(
-    threadUrl(
-      { key: "outlook:ABC123", provider: "outlook", account: "you@outlook.com" },
-      GMAIL_ACCOUNTS,
-    ),
-    "https://outlook.live.com/mail/you%40outlook.com/inbox/id/ABC123",
+    cases.filter((url) => /work%40gmail\.com|personal%40gmail\.com|you%40outlook\.com/.test(url)).length,
+    cases.length,
   );
 });
 
-test("gmailAccountOrder keeps configured gmail order only", () => {
-  assert.deepEqual(
-    gmailAccountOrder([
-      { provider: "outlook", account: "you@outlook.com" },
-      { provider: "gmail", account: "work@gmail.com" },
-      { provider: "gmail", account: "personal@gmail.com" },
-    ]),
-    GMAIL_ACCOUNTS,
-  );
-});
-
-test("search follows the active filter", () => {
+test("search follows the active filter with account-aware outlook view", () => {
   assert.equal(searchUrl("all"), GMAIL_SEARCH_URL);
   assert.equal(searchUrl("gmail"), GMAIL_SEARCH_URL);
-  assert.equal(searchUrl("outlook"), OUTLOOK_SEARCH_URL);
-  assert.ok(OUTLOOK_SEARCH_URL.endsWith("/mail/0/search"));
+  assert.equal(
+    searchUrl("outlook", "you@outlook.com"),
+    "https://outlook.live.com/mail/you%40outlook.com/search",
+  );
+  assert.equal(searchUrl("outlook", ""), "https://outlook.live.com/mail/0/search");
 });
 
 test("messageIdOf strips the provider prefix", () => {
   assert.equal(messageIdOf("gmail:abc"), "abc");
   assert.equal(messageIdOf("outlook:A=B"), "A=B");
+});
+
+test("card keys mark read only when targeted at the card itself", () => {
+  const card = { id: "card" };
+  const button = { id: "open" };
+  // Enter/Space on the focused card: handler runs, marks read.
+  assert.equal(isCardSelfKeydown({ key: "Enter", target: card, currentTarget: card }), true);
+  assert.equal(isCardSelfKeydown({ key: " ", target: card, currentTarget: card }), true);
+  // Enter/Space bubbled from the nested Open button: handler ignores, so
+  // the button keeps native activation and still opens the thread.
+  assert.equal(isCardSelfKeydown({ key: "Enter", target: button, currentTarget: card }), false);
+  assert.equal(isCardSelfKeydown({ key: " ", target: button, currentTarget: card }), false);
+  // Other keys never mark read wherever they land.
+  assert.equal(isCardSelfKeydown({ key: "a", target: card, currentTarget: card }), false);
+  assert.equal(isCardSelfKeydown({ key: "Tab", target: card, currentTarget: card }), false);
 });

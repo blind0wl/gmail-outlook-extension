@@ -4,17 +4,15 @@
 // where `key` is `provider + ':' + id`. Makes no network calls.
 // Sign-in buttons and error states belong to Task 9, not this task.
 
-import { threadUrl, searchUrl, gmailAccountOrder } from "./links.js";
+import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
 
 (function () {
   "use strict";
 
   var CACHE_KEY = "mailCache";
-  var ACCOUNTS_KEY = "accounts";
 
   var filter = "all";
   var items = [];
-  var gmailAccounts = [];
 
   function storageLocal() {
     return globalThis.chrome && chrome.storage ? chrome.storage.local : null;
@@ -74,6 +72,18 @@ import { threadUrl, searchUrl, gmailAccountOrder } from "./links.js";
     var sorted = items.slice().sort(function (a, b) { return b.date - a.date; });
     if (filter === "all") return sorted;
     return sorted.filter(function (item) { return item.provider === filter; });
+  }
+
+  // Account for the Outlook-filter search view: newest cached Outlook
+  // address, or "" for the slot-0 fallback in links.js.
+  function newestOutlookAccount() {
+    var best = null;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].provider === "outlook" && items[i].account) {
+        if (!best || items[i].date > best.date) best = items[i];
+      }
+    }
+    return best ? best.account : "";
   }
 
   function renderHeader() {
@@ -163,7 +173,7 @@ import { threadUrl, searchUrl, gmailAccountOrder } from "./links.js";
       open.addEventListener("click", function (event) {
         event.stopPropagation();
         markRead(item.key);
-        openUrl(threadUrl(item, gmailAccounts));
+        openUrl(threadUrl(item));
       });
       text.appendChild(open);
 
@@ -173,11 +183,12 @@ import { threadUrl, searchUrl, gmailAccountOrder } from "./links.js";
       card.addEventListener("click", function () {
         markRead(item.key);
       });
+      // Card-level keys only: keydowns bubbling up from the nested Open
+      // button are ignored so the button keeps native Enter/Space behavior.
       card.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          markRead(item.key);
-        }
+        if (!isCardSelfKeydown(event)) return;
+        event.preventDefault();
+        markRead(item.key);
       });
 
       list.appendChild(card);
@@ -197,12 +208,11 @@ import { threadUrl, searchUrl, gmailAccountOrder } from "./links.js";
       render();
       return;
     }
-    // Account list drives Gmail authuser slots per card; absence keeps the
-    // slot-less fallback in links.js. Storage reads only, no network.
-    Promise.resolve(store.get([CACHE_KEY, ACCOUNTS_KEY])).then(function (data) {
+    // Thread links carry the account address themselves, so only the mail
+    // cache is needed. Storage reads only, no network.
+    Promise.resolve(store.get(CACHE_KEY)).then(function (data) {
       var cached = data ? data[CACHE_KEY] : null;
       items = Array.isArray(cached) ? cached : [];
-      gmailAccounts = gmailAccountOrder(data ? data[ACCOUNTS_KEY] : null);
       render();
     });
   }
@@ -216,18 +226,13 @@ import { threadUrl, searchUrl, gmailAccountOrder } from "./links.js";
       });
     }
     document.getElementById("provider-search").addEventListener("click", function () {
-      openUrl(searchUrl(filter));
+      openUrl(searchUrl(filter, newestOutlookAccount()));
     });
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === "local" && changes && (changes[CACHE_KEY] || changes[ACCOUNTS_KEY])) {
-          if (changes[CACHE_KEY]) {
-            var next = changes[CACHE_KEY].newValue;
-            items = Array.isArray(next) ? next : [];
-          }
-          if (changes[ACCOUNTS_KEY]) {
-            gmailAccounts = gmailAccountOrder(changes[ACCOUNTS_KEY].newValue);
-          }
+        if (area === "local" && changes && changes[CACHE_KEY]) {
+          var next = changes[CACHE_KEY].newValue;
+          items = Array.isArray(next) ? next : [];
           render();
         }
       });
