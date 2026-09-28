@@ -1,0 +1,60 @@
+// Google auth for Gmail read-only access.
+//
+// Uses chrome.identity.getAuthToken (Chrome manages the OAuth dance against
+// the client id pinned in manifest.json oauth2 section). Clearing uses
+// chrome.identity.removeCachedAuthToken. No tokens are logged or persisted
+// here; Chrome holds the cached token and charge of refresh.
+
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
+// Single-element array so tests and the manifest can share one source of
+// truth. Manifest oauth2.scopes must stay exactly this scope.
+export const GMAIL_SCOPES = [GMAIL_SCOPE];
+
+function identity() {
+  return globalThis.chrome?.identity;
+}
+
+// Interactive sign in. Pass interactive=false for the silent refresh path
+// (worker calls this after a 401): resolves with a token or rejects.
+export function getGmailToken(interactive = true) {
+  return new Promise((resolve, reject) => {
+    const id = identity();
+    if (!id?.getAuthToken) {
+      reject(new Error("google auth unavailable: chrome.identity missing"));
+      return;
+    }
+    try {
+      id.getAuthToken({ interactive }, (token) => {
+        const err =
+          globalThis.chrome?.runtime?.lastError ?? id.lastError ?? null;
+        if (err || !token) {
+          reject(
+            new Error(`google auth failed at=${new Date().toISOString()}`),
+          );
+          return;
+        }
+        resolve(token);
+      });
+    } catch {
+      reject(new Error(`google auth threw at=${new Date().toISOString()}`));
+    }
+  });
+}
+
+// Sign out helper. Removes one token from Chrome's cache; callers clear
+// each token they hold. Never throws: sign out must be best effort.
+export function clearGmailToken(token) {
+  return new Promise((resolve) => {
+    const id = identity();
+    if (!id?.removeCachedAuthToken || !token) {
+      resolve(false);
+      return;
+    }
+    try {
+      id.removeCachedAuthToken({ token }, () => resolve(true));
+    } catch {
+      resolve(false);
+    }
+  });
+}

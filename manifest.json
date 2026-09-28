@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "description": "One popup for Gmail and Outlook.com mail, local only.",
   "permissions": ["identity", "alarms", "notifications", "storage", "offscreen"],
+  "oauth2": {
+    "scopes": ["https://www.googleapis.com/auth/gmail.readonly"]
+  },
   "host_permissions": [
     "https://gmail.googleapis.com/*",
     "https://accounts.google.com/*",
