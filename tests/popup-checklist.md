@@ -1,0 +1,41 @@
+# Popup checklist (Task 7 — A v5 inbox, manual Chrome pass)
+
+Load unpacked in Chrome (`chrome://extensions`, developer mode) with two
+Gmail accounts plus one Outlook.com account, then eyeball each line.
+Manual Chrome verification was NOT performed in the headless environment;
+tick each box by hand in a real browser.
+
+- [ ] Header reads `Inbox` followed by an unread count, e.g. `Inbox (3)`.
+- [ ] A search icon button labelled `Search mail in provider` sits right of the header.
+- [ ] Clicking the search icon opens provider search in a new tab
+      (Gmail filter/All: `https://mail.google.com/mail/#search`,
+      Outlook filter: `https://outlook.live.com/mail/0/` search view).
+      No inline search box exists in the popup.
+- [ ] Three high-contrast pills read exactly `All`, `Gmail`, `Outlook`.
+- [ ] Selected pill is dark background with white text; unselected pills are
+      white background with dark text and a visible border at 13px or larger.
+- [ ] In `All`, `work@gmail.com` and `personal@gmail.com` read as separate
+      account lines on their own cards (accounts never blur together).
+- [ ] Each card shows provider badge (`Gmail` / `Outlook`) plus the full
+      account address top left, and the message time top right.
+- [ ] Each card shows sender avatar (initial) plus dark subject line
+      (`#111111`, weight 600) plus gray snippet below (`#5f6368`).
+- [ ] Unread cards carry a visible unread dot; clicking a card removes the
+      dot, drops the subject to normal weight, and persists `localRead`
+      through to `chrome.storage.local` key `mailCache`.
+- [ ] Each card has a single `Open` action button that opens the provider
+      thread in a new tab (Gmail: `mail.google.com`, Outlook: `outlook.live.com`).
+- [ ] No compose, reply, archive, delete, or other destructive controls exist.
+- [ ] No sign-in buttons and no error/stale/offline states render
+      (those belong to Task 9).
+- [ ] No console errors while rendering, filtering, marking read, or opening threads.
+- [ ] DevTools Network shows zero requests from the popup itself
+      (it reads `chrome.storage.local` only).
+
+Static checks that cover part of this in headless CI:
+
+- `node --check src/popup/popup.js` — JS parses.
+- `node --test tests/` — full suite passes, no regressions.
+- `grep -rn "fetch(\|XMLHttpRequest\|console\.log" src/popup/` returns nothing
+  (no network calls, no mail content logged).
+- `popup.html` references `popup.css` and `popup.js` only, both resolve.
