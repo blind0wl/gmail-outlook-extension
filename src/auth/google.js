@@ -43,18 +43,30 @@ export function getGmailToken(interactive = true) {
 }
 
 // Sign out helper. Removes one token from Chrome's cache; callers clear
-// each token they hold. Never throws: sign out must be best effort.
+// each token they hold. Resolves true when removed, false when there was
+// nothing to remove (no token or no chrome.identity), and rejects with a
+// sanitized error when removal itself fails so callers can report
+// incomplete sign-out.
 export function clearGmailToken(token) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const id = identity();
     if (!id?.removeCachedAuthToken || !token) {
       resolve(false);
       return;
     }
     try {
-      id.removeCachedAuthToken({ token }, () => resolve(true));
+      id.removeCachedAuthToken({ token }, () => {
+        const err = globalThis.chrome?.runtime?.lastError ?? null;
+        if (err) {
+          reject(
+            new Error(`google sign out failed at=${new Date().toISOString()}`),
+          );
+          return;
+        }
+        resolve(true);
+      });
     } catch {
-      resolve(false);
+      reject(new Error(`google sign out threw at=${new Date().toISOString()}`));
     }
   });
 }

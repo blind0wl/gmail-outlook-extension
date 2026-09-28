@@ -16,6 +16,22 @@ export const MS_SESSION_KEY = "auth.microsoft.graph";
 // Refresh one minute before expiry so a poll never races the clock.
 export const TOKEN_SKEW_MS = 60_000;
 
+// Module-level Entra app id. Task 9 integration calls
+// configureMicrosoftAuth once with the public application id; getGraphToken
+// then keeps its promised one-argument shape. An explicit per-call
+// override still wins when supplied.
+let configuredClientId = null;
+
+// Monotonic epoch: every sign-out bumps it synchronously, invalidating
+// in-flight sign-in/refresh writes captured under an older epoch.
+let sessionGeneration = 0;
+
+// Serializes session writes with removals in FIFO order. Combined with the
+// generation guard, an earlier operation can never restore a cleared
+// session. The tail stays rejection-free so one failure cannot wedge the
+// queue; each caller observes errors through its own handle.
+let sessionTail = Promise.resolve();
+
 function identity() {
   return globalThis.chrome?.identity;
 }
@@ -26,6 +42,41 @@ function sessionStore() {
 
 export function scopeString() {
   return MS_SCOPES.join(" ");
+}
+
+export function configureMicrosoftAuth({ clientId } = {}) {
+  if (!clientId) throw new Error("microsoft auth: clientId required");
+  configuredClientId = clientId;
+}
+
+export function getConfiguredClientId() {
+  return configuredClientId;
+}
+
+function resolveClientId(override) {
+  const id = override ?? configuredClientId;
+  if (!id) throw new Error("microsoft auth: clientId not configured");
+  return id;
+}
+
+function enqueueSessionOp(op) {
+  const run = sessionTail.then(op, op);
+  sessionTail = run.catch(() => {});
+  return run;
+}
+
+// Persists a token record only if no sign-out has intervened since the flow
+// started; otherwise rejects so the caller never uses a token the cleared
+// session no longer holds. Runs inside the session queue, ordered against
+// removals.
+function guardedSessionWrite(record, generation) {
+  return enqueueSessionOp(async () => {
+    if (generation !== sessionGeneration) {
+      throw new Error("microsoft auth superseded by sign out");
+    }
+    await writeSessionRecord(record);
+    return record.accessToken;
+  });
 }
 
 // Redirect comes from Chrome; shape is always
@@ -169,9 +220,15 @@ export function isFresh(record, now = Date.now()) {
 }
 
 // Full interactive sign in: PKCE -> authorize -> code -> token -> session.
-// clientId is the public Entra app id (Personal accounts only); it is a
-// public identifier, never a secret, and is supplied by the caller.
-export async function signInMicrosoft(clientId) {
+// The client id is the public Entra app id (Personal accounts only); it is
+// a public identifier, never a secret. It defaults to the id set via
+// configureMicrosoftAuth, with an explicit argument winning when given.
+export async function signInMicrosoft(clientId, generation = sessionGeneration) {
+  const resolvedId = resolveClientId(clientId);
+  // Epoch is fixed at entry (synchronously, via the default above for
+  // direct callers). getGraphToken captures it before any await and passes
+  // it through so the whole operation shares one epoch: a sign-out
+  // landing anywhere below invalidates the session write at the end.
   const id = identity();
   if (!id?.launchWebAuthFlow) {
     throw new Error("microsoft auth unavailable: chrome.identity missing");
@@ -180,7 +237,7 @@ export async function signInMicrosoft(clientId) {
   const { verifier, challenge } = await generatePkce();
   const state = randomState();
   const authUrl = buildAuthorizeUrl({
-    clientId,
+    clientId: resolvedId,
     redirectUri,
     codeChallenge: challenge,
     state,
@@ -201,18 +258,17 @@ export async function signInMicrosoft(clientId) {
   });
   const code = parseAuthCallback(callbackUrl, state);
   const data = await postToken({
-    client_id: clientId,
+    client_id: resolvedId,
     grant_type: "authorization_code",
     code,
     redirect_uri: redirectUri,
     code_verifier: verifier,
   });
   const record = toRecord(data);
-  await writeSessionRecord(record);
-  return record.accessToken;
+  return guardedSessionWrite(record, generation);
 }
 
-async function tryRefresh(clientId, refreshToken) {
+async function tryRefresh(clientId, refreshToken, generation = sessionGeneration) {
   const data = await postToken({
     client_id: clientId,
     grant_type: "refresh_token",
@@ -221,20 +277,23 @@ async function tryRefresh(clientId, refreshToken) {
   const record = toRecord(data);
   // Preserve the old refresh token if the response rotates none in.
   if (!record.refreshToken) record.refreshToken = refreshToken;
-  await writeSessionRecord(record);
-  return record.accessToken;
+  return guardedSessionWrite(record, generation);
 }
 
-// Primary entry matching the worker's token shape.
+// Primary entry matching the worker's token shape: getGraphToken(interactive).
+// The Entra app id comes from configureMicrosoftAuth (Task 9 integration);
+// an explicit per-call override still wins.
 // Silent when interactive=false: cached-or-refresh only, never a popup.
 // Interactive when true: falls back to the full sign-in flow.
 export async function getGraphToken(interactive = true, { clientId } = {}) {
-  if (!clientId) throw new Error("microsoft auth: clientId required");
+  const resolvedId = resolveClientId(clientId);
+  // Epoch for the whole operation, fixed before any await.
+  const generation = sessionGeneration;
   const cached = await readSessionRecord();
   if (isFresh(cached)) return cached.accessToken;
   if (cached?.refreshToken) {
     try {
-      return await tryRefresh(clientId, cached.refreshToken);
+      return await tryRefresh(resolvedId, cached.refreshToken, generation);
     } catch {
       // Fall through to interactive sign in below.
     }
@@ -242,14 +301,28 @@ export async function getGraphToken(interactive = true, { clientId } = {}) {
   if (!interactive) {
     throw new Error("microsoft auth needs sign in");
   }
-  return signInMicrosoft(clientId);
+  return signInMicrosoft(resolvedId, generation);
 }
 
-// Sign out: drops the session record. Best effort, never throws.
+// Sign out: bumps the epoch first (synchronously, so in-flight flows are
+// invalidated before they can write), then queues removal behind earlier
+// ops. Resolves true when cleared and rejects with a sanitized error when
+// removal fails or no session store exists, so callers can report
+// incomplete sign-out.
 export async function clearGraphToken() {
-  try {
-    await sessionStore()?.remove?.(MS_SESSION_KEY);
-  } catch {
-    // Intentionally silent: sign out must not fail loudly.
-  }
+  sessionGeneration += 1;
+  return enqueueSessionOp(async () => {
+    const store = sessionStore();
+    if (!store?.remove) {
+      throw new Error(
+        "microsoft auth unavailable: chrome.storage.session missing",
+      );
+    }
+    try {
+      await store.remove(MS_SESSION_KEY);
+    } catch {
+      throw new Error("microsoft sign out failed");
+    }
+    return true;
+  });
 }
