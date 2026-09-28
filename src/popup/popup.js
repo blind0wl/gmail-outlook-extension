@@ -1,1 +1,1 @@
-console.log("Gmail plus Outlook shell loaded");
+// Popup entry. Inbox view arrives in Task 7.
