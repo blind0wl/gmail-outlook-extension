@@ -20,6 +20,12 @@ import {
   persistAccountState,
   readAccountState,
 } from "../notify/notify.js";
+import {
+  shouldPlay,
+  isMuted,
+  getSoundSettings,
+  playChime,
+} from "../notify/sound.js";
 
 export const ALARM_NAME = "mail-poll";
 export const DEFAULT_POLL_MS = 60_000;
@@ -187,6 +193,23 @@ export async function pollAll(accounts, deps = {}) {
   if (!manual && newItems.length) {
     for (const group of groupByAccount(newItems)) {
       await notify(group, buildToast(group));
+    }
+  }
+  // New-mail chime: automatic polls with new mail only, never manual
+  // refresh. Mute plus volume come from storage so the worker and the
+  // popup read the same settings. Sound never breaks polling and never
+  // carries mail content: playSound receives only the volume level.
+  if (!manual && newItems.length) {
+    try {
+      const readSettings = deps.readSoundSettings ?? getSoundSettings;
+      const settings = await readSettings();
+      const keys = newItems.map((i) => `${i.provider}:${i.account}`);
+      if (shouldPlay({ manual, muted: isMuted(settings, keys), dnd: deps.dnd === true })) {
+        const playSound = deps.playSound ?? playChime;
+        await playSound(settings.volume);
+      }
+    } catch {
+      // Silent by design; no mail content in logs.
     }
   }
   await setBadge(badge);

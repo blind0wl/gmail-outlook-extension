@@ -23,6 +23,12 @@
     <ul id="inbox-list"></ul>
     <p id="inbox-empty" hidden>No mail cached yet.</p>
   </main>
+  <section id="sound-settings" aria-label="Sound settings">
+    <h2>Sound</h2>
+    <label><input type="checkbox" id="sound-muted"> Mute all sounds</label>
+    <label>Volume <input type="range" id="sound-volume" min="0" max="100" step="1" value="50"> <span id="sound-volume-value"></span></label>
+    <ul id="sound-accounts"></ul>
+  </section>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

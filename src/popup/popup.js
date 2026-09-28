@@ -5,6 +5,7 @@
 // Sign-in buttons and error states belong to Task 9, not this task.
 
 import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
+import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY } from "../notify/sound.js";
 
 (function () {
   "use strict";
@@ -13,6 +14,9 @@ import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
 
   var filter = "all";
   var items = [];
+  // Sound settings mirror the worker's storage shape
+  // ({ masterMuted, volume, mutedAccounts }) so both sides agree.
+  var sound = { masterMuted: false, volume: 0.5, mutedAccounts: {} };
 
   function storageLocal() {
     return globalThis.chrome && chrome.storage ? chrome.storage.local : null;
@@ -195,10 +199,66 @@ import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
     });
   }
 
+  // Sound settings surface. Master mute plus per-account chime toggles
+  // plus volume, all persisted under the same storage key the worker
+  // reads, so both sides agree. Storage only, no network.
+  function soundAccountKeys() {
+    var seen = {};
+    var keys = [];
+    for (var i = 0; i < items.length; i++) {
+      var key = items[i].provider + ":" + (items[i].account || "");
+      if (!seen[key]) {
+        seen[key] = true;
+        keys.push({ key: key, label: (items[i].account || "") + " (" + items[i].provider + ")" });
+      }
+    }
+    return keys;
+  }
+
+  function renderSound() {
+    var master = document.getElementById("sound-muted");
+    var slider = document.getElementById("sound-volume");
+    var value = document.getElementById("sound-volume-value");
+    var list = document.getElementById("sound-accounts");
+    if (!master || !slider || !list) return;
+    master.checked = sound.masterMuted === true;
+    slider.value = String(Math.round((sound.volume ?? 0.5) * 100));
+    if (value) value.textContent = slider.value + "%";
+    while (list.firstChild) list.removeChild(list.firstChild);
+    soundAccountKeys().forEach(function (entry) {
+      var li = document.createElement("li");
+      var label = document.createElement("label");
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = !(sound.mutedAccounts && sound.mutedAccounts[entry.key] === true);
+      box.setAttribute("aria-label", "Chime for " + entry.label);
+      box.addEventListener("change", function () {
+        var patch = {};
+        patch[entry.key] = !box.checked;
+        Promise.resolve(setMuted(undefined, patch)).then(function (next) {
+          sound = next;
+          renderSound();
+        });
+      });
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(" Chime for " + entry.label));
+      li.appendChild(label);
+      list.appendChild(li);
+    });
+  }
+
+  function loadSound() {
+    Promise.resolve(getSoundSettings()).then(function (next) {
+      sound = next;
+      renderSound();
+    });
+  }
+
   function render() {
     renderHeader();
     renderPills();
     renderList();
+    renderSound();
   }
 
   function load() {
@@ -228,15 +288,43 @@ import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
     document.getElementById("provider-search").addEventListener("click", function () {
       openUrl(searchUrl(filter, newestOutlookAccount()));
     });
+    var master = document.getElementById("sound-muted");
+    if (master) {
+      master.addEventListener("change", function () {
+        Promise.resolve(setMuted(master.checked)).then(function (next) {
+          sound = next;
+          renderSound();
+        });
+      });
+    }
+    var slider = document.getElementById("sound-volume");
+    if (slider) {
+      slider.addEventListener("change", function () {
+        Promise.resolve(setVolume(Number(slider.value) / 100)).then(function (next) {
+          sound = next;
+          renderSound();
+        });
+      });
+    }
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === "local" && changes && changes[CACHE_KEY]) {
-          var next = changes[CACHE_KEY].newValue;
-          items = Array.isArray(next) ? next : [];
-          render();
+        if (area === "local" && changes) {
+          if (changes[CACHE_KEY]) {
+            var next = changes[CACHE_KEY].newValue;
+            items = Array.isArray(next) ? next : [];
+            render();
+          }
+          if (changes[SOUND_SETTINGS_KEY]) {
+            var snext = changes[SOUND_SETTINGS_KEY].newValue;
+            if (snext) {
+              sound = snext;
+              renderSound();
+            }
+          }
         }
       });
     }
+    loadSound();
     load();
   }
 
