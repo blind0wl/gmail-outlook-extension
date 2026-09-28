@@ -12,6 +12,8 @@
 export const MS_AUTHORITY = "https://login.microsoftonline.com/consumers";
 export const MS_SCOPES = ["User.Read", "Mail.Read", "offline_access"];
 export const MS_SESSION_KEY = "auth.microsoft.graph";
+export const GRAPH_ME_URL =
+  "https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName";
 
 // Refresh one minute before expiry so a poll never races the clock.
 export const TOKEN_SKEW_MS = 60_000;
@@ -73,11 +75,54 @@ function enqueueSessionOp(op) {
 }
 
 // Marks network-level failures so callers can tell a blip from a dead
-// grant. Authentication failures (HTTP status, missing token, superseded
-// generation) keep no marker and mean re-auth.
+// grant. HTTP failures with a transient status (rate limit, server
+// trouble, timeout) are marked transient too: the grant may be fine and
+// the session must be kept. Other authentication failures keep no marker
+// and mean re-auth.
 function asTransient(err) {
   err.transient = true;
   return err;
+}
+
+// Retryable HTTP statuses: rate-limited, timed out, or server-side trouble.
+// 401/403/400 mean the credential or grant itself was refused.
+function isTransientStatus(status) {
+  return status === 408 || status === 429 || (status >= 500 && status <= 599);
+}
+
+function accountMismatchError(account) {
+  const err = new Error(`microsoft account mismatch for ${account}`);
+  err.code = "ACCOUNT_MISMATCH";
+  return err;
+}
+
+// Verified owner of a credential, mirroring the Gmail profile check:
+// login_hint pins the chooser but the user can still pick another account,
+// so the address is confirmed before anything is stored under it.
+export async function getGraphAccountAddress(token) {
+  let res;
+  try {
+    res = await fetch(GRAPH_ME_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    throw asTransient(new Error("microsoft profile request failed"));
+  }
+  if (!res.ok) {
+    const err = new Error(`microsoft profile request failed: ${res.status}`);
+    err.status = res.status;
+    if (isTransientStatus(res.status)) err.transient = true;
+    throw err;
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw asTransient(new Error("microsoft profile parse failed"));
+  }
+  const address = data?.mail ?? data?.userPrincipalName;
+  if (!address) throw new Error("microsoft profile missing address");
+  return address;
 }
 
 // Persists a token record only if no sign-out has intervened since the flow
@@ -188,19 +233,27 @@ export function parseAuthCallback(callbackUrl, expectedState) {
 }
 
 async function postToken(body) {
-  const res = await fetch(`${MS_AUTHORITY}/oauth2/v2.0/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(body),
-  });
+  let res;
+  try {
+    res = await fetch(`${MS_AUTHORITY}/oauth2/v2.0/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body),
+    });
+  } catch {
+    throw asTransient(new Error("microsoft token request failed"));
+  }
   if (!res.ok) {
-    throw new Error(`microsoft token exchange failed: ${res.status}`);
+    const err = new Error(`microsoft token exchange failed: ${res.status}`);
+    err.status = res.status;
+    if (isTransientStatus(res.status)) err.transient = true;
+    throw err;
   }
   let data;
   try {
     data = await res.json();
   } catch {
-    throw new Error("microsoft token exchange parse failed");
+    throw asTransient(new Error("microsoft token exchange parse failed"));
   }
   if (!data.access_token) {
     throw new Error("microsoft token exchange missing token");
@@ -297,6 +350,14 @@ export async function signInMicrosoft(clientId, generation = sessionGeneration, 
   });
   const record = toRecord(data);
   if (account !== undefined) record.account = account;
+  if (account) {
+    // Ownership check before storing: login_hint is a hint, not a proof —
+    // the user may have completed the flow as another address.
+    const owner = await getGraphAccountAddress(record.accessToken);
+    if (owner.toLowerCase() !== String(account).toLowerCase()) {
+      throw accountMismatchError(account);
+    }
+  }
   return guardedSessionWrite(record, generation, sessionKey);
 }
 
@@ -321,6 +382,14 @@ async function tryRefresh(clientId, refreshToken, generation = sessionGeneration
       // Binding preservation is best-effort.
     }
   }
+  if (record.account) {
+    // Re-verify on rotation too: the stored credential must still belong
+    // to the bound address before it replaces the slot contents.
+    const owner = await getGraphAccountAddress(record.accessToken);
+    if (owner.toLowerCase() !== String(record.account).toLowerCase()) {
+      throw accountMismatchError(record.account);
+    }
+  }
   return guardedSessionWrite(record, generation, sessionKey);
 }
 
@@ -334,17 +403,21 @@ export async function getGraphTokenForAccount(account, interactive = true, { cli
   const generation = sessionGeneration;
   const cached = await readSessionRecord(key);
   if (isFresh(cached)) return cached.accessToken;
+  let refreshErr = null;
   if (cached?.refreshToken) {
     try {
       return await tryRefresh(resolvedId, cached.refreshToken, generation, {
         sessionKey: key,
         account: account || cached.account,
       });
-    } catch {
-      // Fall through to interactive sign in below.
+    } catch (e) {
+      refreshErr = e;
     }
   }
   if (!interactive) {
+    // A transient refresh failure stays transient: the grant may be fine
+    // and must not surface as needs-sign-in.
+    if (refreshErr?.transient) throw refreshErr;
     throw new Error("microsoft auth needs sign in");
   }
   return signInMicrosoft(resolvedId, generation, {
@@ -360,14 +433,16 @@ function authRequiredError() {
   return err;
 }
 
-// Classify a forced-renewal failure: HTTP/token errors mean the grant is
-// dead (re-auth), anything else is a transient blip (keep the session).
+// Classify a forced-renewal failure: transient blips (marked by the
+// provider, including transient HTTP statuses and network failure) keep
+// the session and propagate as-is. Only dead grants become AUTH_REQUIRED.
 function classifyRenewalError(err) {
+  if (err?.transient) return err;
   const message = String(err?.message ?? "");
   if (
     typeof err?.status === "number" ||
     /failed: \d+/.test(message) ||
-    /missing token|needs sign in|superseded by sign out|not configured|unavailable/.test(message)
+    /missing token|needs sign in|superseded by sign out|not configured|unavailable|mismatch/.test(message)
   ) {
     return authRequiredError();
   }
@@ -418,24 +493,27 @@ export async function getGraphToken(interactive = true, { clientId } = {}) {
   const generation = sessionGeneration;
   const cached = await readSessionRecord();
   if (isFresh(cached)) return cached.accessToken;
+  let refreshErr = null;
   if (cached?.refreshToken) {
     try {
       return await tryRefresh(resolvedId, cached.refreshToken, generation);
-    } catch {
-      // Fall through to interactive sign in below.
+    } catch (e) {
+      refreshErr = e;
     }
   }
   if (!interactive) {
+    if (refreshErr?.transient) throw refreshErr;
     throw new Error("microsoft auth needs sign in");
   }
   return signInMicrosoft(resolvedId, generation);
 }
 
-// Sign out: bumps the epoch first (synchronously, so in-flight flows are
-// invalidated before they can write), then queues removal behind earlier
-// ops. Resolves true when cleared and rejects with a sanitized error when
-// removal fails or no session store exists, so callers can report
-// incomplete sign-out.
+// Sign out every Microsoft slot this extension writes: the legacy slot
+// plus all per-account slots. Resolves true when cleared and rejects with
+// a sanitized error when removal fails or no session store exists, so
+// callers can report incomplete sign-out. Previously cleared credentials
+// stay unusable: the epoch bump invalidates in-flight writes and every
+// slot they could land in is removed.
 export async function clearGraphToken() {
   sessionGeneration += 1;
   return enqueueSessionOp(async () => {
@@ -445,8 +523,22 @@ export async function clearGraphToken() {
         "microsoft auth unavailable: chrome.storage.session missing",
       );
     }
+    let keys = [MS_SESSION_KEY];
     try {
-      await store.remove(MS_SESSION_KEY);
+      // get(null) returns every key in the area; fall back to the legacy
+      // slot when enumeration is unavailable.
+      const all = await store.get?.(null);
+      if (all && typeof all === "object") {
+        const found = Object.keys(all).filter(
+          (k) => k === MS_SESSION_KEY || k.startsWith(`${MS_SESSION_KEY}:`),
+        );
+        if (found.length) keys = found;
+      }
+    } catch {
+      // Fall back to the legacy slot.
+    }
+    try {
+      for (const k of keys) await store.remove(k);
     } catch {
       throw new Error("microsoft sign out failed");
     }

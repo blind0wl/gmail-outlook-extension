@@ -45,6 +45,14 @@ mailbox's mail).
 3. Accept. Expected: each Gmail row polls its own mailbox; revoking one
 grant marks only that row needs-sign-in.
 
+## Second Outlook account (ownership check)
+
+Like Gmail, Outlook sign-in pins the chooser with `login_hint`, but a hint
+is not proof: the worker confirms the fresh credential against Graph `/me`
+and compares `mail`/`userPrincipalName` to the requested address before
+storing it. Picking another account in the flow rejects with an account
+mismatch and stores nothing, so one record can never poll another mailbox.
+
 ## Flow B: Outlook.com sign in
 
 1. In the popup, click **Sign in with Outlook**.

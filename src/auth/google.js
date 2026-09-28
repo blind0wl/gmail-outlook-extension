@@ -42,13 +42,37 @@ export function getGmailToken(interactive = true) {
   });
 }
 
-// Sign out helper. Removes one token from Chrome's cache; callers clear
-// each token they hold. Resolves true when removed, false when there was
-// nothing to remove (no token or no chrome.identity), and rejects with a
-// sanitized error when removal itself fails so callers can report
-// incomplete sign-out.
-export function clearGmailToken(token) {
-  return new Promise((resolve, reject) => {
+// Sign out helper. Removes every per-account session slot this extension
+// writes plus one token from Chrome's cache; callers clear each token they
+// hold. Resolves true when anything was removed, false when there was
+// nothing to remove (no token, no slots, or no chrome.identity), and
+// rejects with a sanitized error when removal itself fails so callers can
+// report incomplete sign-out. Previously acquired credentials stay
+// unusable: slots are gone and the epoch-free Chrome token is evicted.
+export async function clearGmailToken(token) {
+  let cleared = false;
+  try {
+    const store = globalThis.chrome?.storage?.session;
+    if (store) {
+      let keys = [];
+      try {
+        // get(null) returns every key in the area.
+        const all = await store.get?.(null);
+        if (all && typeof all === "object") {
+          keys = Object.keys(all).filter((k) => k.startsWith(googleSessionKey("")));
+        }
+      } catch {
+        // Enumeration unavailable; Chrome cache eviction still proceeds.
+      }
+      for (const k of keys) {
+        await store.remove(k);
+        cleared = true;
+      }
+    }
+  } catch {
+    throw new Error(`google sign out failed at=${new Date().toISOString()}`);
+  }
+  const evicted = await new Promise((resolve, reject) => {
     const id = identity();
     if (!id?.removeCachedAuthToken || !token) {
       resolve(false);
@@ -69,6 +93,7 @@ export function clearGmailToken(token) {
       reject(new Error(`google sign out threw at=${new Date().toISOString()}`));
     }
   });
+  return cleared || evicted;
 }
 
 // ---- Per-account Gmail tokens (multi-mailbox support) ----
@@ -199,6 +224,12 @@ function transientError(message) {
   return err;
 }
 
+// Retryable HTTP statuses: rate-limited, timed out, or server-side
+// trouble. 401/403/400 mean the credential or grant itself was refused.
+function isTransientStatus(status) {
+  return status === 408 || status === 429 || (status >= 500 && status <= 599);
+}
+
 async function exchangeGoogleCode({ clientId, redirectUri, code, verifier }) {
   let res;
   try {
@@ -219,6 +250,7 @@ async function exchangeGoogleCode({ clientId, redirectUri, code, verifier }) {
   if (!res.ok) {
     const err = new Error(`google token exchange failed: ${res.status}`);
     err.status = res.status;
+    if (isTransientStatus(res.status)) err.transient = true;
     throw err;
   }
   let data;
@@ -231,8 +263,9 @@ async function exchangeGoogleCode({ clientId, redirectUri, code, verifier }) {
   return data;
 }
 
-// Verified owner of a credential. 401s carry the status so callers treat a
-// rejected token as an auth failure; network failure is transient.
+// Verified owner of a credential. 401/403 carry the status so callers
+// treat a rejected token as an auth failure; transient statuses and
+// network failure are transient so a blip never becomes needs-sign-in.
 export async function getGmailProfileEmail(token) {
   let res;
   try {
@@ -245,6 +278,7 @@ export async function getGmailProfileEmail(token) {
   if (!res.ok) {
     const err = new Error(`google profile request failed: ${res.status}`);
     err.status = res.status;
+    if (isTransientStatus(res.status)) err.transient = true;
     throw err;
   }
   let data;
@@ -296,6 +330,7 @@ async function refreshGoogleRecord(account, record) {
   if (!res.ok) {
     const err = new Error(`google token refresh failed: ${res.status}`);
     err.status = res.status;
+    if (isTransientStatus(res.status)) err.transient = true;
     throw err;
   }
   let data;
@@ -334,11 +369,16 @@ export async function getGmailTokenForAccount(account, interactive = false) {
   const now = Date.now();
   const stored = await readGoogleRecord(account);
   if (isRecordFresh(stored, now)) return stored.accessToken;
+  // A transient refresh failure is remembered: the Chrome-cache fallback
+  // below may still hold a verified credential, but when it cannot help,
+  // the original blip (not a spurious grant failure) is what surfaces.
+  let transientErr = null;
   if (stored?.refreshToken) {
     try {
       return await refreshGoogleRecord(account, stored);
-    } catch {
-      // Fall through to the Chrome cache, then interactive.
+    } catch (err) {
+      if (err?.transient) transientErr = err;
+      // Otherwise fall through to the Chrome cache, then interactive.
     }
   }
   try {
@@ -359,12 +399,19 @@ export async function getGmailTokenForAccount(account, interactive = false) {
     }
     return token;
   } catch (err) {
-    // A verified mismatch under an interactive call is the account-switch
-    // case: fall through to the login_hint web flow below.
+    // Recovery while the user is already interacting: a verified mismatch
+    // is the account-switch case, and a 401 on profile verification means
+    // the cached credential is revoked — both start interactive auth
+    // instead of stranding the Sign in button on a dead token.
     if (err?.code === "ACCOUNT_MISMATCH" && interactive) {
       return signInGoogleForAccount(account);
     }
-    if (err?.code === "ACCOUNT_MISMATCH" || err?.status !== undefined || err?.transient) {
+    if (err?.status === 401 && interactive) {
+      return signInGoogleForAccount(account);
+    }
+    if (err?.transient) throw err;
+    if (transientErr) throw transientErr;
+    if (err?.code === "ACCOUNT_MISMATCH" || err?.status !== undefined) {
       throw err;
     }
     if (!interactive) throw authRequired(account);

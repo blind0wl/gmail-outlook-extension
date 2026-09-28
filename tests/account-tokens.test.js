@@ -7,6 +7,7 @@ import assert from "node:assert";
 import {
   getGmailTokenForAccount,
   renewGmailToken,
+  clearGmailToken,
   googleSessionKey,
 } from "../src/auth/google.js";
 import {
@@ -14,7 +15,10 @@ import {
   getConfiguredClientId,
   getGraphTokenForAccount,
   renewGraphToken,
+  clearGraphToken,
+  readSessionRecord,
   sessionKeyFor,
+  MS_SESSION_KEY,
 } from "../src/auth/microsoft.js";
 import {
   pollAccount,
@@ -43,7 +47,8 @@ function memoryStores(seedLocal = {}, seedSession = {}) {
           get: async (key) => ({ [key]: local[key] }),
         },
         session: {
-          get: async (k) => ({ [k]: session[k] ?? null }),
+          // get(null) enumerates the whole area, mirroring chrome.storage.
+          get: async (k) => (k == null ? { ...session } : { [k]: session[k] ?? null }),
           set: async (obj) => void Object.assign(session, obj),
           remove: async (k) => void delete session[k],
         },
@@ -254,6 +259,9 @@ test("microsoft sign-in configures before authenticating on a fresh worker", asy
     },
   });
   const prevFetch = stubFetch(async (url) => {
+    if (String(url).startsWith("https://graph.microsoft.com/v1.0/me")) {
+      return { ok: true, status: 200, json: async () => ({ mail: "t2@o.c" }) };
+    }
     assert.equal(String(url), MS_TOKEN_URL);
     return {
       ok: true,
@@ -295,6 +303,9 @@ test("rejected unexpired microsoft token is force-renewed, never reused", async 
   });
   const prev = installChrome(stores.chrome);
   const prevFetch = stubFetch(async (url) => {
+    if (String(url).startsWith("https://graph.microsoft.com/v1.0/me")) {
+      return { ok: true, status: 200, json: async () => ({ mail: "t3@o.c" }) };
+    }
     assert.equal(String(url), MS_TOKEN_URL);
     return {
       ok: true,
@@ -500,4 +511,364 @@ test("stale marker label shows address only", () => {
     accountStatusLabel({ provider: "outlook", account: "s@o.c" }, { stale: true }),
     "s@o.c — stale, showing saved mail",
   );
+});
+
+// Fix round 2.1 (microsoft): a foreign identity completing the flow is
+// rejected and never stored under the requested address.
+test("microsoft sign-in rejects a foreign identity", async () => {
+  const stores = memoryStores();
+  let capturedUrl = null;
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: {},
+    identity: {
+      getRedirectURL: () => "https://testid.chromiumapp.org/",
+      launchWebAuthFlow: ({ url }, cb) => {
+        capturedUrl = url;
+        const state = new URL(url).searchParams.get("state");
+        cb(`https://testid.chromiumapp.org/?code=c&state=${state}`);
+      },
+    },
+  });
+  const prevFetch = stubFetch(async (url) => {
+    if (String(url).startsWith("https://graph.microsoft.com/v1.0/me")) {
+      return { ok: true, status: 200, json: async () => ({ mail: "someone-else@o.c" }) };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "ms-tok", refresh_token: "ms-rt", expires_in: 3600 }),
+    };
+  });
+  try {
+    await assert.rejects(
+      getGraphTokenForAccount("wanted@o.c", true, { clientId: "entra-mismatch-2" }),
+      /mismatch/,
+    );
+    assert.match(capturedUrl, /login_hint=wanted%40o\.c/);
+    assert.equal(
+      stores.session[sessionKeyFor("wanted@o.c")] ?? null,
+      null,
+      "foreign credential never stored",
+    );
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 2.1 (microsoft): distinct credentials through the real worker
+// wiring — no injected token callbacks.
+test("outlook records resolve distinct credentials via the real provider", async () => {
+  const keyA = sessionKeyFor("r2-a@o.c");
+  const keyB = sessionKeyFor("r2-b@o.c");
+  const stores = memoryStores({}, {
+    [keyA]: { accessToken: "tok-RA", refreshToken: "rt-RA", expiresAt: Date.now() + 3600_000, account: "r2-a@o.c" },
+    [keyB]: { accessToken: "tok-RB", refreshToken: "rt-RB", expiresAt: Date.now() + 3600_000, account: "r2-b@o.c" },
+  });
+  const prev = installChrome(stores.chrome);
+  try {
+    const accounts = [
+      { provider: "outlook", account: "r2-a@o.c", clientId: "entra-real-2" },
+      { provider: "outlook", account: "r2-b@o.c", clientId: "entra-real-2" },
+    ];
+    const provider = buildTokenProvider(accounts);
+    assert.equal(await provider.getToken(accounts[0]), "tok-RA");
+    assert.equal(await provider.getToken(accounts[1]), "tok-RB");
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+// Fix round 2.2 (google): revoked token plus 401 on profile verification
+// falls through to interactive auth instead of stranding recovery.
+test("revoked gmail token with failing profile starts interactive auth", async () => {
+  const stores = memoryStores();
+  let capturedUrl = null;
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: { getManifest: () => ({ oauth2: { client_id: "g-id" } }) },
+    identity: {
+      getAuthToken: (_opts, cb) => cb("revoked-tok"),
+      getRedirectURL: () => "https://testid.chromiumapp.org/",
+      launchWebAuthFlow: ({ url }, cb) => {
+        capturedUrl = url;
+        const state = new URL(url).searchParams.get("state");
+        cb(`https://testid.chromiumapp.org/?code=cc&state=${state}`);
+      },
+    },
+  });
+  const prevFetch = stubFetch(async (url, opts) => {
+    if (String(url) === GMAIL_PROFILE_URL) {
+      const token = String(opts?.headers?.Authorization ?? "").replace("Bearer ", "");
+      if (token === "revoked-tok") {
+        return { ok: false, status: 401, json: async () => ({}) };
+      }
+      return { ok: true, status: 200, json: async () => ({ emailAddress: "r2g@gmail.com" }) };
+    }
+    if (String(url) === GOOGLE_TOKEN_URL) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: "new-tok", refresh_token: "rt-new", expires_in: 3600 }),
+      };
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+  try {
+    assert.equal(await getGmailTokenForAccount("r2g@gmail.com", true), "new-tok");
+    assert.match(capturedUrl, /login_hint=r2g%40gmail\.com/);
+    assert.equal(stores.session[googleSessionKey("r2g@gmail.com")]?.accessToken, "new-tok");
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 2.2 (worker): the Sign in handler recovers a revoked token.
+test("sign-in handler recovers a revoked gmail token end to end", async () => {
+  const stores = memoryStores();
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: { getManifest: () => ({ oauth2: { client_id: "g-id" } }) },
+    identity: {
+      getAuthToken: (_opts, cb) => cb("revoked-tok"),
+      getRedirectURL: () => "https://testid.chromiumapp.org/",
+      launchWebAuthFlow: ({ url }, cb) => {
+        const state = new URL(url).searchParams.get("state");
+        cb(`https://testid.chromiumapp.org/?code=cc&state=${state}`);
+      },
+    },
+  });
+  const prevFetch = stubFetch(async (url, opts) => {
+    if (String(url) === GMAIL_PROFILE_URL) {
+      const token = String(opts?.headers?.Authorization ?? "").replace("Bearer ", "");
+      if (token === "revoked-tok") {
+        return { ok: false, status: 401, json: async () => ({}) };
+      }
+      return { ok: true, status: 200, json: async () => ({ emailAddress: "r2h@gmail.com" }) };
+    }
+    if (String(url) === GOOGLE_TOKEN_URL) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: "new-tok", refresh_token: "rt-new", expires_in: 3600 }),
+      };
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+  try {
+    const acct = { provider: "gmail", account: "r2h@gmail.com" };
+    const r = await handleSignIn([acct], { provider: "gmail", account: "r2h@gmail.com" }, {
+      fetchers: {
+        gmail: async (token) => {
+          assert.equal(token, "new-tok");
+          return [item("gmail:r2hmsg", "gmail", "r2h@gmail.com")];
+        },
+      },
+    });
+    assert.equal(r.items?.length, 1);
+    assert.equal(needsSignInFor(acct), false);
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 2.3 (microsoft): renewal 503 keeps the session and stays
+// generic end to end — no eviction, no sign-in.
+test("microsoft renewal 503 keeps the session and stays generic end to end", async () => {
+  const key = sessionKeyFor("r23a@o.c");
+  const stores = memoryStores({}, {
+    [key]: {
+      accessToken: "bad-tok",
+      refreshToken: "rt-23",
+      expiresAt: Date.now() + 3600_000,
+      account: "r23a@o.c",
+    },
+  });
+  const prev = installChrome(stores.chrome);
+  const prevFetch = stubFetch(async (url) => {
+    assert.equal(String(url), MS_TOKEN_URL);
+    return { ok: false, status: 503, json: async () => ({}) };
+  });
+  try {
+    const accounts = [{ provider: "outlook", account: "r23a@o.c", clientId: "entra-503-2" }];
+    const provider = buildTokenProvider(accounts);
+    const r = await pollAccount(accounts[0], {
+      fetchers: {
+        outlook: async (token) => {
+          assert.equal(token, "bad-tok");
+          throw err401();
+        },
+      },
+      getToken: provider.getToken,
+      refreshToken: provider.refreshToken,
+    });
+    assert.ok(r.error, "generic error recorded");
+    assert.equal(r.refreshed, true);
+    assert.equal(r.needsSignIn, undefined, "no sign-in for a 503 blip");
+    assert.equal(r.backedOff, undefined);
+    assert.equal(stores.session[key]?.accessToken, "bad-tok", "slot not evicted");
+    assert.equal(stores.session[key]?.refreshToken, "rt-23", "refresh grant kept");
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 2.3 (microsoft): renewal network failure keeps the session.
+test("microsoft renewal network failure keeps the session end to end", async () => {
+  const key = sessionKeyFor("r23b@o.c");
+  const stores = memoryStores({}, {
+    [key]: {
+      accessToken: "bad-tok",
+      refreshToken: "rt-23b",
+      expiresAt: Date.now() + 3600_000,
+      account: "r23b@o.c",
+    },
+  });
+  const prev = installChrome(stores.chrome);
+  const prevFetch = stubFetch(async (url) => {
+    assert.equal(String(url), MS_TOKEN_URL);
+    throw new TypeError("socket hang up");
+  });
+  try {
+    const accounts = [{ provider: "outlook", account: "r23b@o.c", clientId: "entra-net-2" }];
+    const provider = buildTokenProvider(accounts);
+    const r = await pollAccount(accounts[0], {
+      fetchers: {
+        outlook: async () => { throw err401(); },
+      },
+      getToken: provider.getToken,
+      refreshToken: provider.refreshToken,
+    });
+    assert.ok(r.error);
+    assert.equal(r.needsSignIn, undefined, "no sign-in for a network blip");
+    assert.equal(stores.session[key]?.accessToken, "bad-tok", "slot not evicted");
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 2.3 (google): profile 429 during verification stays transient.
+test("gmail profile 429 stays transient end to end", async () => {
+  const stores = memoryStores();
+  const prev = installChrome({
+    ...stores.chrome,
+    identity: { getAuthToken: (_opts, cb) => cb("tok-t") },
+  });
+  const prevFetch = stubFetch(async (url) => {
+    assert.equal(String(url), GMAIL_PROFILE_URL);
+    return { ok: false, status: 429, json: async () => ({}) };
+  });
+  try {
+    const accounts = [{ provider: "gmail", account: "r23g@gmail.com" }];
+    const provider = buildTokenProvider(accounts);
+    const r = await pollAccount(accounts[0], {
+      fetchers: { gmail: async () => { throw new Error("must not fetch without a token"); } },
+      getToken: provider.getToken,
+      refreshToken: provider.refreshToken,
+    });
+    assert.ok(r.error, "generic error recorded");
+    assert.equal(r.error.status, 429, "code retained, text sanitized");
+    assert.equal(r.needsSignIn, undefined, "no sign-in for a 429 blip");
+    assert.equal(r.offline, undefined);
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 2.3 (google): refresh 503 surfaces the blip, not sign-in.
+test("gmail refresh 503 surfaces transient, not needs sign in", async () => {
+  const stores = memoryStores({}, {
+    [googleSessionKey("r23h@gmail.com")]: {
+      accessToken: "old-tok",
+      refreshToken: "rt-23h",
+      expiresAt: Date.now() - 1000,
+      account: "r23h@gmail.com",
+    },
+  });
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: { getManifest: () => ({ oauth2: { client_id: "g-id" } }) },
+    // No identity: the Chrome-cache fallback cannot help.
+  });
+  const prevFetch = stubFetch(async (url) => {
+    assert.equal(String(url), GOOGLE_TOKEN_URL);
+    return { ok: false, status: 503, json: async () => ({}) };
+  });
+  try {
+    await assert.rejects(
+      getGmailTokenForAccount("r23h@gmail.com", false),
+      (err) => err?.transient === true,
+    );
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 2.4 (microsoft): sign-out removes every slot; grants unusable.
+test("microsoft sign-out clears all slots and grants stay unusable", async () => {
+  const keyA = sessionKeyFor("r24a@o.c");
+  const keyB = sessionKeyFor("r24b@o.c");
+  const stores = memoryStores({}, {
+    [MS_SESSION_KEY]: { accessToken: "tok-L", expiresAt: Date.now() + 3600_000 },
+    [keyA]: { accessToken: "tok-A", refreshToken: "rt-A", expiresAt: Date.now() + 3600_000, account: "r24a@o.c" },
+    [keyB]: { accessToken: "tok-B", refreshToken: "rt-B", expiresAt: Date.now() + 3600_000, account: "r24b@o.c" },
+  });
+  const removed = [];
+  const session = stores.chrome.storage.session;
+  const origRemove = session.remove;
+  session.remove = async (k) => { removed.push(k); return origRemove(k); };
+  const prev = installChrome(stores.chrome);
+  try {
+    configureMicrosoftAuth({ clientId: "entra-clear-2" });
+    assert.equal(await clearGraphToken(), true);
+    assert.ok(removed.includes(MS_SESSION_KEY), "legacy slot removed");
+    assert.ok(removed.includes(keyA) && removed.includes(keyB), "per-account slots removed");
+    assert.equal(await readSessionRecord(), null);
+    await assert.rejects(getGraphTokenForAccount("r24a@o.c", false), /needs sign in/);
+    await assert.rejects(getGraphTokenForAccount("r24b@o.c", false), /needs sign in/);
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+// Fix round 2.4 (google): sign-out clears slots and cache; grants unusable.
+test("google sign-out clears slots and cache; grants stay unusable", async () => {
+  const slot = googleSessionKey("r24g@gmail.com");
+  const stores = memoryStores({}, {
+    [slot]: { accessToken: "tok-G", expiresAt: Date.now() + 3600_000, account: "r24g@gmail.com" },
+  });
+  const removed = [];
+  const evicted = [];
+  const session = stores.chrome.storage.session;
+  const origRemove = session.remove;
+  session.remove = async (k) => { removed.push(k); return origRemove(k); };
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: {},
+    identity: {
+      removeCachedAuthToken: ({ token }, cb) => void (evicted.push(token), cb()),
+      getAuthToken: (_opts, cb) => cb(null),
+    },
+  });
+  const prevFetch = stubFetch(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ emailAddress: "r24g@gmail.com" }),
+  }));
+  try {
+    assert.equal(await clearGmailToken("tok-G"), true);
+    assert.ok(removed.includes(slot), "account slot removed");
+    assert.ok(evicted.includes("tok-G"), "Chrome-cached token evicted");
+    await assert.rejects(getGmailTokenForAccount("r24g@gmail.com", false), /needs sign in/);
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
 });
