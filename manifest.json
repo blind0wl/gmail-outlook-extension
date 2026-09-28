@@ -13,6 +13,11 @@
   "action": {
     "default_popup": "src/popup/popup.html"
   },
+  "icons": {
+    "16": "src/notify/icon.png",
+    "48": "src/notify/icon.png",
+    "128": "src/notify/icon.png"
+  },
   "background": {
     "service_worker": "src/background/service-worker.js"
   }

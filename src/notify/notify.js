@@ -44,6 +44,22 @@ export function buildToast(group) {
   };
 }
 
+// Boundary sanitizer for poll errors. Provider adapters already throw
+// sanitized errors, but token callbacks and test fakes can throw anything
+// (including mail content). Keep only permitted identifiers: HTTP status,
+// account address, and a timestamp. Free-text messages are dropped.
+export function sanitizeError(err, acct) {
+  const status = typeof err?.status === "number" ? err.status : undefined;
+  const clean = new Error(
+    status !== undefined ? `poll failed: ${status}` : "poll failed",
+  );
+  clean.name = "PollError";
+  if (status !== undefined) clean.status = status;
+  if (acct?.account) clean.account = acct.account;
+  clean.at = new Date().toISOString();
+  return clean;
+}
+
 function storageLocal() {
   return globalThis.chrome?.storage?.local;
 }

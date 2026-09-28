@@ -14,9 +14,11 @@ import {
   unreadCount,
   groupByAccount,
   buildToast,
+  sanitizeError,
   persistCache,
   hydrateCache,
   persistAccountState,
+  readAccountState,
 } from "../notify/notify.js";
 
 export const ALARM_NAME = "mail-poll";
@@ -57,6 +59,16 @@ export function clearNeedsSignIn(acct) {
   needsSignInByKey.delete(accountKey(acct));
 }
 
+// Restore persisted per-account flags (e.g. needsSignIn) into memory.
+// Runs as part of init; exported so tests can simulate a restart.
+export async function hydrateAccountState() {
+  const stored = await readAccountState();
+  for (const [key, value] of Object.entries(stored ?? {})) {
+    if (value?.needsSignIn) needsSignInByKey.add(key);
+    else needsSignInByKey.delete(key);
+  }
+}
+
 function isBackingOff(acct, now) {
   return (backoffByKey.get(accountKey(acct))?.nextAllowedAt ?? 0) > now;
 }
@@ -93,32 +105,47 @@ export async function pollAccount(acct, deps) {
   try {
     token = await deps.getToken(acct);
   } catch (err) {
-    return { key, error: err };
+    return { key, error: sanitizeError(err, acct) };
   }
 
   try {
     const items = await fetcher(token, deps.since);
     clearBackoff(acct);
+    clearNeedsSignIn(acct);
     return { key, items };
   } catch (err) {
     if (err?.status === 401 && deps.refreshToken) {
-      // One silent refresh, one retry, then a per-account needs-sign-in flag.
+      // One silent refresh, one retry. The needs-sign-in flag is reserved
+      // for auth failures; transient retry errors back off instead.
+      let fresh;
       try {
-        const fresh = await deps.refreshToken(acct);
+        fresh = await deps.refreshToken(acct);
+      } catch (refreshErr) {
+        markNeedsSignIn(acct);
+        return { key, needsSignIn: true, error: sanitizeError(refreshErr, acct) };
+      }
+      try {
         const items = await fetcher(fresh, deps.since);
         clearBackoff(acct);
         clearNeedsSignIn(acct);
         return { key, items, refreshed: true };
-      } catch {
-        markNeedsSignIn(acct);
-        return { key, needsSignIn: true };
+      } catch (retryErr) {
+        if (isRateOrServer(retryErr?.status)) {
+          const { retryAt } = recordBackoff(acct, now);
+          return { key, backedOff: true, retryAt, refreshed: true, error: sanitizeError(retryErr, acct) };
+        }
+        if (retryErr?.status === 401) {
+          markNeedsSignIn(acct);
+          return { key, needsSignIn: true, error: sanitizeError(retryErr, acct) };
+        }
+        return { key, refreshed: true, error: sanitizeError(retryErr, acct) };
       }
     }
     if (isRateOrServer(err?.status)) {
       const { retryAt } = recordBackoff(acct, now);
-      return { key, backedOff: true, retryAt, error: err };
+      return { key, backedOff: true, retryAt, error: sanitizeError(err, acct) };
     }
-    return { key, error: err };
+    return { key, error: sanitizeError(err, acct) };
   }
 }
 
@@ -155,7 +182,7 @@ export async function pollAll(accounts, deps = {}) {
     for (const f of failures) deps.onError(f);
   }
 
-  const notify = deps.notify ?? defaultNotify;
+  const notify = deps.notify ?? sendNotification;
   const setBadge = deps.setBadge ?? defaultSetBadge;
   if (!manual && newItems.length) {
     for (const group of groupByAccount(newItems)) {
@@ -164,11 +191,12 @@ export async function pollAll(accounts, deps = {}) {
   }
   await setBadge(badge);
   await persistCache(inbox);
-  await persistAccountState(
-    Object.fromEntries(
-      accounts.map((a) => [accountKey(a), { needsSignIn: needsSignInFor(a) }]),
-    ),
-  );
+  // Merge with stored flags so accounts absent from this poll keep theirs.
+  const mergedState = await readAccountState();
+  for (const a of accounts) {
+    mergedState[accountKey(a)] = { needsSignIn: needsSignInFor(a) };
+  }
+  await persistAccountState(mergedState);
 
   return {
     badge,
@@ -180,14 +208,28 @@ export async function pollAll(accounts, deps = {}) {
   };
 }
 
-function defaultNotify(group, toast) {
+// Packaged icon for toasts. Chrome requires iconUrl; without it the
+// create() rejection is swallowed and real toasts silently never appear.
+export const NOTIFICATION_ICON = "src/notify/icon.png";
+
+function notificationIconUrl() {
+  try {
+    return globalThis.chrome?.runtime?.getURL?.(NOTIFICATION_ICON) ?? NOTIFICATION_ICON;
+  } catch {
+    return NOTIFICATION_ICON;
+  }
+}
+
+export function sendNotification(group, toast) {
   const chromeNotify = globalThis.chrome?.notifications;
   if (!chromeNotify) return Promise.resolve();
-  return chromeNotify.create(`${accountKey(group)}:${Date.now()}`, {
+  const result = chromeNotify.create(`${accountKey(group)}:${Date.now()}`, {
     type: "basic",
+    iconUrl: notificationIconUrl(),
     title: toast.title,
     message: toast.message,
-  }).catch?.(() => {}) ?? Promise.resolve();
+  });
+  return result?.catch?.(() => {}) ?? Promise.resolve();
 }
 
 function defaultSetBadge(count) {
@@ -227,13 +269,36 @@ async function ensureAlarm() {
   });
 }
 
-async function start() {
+// One initialization promise created at worker evaluation. Every polling
+// entry point awaits it, so an alarm or message that wakes a terminated
+// worker hydrates memory from storage before polling — never polling with
+// an empty cache, never persisting an empty inbox over stored mail.
+async function init() {
   await hydrateCache();
+  await hydrateAccountState();
   await ensureAlarm();
+}
+
+export const ready = init();
+
+async function start() {
+  await ready;
   const accounts = await loadAccounts();
   if (accounts.length) {
     await pollAll(accounts, { ...defaultTokenProvider() });
   }
+}
+
+// Polling entry points. Each awaits ready first; tests drive these directly
+// to simulate a fresh worker woken by an alarm with no startup events.
+export async function handleAlarm(accounts, deps = {}) {
+  await ready;
+  return pollAll(accounts, deps);
+}
+
+export async function handleManualRefresh(accounts, deps = {}) {
+  await ready;
+  return pollAll(accounts, { ...deps, manual: true });
 }
 
 if (typeof chrome !== "undefined" && chrome?.alarms) {
@@ -243,14 +308,14 @@ if (typeof chrome !== "undefined" && chrome?.alarms) {
     if (alarm?.name !== ALARM_NAME) return;
     void (async () => {
       const accounts = await loadAccounts();
-      await pollAll(accounts, { ...defaultTokenProvider() });
+      await handleAlarm(accounts, { ...defaultTokenProvider() });
     })();
   });
   chrome.runtime?.onMessage?.addListener((msg, _sender, sendResponse) => {
     if (msg?.type !== "refresh") return false;
     void (async () => {
       const accounts = await loadAccounts();
-      const summary = await pollAll(accounts, { ...defaultTokenProvider(), manual: true });
+      const summary = await handleManualRefresh(accounts, { ...defaultTokenProvider() });
       sendResponse?.({ ok: true, badge: summary.badge });
     })();
     return true;
