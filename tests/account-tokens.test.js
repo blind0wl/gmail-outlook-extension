@@ -1026,7 +1026,7 @@ test("one gmail 401 leaves a second gmail account usable", async () => {
     [slotA]: {
       accessToken: "bad-A",
       refreshToken: "rt-A",
-      expiresAt: Date.now() - 1000,
+      expiresAt: Date.now() + 3600_000,
       account: "r34a@gmail.com",
     },
     [slotB]: {
@@ -1036,6 +1036,18 @@ test("one gmail 401 leaves a second gmail account usable", async () => {
       account: "r34b@gmail.com",
     },
   });
+  const originalB = { ...stores.session[slotB] };
+  const sessionMutations = [];
+  const session = stores.chrome.storage.session;
+  for (const method of ["set", "remove"]) {
+    const original = session[method];
+    session[method] = async (value) => {
+      sessionMutations.push({ method, value });
+      return original(value);
+    };
+  }
+  const fetchedTokens = [];
+  const renewals = [];
   const evicted = [];
   const prev = installChrome({
     ...stores.chrome,
@@ -1069,6 +1081,7 @@ test("one gmail 401 leaves a second gmail account usable", async () => {
     const provider = buildTokenProvider(accounts);
     const fetchers = {
       gmail: async (token) => {
+        fetchedTokens.push(token);
         if (token === "bad-A") throw err401();
         if (token === "fresh-A") return [item("gmail:r34a", "gmail", "r34a@gmail.com")];
         if (token === "good-B") return [item("gmail:r34b", "gmail", "r34b@gmail.com")];
@@ -1080,13 +1093,25 @@ test("one gmail 401 leaves a second gmail account usable", async () => {
     const summary = await pollAll(accounts, {
       fetchers,
       getToken: provider.getToken,
-      refreshToken: provider.refreshToken,
+      refreshToken: async (account, rejectedToken) => {
+        renewals.push({ account, rejectedToken });
+        return provider.refreshToken(account, rejectedToken);
+      },
       notify: async () => {},
       setBadge: async () => {},
     });
     assert.ok(summary.succeeded.includes("gmail:r34a@gmail.com"), "A recovered via its own grant");
     assert.ok(summary.succeeded.includes("gmail:r34b@gmail.com"), "B polled from its slot");
-    assert.ok(!evicted.includes("good-B"), "B's credential never evicted");
+    assert.deepEqual(fetchedTokens.filter((token) => token !== "good-B"), ["bad-A", "fresh-A"],
+      "A's rejected token reaches the fetcher before the renewed token");
+    assert.deepEqual(renewals, [{ account: accounts[0], rejectedToken: "bad-A" }],
+      "only A enters forced renewal after its 401");
+    assert.deepEqual(evicted, ["bad-A"], "only the rejected token is evicted");
+    assert.deepEqual(stores.session[slotB], originalB, "B's entire credential record is unchanged");
+    assert.ok(sessionMutations.every(({ method, value }) => method === "set"
+      ? !Object.hasOwn(value, slotB)
+      : !(Array.isArray(value) ? value : [value]).includes(slotB)),
+    "B's slot is never written or removed");
     assert.equal(stores.session[slotB]?.accessToken, "good-B", "B's slot untouched");
     assert.equal(stores.session[slotB]?.refreshToken, "rt-B", "B's grant untouched");
     assert.equal(stores.session[slotA]?.accessToken, "fresh-A", "A rotated in its own slot");
