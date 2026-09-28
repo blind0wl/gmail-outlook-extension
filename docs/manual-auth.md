@@ -27,6 +27,24 @@ registrations (see Prerequisites); the bundle itself holds no secrets.
    starts on the next alarm tick.
 5. Reload the extension. Expected: still signed in (Chrome token cache).
 
+## Second Gmail account (account switch)
+
+`chrome.identity.getAuthToken` takes no account parameter: it always
+resolves the default-account credential. A second Gmail record therefore
+signs via `chrome.identity.launchWebAuthFlow` with `login_hint` pinned to
+its address (PKCE code flow, offline access), and the worker verifies the
+fresh credential against the Gmail profile before storing it under that
+address. Silent polls re-verify the same way and never return another
+mailbox's token (a mismatch surfaces needs-sign-in, never the other
+mailbox's mail).
+
+1. With one Gmail account already signed in, add a second Gmail record
+   and click **Sign in** on its row.
+2. Expected: Google chooser pre-targeted at the second address
+   (pick it if asked), then the same readonly-only consent screen.
+3. Accept. Expected: each Gmail row polls its own mailbox; revoking one
+grant marks only that row needs-sign-in.
+
 ## Flow B: Outlook.com sign in
 
 1. In the popup, click **Sign in with Outlook**.

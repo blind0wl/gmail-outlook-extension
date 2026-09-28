@@ -2,13 +2,19 @@
 // Popup reads the cache from chrome.storage.local only (Task 7).
 //
 // Tokens come from the real Task 6 flows through buildTokenProvider:
-// per account, getToken and refreshToken call getGmailToken or
-// getGraphToken with interactive:false (silent). Tests supply fakes via deps.
+// per account, getToken resolves the account-bound credential silently and
+// refreshToken evicts the rejected credential and renews it (both
+// interactive:false). Interactive recovery passes the same account identity
+// through handleSignIn. Tests supply fakes via deps.
 
 import { fetchGmailMessages } from "../providers/gmail.js";
 import { fetchOutlookMessages } from "../providers/outlook.js";
-import { getGmailToken } from "../auth/google.js";
-import { getGraphToken, configureMicrosoftAuth } from "../auth/microsoft.js";
+import { getGmailTokenForAccount, renewGmailToken } from "../auth/google.js";
+import {
+  getGraphTokenForAccount,
+  renewGraphToken,
+  configureMicrosoftAuth,
+} from "../auth/microsoft.js";
 import { accountKey, getMicrosoftClientId, loadAccounts } from "../store/accounts.js";
 import { mergeMessages, getInbox, pruneCache } from "../store/cache.js";
 import {
@@ -71,8 +77,8 @@ function isOfflineNow() {
 }
 
 function markNeedsSignIn(acct) {
-  // Auth state was determined from an HTTP response, so we are online.
-  offlineByKey.delete(accountKey(acct));
+  // Proven authentication failure. Offline state is preserved: only call
+  // sites with an HTTP response in hand clear it via clearOffline.
   needsSignInByKey.add(accountKey(acct));
 }
 
@@ -140,8 +146,16 @@ export async function pollAccount(acct, deps) {
   try {
     token = await deps.getToken(acct);
   } catch (err) {
-    // Silent token failure means the grant is gone: surface needs-sign-in
-    // so the popup offers its button instead of a generic error.
+    // Acquisition failures are classified, not blanket sign-in: offline
+    // stays offline (other flags preserved), transient blips stay generic
+    // errors, only authentication failures offer the Sign in button.
+    if (isOfflineNow()) {
+      markOffline(acct);
+      return { key, offline: true, error: sanitizeError(err, acct) };
+    }
+    if (err?.transient) {
+      return { key, error: sanitizeError(err, acct) };
+    }
     markNeedsSignIn(acct);
     return { key, needsSignIn: true, error: sanitizeError(err, acct) };
   }
@@ -156,12 +170,22 @@ export async function pollAccount(acct, deps) {
     // Any HTTP response proves we are online, even an error status.
     if (typeof err?.status === "number") clearOffline(acct);
     if (err?.status === 401 && deps.refreshToken) {
-      // One silent refresh, one retry. The needs-sign-in flag is reserved
-      // for auth failures; transient retry errors back off instead.
+      // One forced renewal, one retry. The rejected token is passed along
+      // so renewal evicts and replaces it instead of returning it again.
+      // The needs-sign-in flag is reserved for auth failures; transient
+      // retry errors back off instead.
       let fresh;
       try {
-        fresh = await deps.refreshToken(acct);
+        fresh = await deps.refreshToken(acct, token);
       } catch (refreshErr) {
+        if (isOfflineNow()) {
+          markOffline(acct);
+          return { key, offline: true, error: sanitizeError(refreshErr, acct) };
+        }
+        if (refreshErr?.transient) {
+          return { key, refreshed: true, error: sanitizeError(refreshErr, acct) };
+        }
+        clearOffline(acct);
         markNeedsSignIn(acct);
         return { key, needsSignIn: true, error: sanitizeError(refreshErr, acct) };
       }
@@ -177,6 +201,7 @@ export async function pollAccount(acct, deps) {
           return { key, backedOff: true, retryAt, refreshed: true, error: sanitizeError(retryErr, acct) };
         }
         if (retryErr?.status === 401) {
+          clearOffline(acct);
           markNeedsSignIn(acct);
           return { key, needsSignIn: true, error: sanitizeError(retryErr, acct) };
         }
@@ -282,10 +307,17 @@ export async function pollAll(accounts, deps = {}) {
 // One persisted entry per account for the popup's error UI.
 function stateEntry(acct, result) {
   const key = accountKey(acct);
+  const needsSignIn = needsSignInByKey.has(key);
+  const offline = offlineByKey.has(key);
+  const backedOff = result?.backedOff === true;
+  // Status-less online failures carry no retry or code marker of their own,
+  // so they persist an explicit stale indicator instead of looking healthy.
+  const stale = !!result?.error && !needsSignIn && !offline && !backedOff;
   return {
-    needsSignIn: needsSignInByKey.has(key),
-    offline: offlineByKey.has(key),
-    backedOff: result?.backedOff === true,
+    needsSignIn,
+    offline,
+    backedOff,
+    ...(stale ? { stale: true } : {}),
     ...(result?.retryAt ? { retryAt: result.retryAt } : {}),
     ...(typeof result?.error?.status === "number" ? { status: result.error.status } : {}),
   };
@@ -337,12 +369,14 @@ function defaultSetBadge(count) {
 
 let lastConfiguredClientId = null;
 
-// Per-account silent tokens backed by the real Task 6 flows: gmail via
-// getGmailToken, outlook via getGraphToken, always interactive:false so a
-// background poll never pops a sign-in window. The Microsoft side is
-// configured once from the Entra app id on the account record (a public
-// identifier, never a secret).
-export function buildTokenProvider(accounts = []) {
+// Per-account silent tokens backed by the real Task 6 flows, always
+// interactive:false so a background poll never pops a sign-in window.
+// The stable account identity travels the whole path: gmail resolves its
+// credential through the account-bound record (verified, never the wrong
+// mailbox), outlook through its per-account session slot. The Microsoft
+// side is configured once from the Entra app id on the account record (a
+// public identifier, never a secret).
+export function ensureMicrosoftConfigured(accounts = []) {
   const clientId = getMicrosoftClientId(accounts ?? []);
   if (clientId && clientId !== lastConfiguredClientId) {
     try {
@@ -352,15 +386,37 @@ export function buildTokenProvider(accounts = []) {
       // Per-account errors surface at poll time; never break wiring here.
     }
   }
+  return clientId;
+}
+
+export function buildTokenProvider(accounts = []) {
+  const clientId = ensureMicrosoftConfigured(accounts);
   return {
-    getToken: (acct) => silentTokenFor(acct),
-    refreshToken: (acct) => silentTokenFor(acct),
+    getToken: (acct) => silentTokenFor(acct, clientId),
+    refreshToken: (acct, rejectedToken) => renewTokenFor(acct, rejectedToken, clientId),
   };
 }
 
-function silentTokenFor(acct) {
-  if (acct?.provider === "outlook") return getGraphToken(false);
-  if (acct?.provider === "gmail") return getGmailToken(false);
+function silentTokenFor(acct, clientId) {
+  if (acct?.provider === "outlook") {
+    return getGraphTokenForAccount(acct?.account ?? "", false, { clientId });
+  }
+  if (acct?.provider === "gmail") {
+    return getGmailTokenForAccount(acct?.account ?? "", false);
+  }
+  return Promise.reject(new Error(`unknown provider ${acct?.provider}`));
+}
+
+// Forced renewal after a 401: evict the rejected credential and refetch
+// silently. Renewal failure throws AUTH_REQUIRED (caller drives the
+// Sign in button) or a transient-marked error (generic retry next poll).
+function renewTokenFor(acct, rejectedToken, clientId) {
+  if (acct?.provider === "outlook") {
+    return renewGraphToken(acct?.account ?? "", rejectedToken, { clientId });
+  }
+  if (acct?.provider === "gmail") {
+    return renewGmailToken(acct?.account ?? "", rejectedToken);
+  }
   return Promise.reject(new Error(`unknown provider ${acct?.provider}`));
 }
 
@@ -414,12 +470,30 @@ export async function handleSignIn(accounts, target, deps = {}) {
   ) ?? target;
   const key = accountKey(acct);
   const { interactiveGet, ...pollDeps } = deps;
+  // Configure Microsoft before any interactive callback: on a fresh worker
+  // this is the first event, and the graph flow would otherwise reject
+  // "clientId not configured" before authenticating.
+  const clientId = ensureMicrosoftConfigured([...list, target]);
   const interactive =
     interactiveGet ??
-    ((a) => (a?.provider === "outlook" ? getGraphToken(true) : getGmailToken(true)));
+    ((a) =>
+      a?.provider === "outlook"
+        ? getGraphTokenForAccount(a?.account ?? "", true, { clientId })
+        : getGmailTokenForAccount(a?.account ?? "", true));
   try {
     await interactive(acct);
   } catch (err) {
+    if (isOfflineNow()) {
+      markOffline(acct);
+      const offlineResult = { key, offline: true, error: sanitizeError(err, acct) };
+      await storeAccountEntries([acct], new Map([[key, offlineResult]]));
+      return offlineResult;
+    }
+    if (err?.transient) {
+      const transientResult = { key, error: sanitizeError(err, acct) };
+      await storeAccountEntries([acct], new Map([[key, transientResult]]));
+      return transientResult;
+    }
     markNeedsSignIn(acct);
     const failure = { key, needsSignIn: true, error: sanitizeError(err, acct) };
     await storeAccountEntries([acct], new Map([[key, failure]]));

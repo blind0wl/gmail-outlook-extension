@@ -44,6 +44,13 @@ export function scopeString() {
   return MS_SCOPES.join(" ");
 }
 
+// Per-account session slots. The legacy single slot (MS_SESSION_KEY) stays
+// the default so existing callers are unaffected; the worker addresses one
+// slot per Outlook record so two mailboxes never share a credential.
+export function sessionKeyFor(account) {
+  return account ? `${MS_SESSION_KEY}:${account}` : MS_SESSION_KEY;
+}
+
 export function configureMicrosoftAuth({ clientId } = {}) {
   if (!clientId) throw new Error("microsoft auth: clientId required");
   configuredClientId = clientId;
@@ -65,16 +72,24 @@ function enqueueSessionOp(op) {
   return run;
 }
 
+// Marks network-level failures so callers can tell a blip from a dead
+// grant. Authentication failures (HTTP status, missing token, superseded
+// generation) keep no marker and mean re-auth.
+function asTransient(err) {
+  err.transient = true;
+  return err;
+}
+
 // Persists a token record only if no sign-out has intervened since the flow
 // started; otherwise rejects so the caller never uses a token the cleared
 // session no longer holds. Runs inside the session queue, ordered against
 // removals.
-function guardedSessionWrite(record, generation) {
+function guardedSessionWrite(record, generation, sessionKey = MS_SESSION_KEY) {
   return enqueueSessionOp(async () => {
     if (generation !== sessionGeneration) {
       throw new Error("microsoft auth superseded by sign out");
     }
-    await writeSessionRecord(record);
+    await writeSessionRecord(record, sessionKey);
     return record.accessToken;
   });
 }
@@ -129,6 +144,7 @@ export function buildAuthorizeUrl({
   redirectUri,
   codeChallenge,
   state,
+  loginHint,
 }) {
   if (!clientId) throw new Error("microsoft auth: clientId required");
   if (!redirectUri) throw new Error("microsoft auth: redirectUri required");
@@ -142,6 +158,8 @@ export function buildAuthorizeUrl({
     code_challenge_method: "S256",
     state: state ?? randomState(),
   });
+  // login_hint pins the chooser to the requested address for multi-account.
+  if (loginHint) params.set("login_hint", loginHint);
   return `${MS_AUTHORITY}/oauth2/v2.0/authorize?${params}`;
 }
 
@@ -198,19 +216,28 @@ function toRecord(data, now = Date.now()) {
   };
 }
 
-export async function readSessionRecord() {
+export async function readSessionRecord(sessionKey = MS_SESSION_KEY) {
   const store = sessionStore();
   if (!store?.get) return null;
-  const data = await store.get(MS_SESSION_KEY);
-  return data?.[MS_SESSION_KEY] ?? null;
+  const data = await store.get(sessionKey);
+  return data?.[sessionKey] ?? null;
 }
 
-export async function writeSessionRecord(record) {
+export async function writeSessionRecord(record, sessionKey = MS_SESSION_KEY) {
   const store = sessionStore();
   if (!store?.set) {
     throw new Error("microsoft auth unavailable: chrome.storage.session missing");
   }
-  await store.set({ [MS_SESSION_KEY]: record });
+  await store.set({ [sessionKey]: record });
+}
+
+// Best-effort eviction of one session slot. Never throws.
+async function evictSessionRecord(sessionKey) {
+  try {
+    await sessionStore()?.remove?.(sessionKey);
+  } catch {
+    // Eviction is best-effort; renewal still proceeds.
+  }
 }
 
 export function isFresh(record, now = Date.now()) {
@@ -223,7 +250,10 @@ export function isFresh(record, now = Date.now()) {
 // The client id is the public Entra app id (Personal accounts only); it is
 // a public identifier, never a secret. It defaults to the id set via
 // configureMicrosoftAuth, with an explicit argument winning when given.
-export async function signInMicrosoft(clientId, generation = sessionGeneration) {
+// opts selects the session slot and pins the chooser: { loginHint,
+// sessionKey, account }. Defaults preserve the legacy single-slot flow.
+export async function signInMicrosoft(clientId, generation = sessionGeneration, opts = {}) {
+  const { loginHint, sessionKey = MS_SESSION_KEY, account } = opts;
   const resolvedId = resolveClientId(clientId);
   // Epoch is fixed at entry (synchronously, via the default above for
   // direct callers). getGraphToken captures it before any await and passes
@@ -241,6 +271,7 @@ export async function signInMicrosoft(clientId, generation = sessionGeneration) 
     redirectUri,
     codeChallenge: challenge,
     state,
+    loginHint,
   });
   const callbackUrl = await new Promise((resolve, reject) => {
     try {
@@ -265,10 +296,12 @@ export async function signInMicrosoft(clientId, generation = sessionGeneration) 
     code_verifier: verifier,
   });
   const record = toRecord(data);
-  return guardedSessionWrite(record, generation);
+  if (account !== undefined) record.account = account;
+  return guardedSessionWrite(record, generation, sessionKey);
 }
 
-async function tryRefresh(clientId, refreshToken, generation = sessionGeneration) {
+async function tryRefresh(clientId, refreshToken, generation = sessionGeneration, opts = {}) {
+  const { sessionKey = MS_SESSION_KEY, account } = opts;
   const data = await postToken({
     client_id: clientId,
     grant_type: "refresh_token",
@@ -277,7 +310,101 @@ async function tryRefresh(clientId, refreshToken, generation = sessionGeneration
   const record = toRecord(data);
   // Preserve the old refresh token if the response rotates none in.
   if (!record.refreshToken) record.refreshToken = refreshToken;
-  return guardedSessionWrite(record, generation);
+  // Preserve the account binding across rotation.
+  if (account !== undefined) {
+    record.account = account;
+  } else {
+    try {
+      const current = await readSessionRecord(sessionKey);
+      if (current?.account) record.account = current.account;
+    } catch {
+      // Binding preservation is best-effort.
+    }
+  }
+  return guardedSessionWrite(record, generation, sessionKey);
+}
+
+// Account-scoped token matching the worker's per-record shape. Empty
+// account keeps the legacy single-slot behavior. Never resolves a
+// credential stored under another address: each account owns its slot.
+export async function getGraphTokenForAccount(account, interactive = true, { clientId } = {}) {
+  const resolvedId = resolveClientId(clientId);
+  const key = sessionKeyFor(account);
+  // Epoch for the whole operation, fixed before any await.
+  const generation = sessionGeneration;
+  const cached = await readSessionRecord(key);
+  if (isFresh(cached)) return cached.accessToken;
+  if (cached?.refreshToken) {
+    try {
+      return await tryRefresh(resolvedId, cached.refreshToken, generation, {
+        sessionKey: key,
+        account: account || cached.account,
+      });
+    } catch {
+      // Fall through to interactive sign in below.
+    }
+  }
+  if (!interactive) {
+    throw new Error("microsoft auth needs sign in");
+  }
+  return signInMicrosoft(resolvedId, generation, {
+    loginHint: account || undefined,
+    sessionKey: key,
+    account: account || undefined,
+  });
+}
+
+function authRequiredError() {
+  const err = new Error("microsoft auth needs sign in");
+  err.code = "AUTH_REQUIRED";
+  return err;
+}
+
+// Classify a forced-renewal failure: HTTP/token errors mean the grant is
+// dead (re-auth), anything else is a transient blip (keep the session).
+function classifyRenewalError(err) {
+  const message = String(err?.message ?? "");
+  if (
+    typeof err?.status === "number" ||
+    /failed: \d+/.test(message) ||
+    /missing token|needs sign in|superseded by sign out|not configured|unavailable/.test(message)
+  ) {
+    return authRequiredError();
+  }
+  return asTransient(err instanceof Error ? err : new Error("microsoft token renewal failed"));
+}
+
+// Forced silent renewal after a 401: the locally unexpired cached token is
+// rejected by the server, so bypass the freshness check and spend the
+// refresh token. Evicts the slot when the grant is dead (never on a
+// transient blip). Never returns the rejected token; throws AUTH_REQUIRED
+// when renewal fails so the caller drives explicit interactive recovery.
+export async function renewGraphToken(account, rejectedToken, { clientId } = {}) {
+  const resolvedId = resolveClientId(clientId);
+  const key = sessionKeyFor(account);
+  const store = sessionStore();
+  const data = await store?.get?.(key);
+  const rec = data?.[key] ?? null;
+  if (rec?.accessToken && rec.accessToken !== rejectedToken && isFresh(rec)) {
+    return rec.accessToken;
+  }
+  if (rec?.refreshToken) {
+    try {
+      const fresh = await tryRefresh(resolvedId, rec.refreshToken, sessionGeneration, {
+        sessionKey: key,
+        account: account || rec.account,
+      });
+      if (rejectedToken && fresh === rejectedToken) throw authRequiredError();
+      return fresh;
+    } catch (err) {
+      const classified = classifyRenewalError(err);
+      if (!classified.transient) await evictSessionRecord(key);
+      throw classified;
+    }
+  }
+  // No refresh path: evict the rejected slot so it is never reused.
+  await evictSessionRecord(key);
+  throw authRequiredError();
 }
 
 // Primary entry matching the worker's token shape: getGraphToken(interactive).

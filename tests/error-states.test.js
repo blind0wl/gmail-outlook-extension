@@ -137,6 +137,7 @@ test("silent token failure marks needs sign in, never mail content", async () =>
 
 test("real token provider calls gmail or graph silently per account", async () => {
   const prev = globalThis.chrome;
+  const prevFetch = globalThis.fetch;
   const seen = [];
   globalThis.chrome = {
     identity: {
@@ -147,13 +148,22 @@ test("real token provider calls gmail or graph silently per account", async () =
     },
     storage: {
       session: {
+        // Per-account slots: the graph record lives under its MS keys only.
         get: async (k) => ({
-          [k]: { accessToken: "graph-tok", refreshToken: "rt", expiresAt: Date.now() + 3600_000 },
+          [k]: String(k).startsWith("auth.microsoft.graph")
+            ? { accessToken: "graph-tok", refreshToken: "rt", expiresAt: Date.now() + 3600_000 }
+            : null,
         }),
         set: async () => {},
       },
     },
   };
+  // Account verification: the Chrome-cached credential profiles as w@g.c.
+  globalThis.fetch = async (url) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ emailAddress: "w@g.c" }),
+  });
   try {
     const accounts = [
       { provider: "gmail", account: "w@g.c" },
@@ -162,19 +172,27 @@ test("real token provider calls gmail or graph silently per account", async () =
     const provider = buildTokenProvider(accounts);
     assert.equal(await provider.getToken(accounts[0]), "gmail-tok");
     assert.equal(await provider.getToken(accounts[1]), "graph-tok");
-    assert.deepEqual(seen, [["gmail", false]], "gmail token fetched silently");
-    assert.equal(await provider.refreshToken(accounts[0]), "gmail-tok");
+    assert.equal(await provider.refreshToken(accounts[0], "stale-tok"), "gmail-tok");
+    assert.deepEqual(seen, [["gmail", false], ["gmail", false]], "gmail fetched silently, renewal refetches after evict");
   } finally {
     if (prev === undefined) delete globalThis.chrome;
     else globalThis.chrome = prev;
+    globalThis.fetch = prevFetch;
   }
 });
 
 test("sign-in handler recovers one account without touching the others", async () => {
   const backing = installChromeStub();
+  const prevFetch = globalThis.fetch;
   globalThis.chrome.identity = {
     getAuthToken: ({ interactive }, cb) => cb("fresh-tok"),
   };
+  // Interactive silent-first path verifies the fresh credential's owner.
+  globalThis.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ emailAddress: "err-signin@g.c" }),
+  });
   try {
     const target = { provider: "gmail", account: "err-signin@g.c" };
     const fetchers = { gmail: async () => [item("gmail:errsin", "gmail", "err-signin@g.c")] };
@@ -185,6 +203,7 @@ test("sign-in handler recovers one account without touching the others", async (
     assert.equal(needsSignInFor(target), false);
     assert.equal(backing.accountState?.["gmail:err-signin@g.c"]?.needsSignIn, false);
   } finally {
+    globalThis.fetch = prevFetch;
     uninstallChromeStub();
   }
 });

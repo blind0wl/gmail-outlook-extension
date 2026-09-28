@@ -85,6 +85,9 @@ export function accountStatusLabel(acct, state = {}) {
     const code = state.status !== undefined ? ` (${state.status})` : "";
     return `${address} — stale, ${when}${code}`;
   }
+  // Sanitized stale indicator for status-less online failures: no retry
+  // time, no code, and never raw error text.
+  if (state.stale) return `${address} — stale, showing saved mail`;
   if (state.status !== undefined || state.error) {
     const code = state.status !== undefined ? ` (${state.status})` : "";
     return `${address} — last poll failed${code}`;
