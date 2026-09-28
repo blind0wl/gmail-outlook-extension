@@ -8,6 +8,7 @@ import {
   setMuted,
   setVolume,
   playChime,
+  soundControlKeys,
   SOUND_SETTINGS_KEY,
   DEFAULT_SOUND_SETTINGS,
 } from "../src/notify/sound.js";
@@ -148,4 +149,27 @@ test("worker chimes once on automatic new mail, never on manual refresh", async 
   } finally {
     uninstallChromeStub();
   }
+});
+
+test("chime controls include a configured account with an empty cache", () => {
+  // Configured in storage but zero cached messages: toggle must exist.
+  const keys = soundControlKeys(
+    [{ provider: "gmail", account: "empty@g.c" }],
+    [],
+  );
+  assert.deepEqual(keys, [{ key: "gmail:empty@g.c", label: "empty@g.c (gmail)" }]);
+  // Cached accounts union with configured ones; duplicates collapse.
+  const union = soundControlKeys(
+    [
+      { provider: "gmail", account: "empty@g.c" },
+      { provider: "outlook", account: "cfg@o.c" },
+    ],
+    [{ provider: "gmail", account: "empty@g.c" }],
+  );
+  assert.deepEqual(
+    union.map((k) => k.key),
+    ["gmail:empty@g.c", "outlook:cfg@o.c"],
+  );
+  // Keys stay provider:account so worker mute checks agree with the popup.
+  assert.equal(isMuted({ masterMuted: false, mutedAccounts: { "gmail:empty@g.c": true } }, [keys[0].key]), true);
 });

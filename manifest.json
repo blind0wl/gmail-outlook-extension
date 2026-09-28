@@ -22,6 +22,7 @@
     "128": "src/notify/icon.png"
   },
   "background": {
-    "service_worker": "src/background/service-worker.js"
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
   }
 }

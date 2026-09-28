@@ -51,6 +51,14 @@ tick each box by hand in a real browser.
 - [ ] No console errors while rendering, filtering, marking read, or opening threads.
 - [ ] DevTools Network shows zero requests from the popup itself
       (it reads `chrome.storage.local` only).
+- [ ] Sound section: master mute checkbox, volume slider with % label, and
+      one `Chime for <account> (<provider>)` toggle per configured account
+      from storage key `accounts` — including a configured account with no
+      cached messages (its toggle must exist with an empty inbox and must
+      not vanish when its messages are read or pruned). Toggling mute then
+      triggering an automatic poll with new mail stays silent; unmuting
+      chimes once. Headless key-union coverage:
+      `node --test tests/sound.test.js` (empty-cache account case).
 
 Static checks that cover part of this in headless CI:
 

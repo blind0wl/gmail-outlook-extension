@@ -107,6 +107,24 @@ export async function setVolume(level) {
   return saveSettings({ ...current, volume: clampVolume(level) });
 }
 
+// Union of configured accounts and cached-mail accounts for the popup's
+// per-account chime toggles, deduplicated on "provider:account". A
+// configured account with no cached messages still gets a control, so its
+// toggle never vanishes with its messages. Keys match isMuted/worker keys.
+export function soundControlKeys(configured, cached) {
+  const seen = new Set();
+  const keys = [];
+  const push = (provider, account) => {
+    const key = `${provider}:${account || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    keys.push({ key, label: `${account || ""} (${provider})` });
+  };
+  for (const a of configured ?? []) push(a.provider, a.account);
+  for (const i of cached ?? []) push(i.provider, i.account);
+  return keys;
+}
+
 async function ensureOffscreenDocument() {
   const offscreen = globalThis.chrome?.offscreen;
   // No offscreen API (older Chrome, tests): still try sendMessage; the

@@ -5,7 +5,7 @@
 // Sign-in buttons and error states belong to Task 9, not this task.
 
 import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
-import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY } from "../notify/sound.js";
+import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
 
 (function () {
   "use strict";
@@ -14,6 +14,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY } from "../no
 
   var filter = "all";
   var items = [];
+  // Configured accounts from the same storage key the worker polls
+  // (`accounts`), so per-account chime toggles exist even with an empty
+  // mail cache. Settings keys stay `provider:account`.
+  var ACCOUNTS_KEY = "accounts";
+  var configuredAccounts = [];
   // Sound settings mirror the worker's storage shape
   // ({ masterMuted, volume, mutedAccounts }) so both sides agree.
   var sound = { masterMuted: false, volume: 0.5, mutedAccounts: {} };
@@ -202,17 +207,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY } from "../no
   // Sound settings surface. Master mute plus per-account chime toggles
   // plus volume, all persisted under the same storage key the worker
   // reads, so both sides agree. Storage only, no network.
+  // Controls union configured accounts with cached-mail accounts, so a
+  // configured account with no cached messages keeps its toggle.
   function soundAccountKeys() {
-    var seen = {};
-    var keys = [];
-    for (var i = 0; i < items.length; i++) {
-      var key = items[i].provider + ":" + (items[i].account || "");
-      if (!seen[key]) {
-        seen[key] = true;
-        keys.push({ key: key, label: (items[i].account || "") + " (" + items[i].provider + ")" });
-      }
-    }
-    return keys;
+    return soundControlKeys(configuredAccounts, items);
   }
 
   function renderSound() {
@@ -244,6 +242,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY } from "../no
       label.appendChild(document.createTextNode(" Chime for " + entry.label));
       li.appendChild(label);
       list.appendChild(li);
+    });
+  }
+
+  function loadSoundAccounts() {
+    var store = storageLocal();
+    if (!store) {
+      configuredAccounts = [];
+      renderSound();
+      return;
+    }
+    Promise.resolve(store.get(ACCOUNTS_KEY)).then(function (data) {
+      var list = data ? data[ACCOUNTS_KEY] : null;
+      configuredAccounts = Array.isArray(list) ? list : [];
+      renderSound();
     });
   }
 
@@ -321,10 +333,16 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY } from "../no
               renderSound();
             }
           }
+          if (changes[ACCOUNTS_KEY]) {
+            var anext = changes[ACCOUNTS_KEY].newValue;
+            configuredAccounts = Array.isArray(anext) ? anext : [];
+            renderSound();
+          }
         }
       });
     }
     loadSound();
+    loadSoundAccounts();
     load();
   }
 
