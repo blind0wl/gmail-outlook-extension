@@ -8,14 +8,16 @@ tick each box by hand in a real browser.
 - [ ] Header reads `Inbox` followed by an unread count, e.g. `Inbox (3)`.
 - [ ] A search icon button labelled `Search mail in provider` sits right of the header.
 - [ ] Clicking the search icon opens provider search in a new tab
-      (Gmail filter/All: `https://mail.google.com/mail/#search`,
-      Outlook filter: `https://outlook.live.com/mail/0/` search view).
+      (All/Gmail filter: `https://mail.google.com/mail/#search`,
+      Outlook filter: `https://outlook.live.com/mail/0/search`).
       No inline search box exists in the popup.
 - [ ] Three high-contrast pills read exactly `All`, `Gmail`, `Outlook`.
 - [ ] Selected pill is dark background with white text; unselected pills are
       white background with dark text and a visible border at 13px or larger.
 - [ ] In `All`, `work@gmail.com` and `personal@gmail.com` read as separate
       account lines on their own cards (accounts never blur together).
+- [ ] Long account addresses wrap onto further lines in full — no truncation
+      with ellipsis — while the message time stays top right.
 - [ ] Each card shows provider badge (`Gmail` / `Outlook`) plus the full
       account address top left, and the message time top right.
 - [ ] Each card shows sender avatar (initial) plus dark subject line
@@ -25,6 +27,14 @@ tick each box by hand in a real browser.
       through to `chrome.storage.local` key `mailCache`.
 - [ ] Each card has a single `Open` action button that opens the provider
       thread in a new tab (Gmail: `mail.google.com`, Outlook: `outlook.live.com`).
+- [ ] `Open` on a `work@gmail.com` card lands on the first Gmail mailbox
+      (`/mail/u/0/`), and on a `personal@gmail.com` card on the second
+      (`/mail/u/1/`); an Outlook card lands on its own account mailbox
+      (`/mail/<account>/inbox/id/<id>`), never hardcoded slot 0.
+      Covered headless by `node --test tests/popup-links.test.js`.
+- [ ] Keyboard: Tab reaches each card (visible focus ring), Enter or Space
+      marks it read — same local-only flag as mouse click — without opening
+      the provider.
 - [ ] No compose, reply, archive, delete, or other destructive controls exist.
 - [ ] No sign-in buttons and no error/stale/offline states render
       (those belong to Task 9).

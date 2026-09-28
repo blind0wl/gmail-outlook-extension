@@ -4,17 +4,17 @@
 // where `key` is `provider + ':' + id`. Makes no network calls.
 // Sign-in buttons and error states belong to Task 9, not this task.
 
+import { threadUrl, searchUrl, gmailAccountOrder } from "./links.js";
+
 (function () {
   "use strict";
 
   var CACHE_KEY = "mailCache";
-  var GMAIL_SEARCH_URL = "https://mail.google.com/mail/#search";
-  var OUTLOOK_SEARCH_URL = "https://outlook.live.com/mail/0/";
-  var GMAIL_THREAD_URL = "https://mail.google.com/mail/#inbox/";
-  var OUTLOOK_THREAD_URL = "https://outlook.live.com/mail/0/inbox/id/";
+  var ACCOUNTS_KEY = "accounts";
 
   var filter = "all";
   var items = [];
+  var gmailAccounts = [];
 
   function storageLocal() {
     return globalThis.chrome && chrome.storage ? chrome.storage.local : null;
@@ -22,21 +22,6 @@
 
   function isUnread(item) {
     return item.unread === true && item.localRead !== true;
-  }
-
-  function idOf(item) {
-    var idx = String(item.key || "").indexOf(":");
-    return idx === -1 ? String(item.key || "") : String(item.key).slice(idx + 1);
-  }
-
-  function threadUrl(item) {
-    var id = idOf(item);
-    if (item.provider === "outlook") return OUTLOOK_THREAD_URL + encodeURIComponent(id);
-    return GMAIL_THREAD_URL + encodeURIComponent(id);
-  }
-
-  function searchUrl() {
-    return filter === "outlook" ? OUTLOOK_SEARCH_URL : GMAIL_SEARCH_URL;
   }
 
   function openUrl(url) {
@@ -117,6 +102,11 @@
 
       var card = document.createElement("li");
       card.className = "card" + (read ? " read" : "");
+      // Keyboard path to the same local-only read flag the mouse click
+      // sets: focus the card, press Enter or Space. Never opens provider.
+      card.setAttribute("tabindex", "0");
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", "Mark as read: " + (item.subject || "(no subject)"));
 
       if (!read) {
         var dot = document.createElement("span");
@@ -173,7 +163,7 @@
       open.addEventListener("click", function (event) {
         event.stopPropagation();
         markRead(item.key);
-        openUrl(threadUrl(item));
+        openUrl(threadUrl(item, gmailAccounts));
       });
       text.appendChild(open);
 
@@ -182,6 +172,12 @@
 
       card.addEventListener("click", function () {
         markRead(item.key);
+      });
+      card.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          markRead(item.key);
+        }
       });
 
       list.appendChild(card);
@@ -201,10 +197,12 @@
       render();
       return;
     }
-    var result = store.get(CACHE_KEY);
-    Promise.resolve(result).then(function (data) {
+    // Account list drives Gmail authuser slots per card; absence keeps the
+    // slot-less fallback in links.js. Storage reads only, no network.
+    Promise.resolve(store.get([CACHE_KEY, ACCOUNTS_KEY])).then(function (data) {
       var cached = data ? data[CACHE_KEY] : null;
       items = Array.isArray(cached) ? cached : [];
+      gmailAccounts = gmailAccountOrder(data ? data[ACCOUNTS_KEY] : null);
       render();
     });
   }
@@ -218,13 +216,18 @@
       });
     }
     document.getElementById("provider-search").addEventListener("click", function () {
-      openUrl(searchUrl());
+      openUrl(searchUrl(filter));
     });
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === "local" && changes && changes[CACHE_KEY]) {
-          var next = changes[CACHE_KEY].newValue;
-          items = Array.isArray(next) ? next : [];
+        if (area === "local" && changes && (changes[CACHE_KEY] || changes[ACCOUNTS_KEY])) {
+          if (changes[CACHE_KEY]) {
+            var next = changes[CACHE_KEY].newValue;
+            items = Array.isArray(next) ? next : [];
+          }
+          if (changes[ACCOUNTS_KEY]) {
+            gmailAccounts = gmailAccountOrder(changes[ACCOUNTS_KEY].newValue);
+          }
           render();
         }
       });
