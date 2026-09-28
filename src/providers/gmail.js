@@ -5,6 +5,42 @@
 // taken as a function parameter (auth wiring comes from Task 6 at runtime).
 
 const LIST_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
+const PROFILE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
+
+// Sanitized fetch error. Carries only safe identifiers (operation, HTTP
+// status, message id, account) plus a timestamp — never subject, snippet,
+// or response body content.
+export class GmailFetchError extends Error {
+  constructor(op, { status, id, account } = {}) {
+    const at = new Date().toISOString();
+    let message = `gmail ${op} failed`;
+    if (status !== undefined) message += `: ${status}`;
+    if (id !== undefined) message += ` id=${id}`;
+    message += ` at=${at}`;
+    super(message);
+    this.name = "GmailFetchError";
+    this.op = op;
+    if (status !== undefined) this.status = status;
+    if (id !== undefined) this.id = id;
+    if (account !== undefined) this.account = account;
+    this.at = at;
+  }
+}
+
+async function getJson(url, token, op, extra) {
+  let res;
+  try {
+    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new GmailFetchError(op, extra);
+  }
+  if (!res.ok) throw new GmailFetchError(op, { status: res.status, ...extra });
+  try {
+    return await res.json();
+  } catch {
+    throw new GmailFetchError(`${op} parse`, { status: res.status, ...extra });
+  }
+}
 
 function header(payload, name) {
   const found = payload?.headers?.find(
@@ -31,31 +67,31 @@ export function normalizeGmailMessage(raw, account) {
 }
 
 export async function fetchGmailMessages(token, since) {
-  const params = new URLSearchParams({ format: "metadata", maxResults: "25" });
-  if (since) {
-    const afterSec = Math.floor(since / 1000);
-    params.set("q", `after:${afterSec}`);
-  }
-  const listRes = await fetch(`${LIST_URL}?${params}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!listRes.ok) throw new Error(`gmail list failed: ${listRes.status}`);
-  const list = await listRes.json();
-  if (!list.messages?.length) return [];
-  const profileRes = await fetch(
-    "https://gmail.googleapis.com/gmail/v1/users/me/profile",
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!profileRes.ok) throw new Error(`gmail profile failed: ${profileRes.status}`);
-  const account = (await profileRes.json()).emailAddress ?? "gmail";
+  const base = new URLSearchParams({ format: "metadata", maxResults: "25" });
+  if (since) base.set("q", `after:${Math.floor(since / 1000)}`);
+  const ids = [];
+  let pageToken;
+  do {
+    const params = new URLSearchParams(base);
+    if (pageToken) params.set("pageToken", pageToken);
+    const list = await getJson(`${LIST_URL}?${params}`, token, "list");
+    if (list.messages?.length) {
+      for (const { id } of list.messages) ids.push(id);
+    }
+    pageToken = list.nextPageToken;
+  } while (pageToken);
+  if (!ids.length) return [];
+  const profile = await getJson(PROFILE_URL, token, "profile");
+  const account = profile.emailAddress ?? "gmail";
   const out = [];
-  for (const { id } of list.messages) {
-    const detailRes = await fetch(
+  for (const id of ids) {
+    const detail = await getJson(
       `${LIST_URL}/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-      { headers: { Authorization: `Bearer ${token}` } },
+      token,
+      "get",
+      { id, account },
     );
-    if (!detailRes.ok) throw new Error(`gmail get failed: ${detailRes.status}`);
-    out.push(normalizeGmailMessage(await detailRes.json(), account));
+    out.push(normalizeGmailMessage(detail, account));
   }
   return out;
 }
