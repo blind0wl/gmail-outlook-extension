@@ -34,6 +34,12 @@ tick each box by hand in a real browser.
       Outlook card lands on its own account mailbox
       (`/mail/<account>/inbox/id/<id>`), never hardcoded slot 0.
       Covered headless by `node --test tests/popup-links.test.js`.
+- [ ] BEST-EFFORT — Outlook thread link (no Microsoft documentation found
+      for this format): with a real Outlook.com account cached, click `Open`
+      on one of its cards and confirm the new tab lands on that exact
+      message in the right mailbox — not the inbox root, not another
+      account's mailbox, not an error page. If it lands anywhere else, note
+      the actual URL behavior in the fix report so the format can be revised.
 - [ ] Keyboard: Tab reaches each card (visible focus ring), Enter or Space
       marks it read — same local-only flag as mouse click — without opening
       the provider. Tabbing into a card's `Open` button keeps native
