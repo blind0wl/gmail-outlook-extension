@@ -36,6 +36,17 @@ function stubFetch(handler) {
 const ok = (body) => ({ ok: true, status: 200, json: async () => body });
 const SECRET = raw.value[0].subject;
 
+// Fails the test if a sensitive string appears anywhere observable on the
+// error: the message, its string coercion, or its serialized properties.
+function assertNoLeak(err, secret) {
+  assert.ok(!err.message.includes(secret), "no secret in message");
+  assert.ok(!String(err).includes(secret), "no secret in String(err)");
+  assert.ok(
+    !JSON.stringify({ ...err, message: err.message }).includes(secret),
+    "no secret in serialized properties",
+  );
+}
+
 test("outlook fetch follows @odata.nextLink across two pages", async () => {
   const seen = [];
   const restore = stubFetch(async (url) => {
@@ -67,6 +78,51 @@ test("outlook fetch follows @odata.nextLink across two pages", async () => {
   }
 });
 
+test("outlook fetch rejects external @odata.nextLink before requesting it", async () => {
+  const seen = [];
+  const evil = "https://evil.example/collect?token=abc";
+  const restore = stubFetch(async (url) => {
+    seen.push(url);
+    if (url.includes("/v1.0/me?$select=")) return ok({ mail: "you@outlook.com" });
+    return ok({ value: [raw.value[0]], "@odata.nextLink": evil });
+  });
+  try {
+    const err = await fetchOutlookMessages("tok").catch((e) => e);
+    assert.ok(err instanceof OutlookFetchError);
+    assert.ok(
+      seen.every((u) => !u.startsWith("https://evil.example")),
+      "no request sent to the external link",
+    );
+    assert.equal(err.account, "you@outlook.com");
+    assert.ok(!err.message.includes("evil.example"), "no link in error");
+  } finally {
+    restore();
+  }
+});
+
+test("outlook fetch refuses cross-origin redirect without following it", async () => {
+  const seen = [];
+  const restore = stubFetch(async (url) => {
+    seen.push(url);
+    if (url.includes("/v1.0/me?$select=")) return ok({ mail: "you@outlook.com" });
+    return {
+      ok: false,
+      status: 301,
+      headers: { get: () => "https://evil.example/steal" },
+    };
+  });
+  try {
+    const err = await fetchOutlookMessages("tok").catch((e) => e);
+    assert.ok(err instanceof OutlookFetchError);
+    assert.equal(seen.length, 2, "profile plus one list request, then stop");
+    assert.ok(
+      seen.every((u) => !u.startsWith("https://evil.example")),
+      "redirect target never requested",
+    );
+  } finally {
+    restore();
+  }
+});
 test("outlook fetch http failure is sanitized", async () => {
   const restore = stubFetch(async (url) => {
     if (url.includes("/v1.0/me?$select=")) return ok({ mail: "you@outlook.com" });
@@ -85,33 +141,42 @@ test("outlook fetch http failure is sanitized", async () => {
 });
 
 test("outlook fetch transport failure is sanitized", async () => {
+  const secret = "TRANSPORT-SENSITIVE-7734 subject Quarterly report draft";
   const restore = stubFetch(async (url) => {
     if (url.includes("/v1.0/me?$select=")) return ok({ mail: "you@outlook.com" });
-    throw new TypeError("fetch failed");
+    throw new TypeError(secret);
   });
   try {
     const err = await fetchOutlookMessages("tok").catch((e) => e);
     assert.ok(err instanceof OutlookFetchError);
     assert.ok(err.message.includes("outlook list"));
     assert.ok(err.at, "timestamp present");
+    assertNoLeak(err, secret);
+    assertNoLeak(err, "Quarterly report draft");
   } finally {
     restore();
   }
 });
 
 test("outlook fetch parse failure is sanitized", async () => {
-  const restore = stubFetch(async () => ({
-    ok: true,
-    status: 200,
-    json: async () => {
-      throw new SyntaxError("bad json");
-    },
-  }));
+  const secret = "PARSE-SENSITIVE-9912 bodyPreview lunch tomorrow";
+  const restore = stubFetch(async (url) => {
+    if (url.includes("/v1.0/me?$select=")) return ok({ mail: "you@outlook.com" });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError(secret);
+      },
+    };
+  });
   try {
     const err = await fetchOutlookMessages("tok").catch((e) => e);
     assert.ok(err instanceof OutlookFetchError);
     assert.ok(err.message.includes("parse"));
     assert.ok(err.at, "timestamp present");
+    assertNoLeak(err, secret);
+    assertNoLeak(err, "lunch tomorrow");
     assert.ok(!err.message.includes(SECRET), "no subject in error");
   } finally {
     restore();

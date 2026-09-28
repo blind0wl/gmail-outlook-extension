@@ -6,8 +6,10 @@
 // parameter (auth wiring comes from Task 6 at runtime).
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+const GRAPH_ORIGIN = "https://graph.microsoft.com";
 const SELECT =
   "subject,from,receivedDateTime,bodyPreview,isRead";
+const MAX_REDIRECTS = 5;
 
 // Sanitized fetch error. Carries only safe identifiers (operation, HTTP
 // status, message id, account) plus a timestamp — never subject, preview,
@@ -29,24 +31,63 @@ export class OutlookFetchError extends Error {
   }
 }
 
-async function readJson(url, token, op, extra) {
-  let res;
+// Allowlist check: only the Graph origin may receive the bearer token.
+// Every page URL (including server-supplied @odata.nextLink values) and
+// every redirect target passes through here before any request is sent.
+function checkGraphUrl(url, op, extra) {
+  let parsed;
   try {
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    parsed = new URL(url, GRAPH_BASE);
   } catch {
     throw new OutlookFetchError(op, extra);
   }
-  if (!res.ok) {
-    throw new OutlookFetchError(op, { status: res.status, ...extra });
+  if (parsed.origin !== GRAPH_ORIGIN) {
+    throw new OutlookFetchError(op, extra);
   }
-  try {
-    return await res.json();
-  } catch {
-    throw new OutlookFetchError(`${op} parse`, {
-      status: res.status,
-      ...extra,
-    });
+  return parsed.href;
+}
+
+async function readJson(url, token, op, extra) {
+  let current = checkGraphUrl(url, op, extra);
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    let res;
+    try {
+      // manual redirects: automatic following would re-send the bearer
+      // token before we can re-check the target against the allowlist.
+      res = await fetch(current, {
+        headers: { Authorization: `Bearer ${token}` },
+        redirect: "manual",
+      });
+    } catch {
+      throw new OutlookFetchError(op, extra);
+    }
+    const location = res.status >= 300 && res.status < 400
+      ? res.headers?.get?.("location")
+      : null;
+    if (location) {
+      // Refuse cross-origin targets without sending them a request.
+      let target;
+      try {
+        target = new URL(location, current).href;
+      } catch {
+        throw new OutlookFetchError(op, extra);
+      }
+      current = checkGraphUrl(target, op, extra);
+      continue;
+    }
+    if (!res.ok) {
+      throw new OutlookFetchError(op, { status: res.status, ...extra });
+    }
+    try {
+      return await res.json();
+    } catch {
+      throw new OutlookFetchError(`${op} parse`, {
+        status: res.status,
+        ...extra,
+      });
+    }
   }
+  throw new OutlookFetchError(op, extra);
 }
 
 export function normalizeGraphMessage(raw, account) {
@@ -88,7 +129,9 @@ export async function fetchOutlookMessages(token, since) {
         out.push(normalizeGraphMessage(raw, account));
       }
     }
-    next = page["@odata.nextLink"] ?? null;
+    next = page["@odata.nextLink"]
+      ? checkGraphUrl(page["@odata.nextLink"], "list", { account })
+      : null;
   }
   return out;
 }
