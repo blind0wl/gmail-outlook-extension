@@ -209,3 +209,56 @@ body {
   color: #5f6368;
   margin: 16px 0 0;
 }
+
+#account-status {
+  margin: 12px 0 0;
+}
+
+#account-status h2 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111111;
+  margin: 0 0 6px;
+}
+
+#account-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-row {
+  font-size: 13px;
+  color: #202124;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.status-signin {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  background: #111111;
+  color: #ffffff;
+  border: 1px solid #111111;
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.status-signin:disabled {
+  background: #ffffff;
+  color: #5f6368;
+  border-color: #5f6368;
+  cursor: default;
+}

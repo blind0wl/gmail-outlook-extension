@@ -1,0 +1,5 @@
+{
+  "name": "gmail-outlook-extension",
+  "private": true,
+  "type": "module"
+}

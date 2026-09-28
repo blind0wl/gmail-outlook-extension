@@ -375,6 +375,42 @@ test("notification options include the packaged icon", async () => {
   }
 });
 
+test("401 on one account leaves the other two updating", async () => {
+  installChromeStub();
+  try {
+    const a = { provider: "gmail", account: "mix-a@g.c" };
+    const b = { provider: "gmail", account: "mix-b@g.c" };
+    const c = { provider: "outlook", account: "mix-c@o.c" };
+    const err401 = () => {
+      const e = new Error("unauthorized");
+      e.status = 401;
+      throw e;
+    };
+    const fetchers = {
+      gmail: async (token) => {
+        if (token === "bad") err401();
+        const who = token === "tok-a" ? "mix-a@g.c" : "mix-b@g.c";
+        return [item(`gmail:ok-${who}`, "gmail", who)];
+      },
+      outlook: async () => [item("outlook:mix-c", "outlook", "mix-c@o.c")],
+    };
+    const summary = await pollAll([a, b, c], {
+      fetchers,
+      getToken: async (acct) => (acct.account === "mix-b@g.c" ? "bad" : `tok-${acct.account[4]}`),
+      refreshToken: async () => "bad",
+      notify: async () => {},
+      setBadge: async () => {},
+    });
+    assert.ok(summary.succeeded.includes("gmail:mix-a@g.c"));
+    assert.ok(summary.succeeded.includes("outlook:mix-c@o.c"));
+    assert.deepEqual(summary.needsSignIn, ["gmail:mix-b@g.c"]);
+    assert.ok(getInbox().find((i) => i.key === "gmail:ok-mix-a@g.c"));
+    assert.ok(getInbox().find((i) => i.key === "outlook:mix-c"));
+  } finally {
+    uninstallChromeStub();
+  }
+});
+
 test("fresh worker woken by alarm hydrates before polling", async () => {
   const backing = installChromeStub();
   try {

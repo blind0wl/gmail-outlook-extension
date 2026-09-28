@@ -1,13 +1,15 @@
 // Service worker entry. Owns polling, cache writes, badge, and toasts.
 // Popup reads the cache from chrome.storage.local only (Task 7).
 //
-// Auth arrives in Task 6, so tokens come through an injected token
-// provider: getToken(account) and refreshToken(account). Nothing here
-// imports auth; the chrome wiring at the bottom supplies the real
-// provider later, tests supply fakes.
+// Tokens come from the real Task 6 flows through buildTokenProvider:
+// per account, getToken and refreshToken call getGmailToken or
+// getGraphToken with interactive:false (silent). Tests supply fakes via deps.
 
 import { fetchGmailMessages } from "../providers/gmail.js";
 import { fetchOutlookMessages } from "../providers/outlook.js";
+import { getGmailToken } from "../auth/google.js";
+import { getGraphToken, configureMicrosoftAuth } from "../auth/microsoft.js";
+import { accountKey, getMicrosoftClientId, loadAccounts } from "../store/accounts.js";
 import { mergeMessages, getInbox, pruneCache } from "../store/cache.js";
 import {
   diffNewIds,
@@ -40,10 +42,9 @@ const fetchers = { gmail: fetchGmailMessages, outlook: fetchOutlookMessages };
 
 const backoffByKey = new Map(); // accountKey -> { failures, nextAllowedAt }
 const needsSignInByKey = new Set();
+const offlineByKey = new Set(); // accountKey -> last fetch failed with no HTTP status while offline
 
-export function accountKey(acct) {
-  return `${acct.provider}:${acct.account}`;
-}
+export { accountKey };
 
 export function clampInterval(ms) {
   return Math.min(MAX_POLL_MS, Math.max(MIN_POLL_MS, ms ?? DEFAULT_POLL_MS));
@@ -57,21 +58,47 @@ export function needsSignInFor(acct) {
   return needsSignInByKey.has(accountKey(acct));
 }
 
+export function isOfflineFor(acct) {
+  return offlineByKey.has(accountKey(acct));
+}
+
+function isOfflineNow() {
+  try {
+    return globalThis.navigator?.onLine === false;
+  } catch {
+    return false;
+  }
+}
+
 function markNeedsSignIn(acct) {
+  // Auth state was determined from an HTTP response, so we are online.
+  offlineByKey.delete(accountKey(acct));
   needsSignInByKey.add(accountKey(acct));
+}
+
+function markOffline(acct) {
+  offlineByKey.add(accountKey(acct));
+}
+
+function clearOffline(acct) {
+  offlineByKey.delete(accountKey(acct));
 }
 
 export function clearNeedsSignIn(acct) {
   needsSignInByKey.delete(accountKey(acct));
 }
 
-// Restore persisted per-account flags (e.g. needsSignIn) into memory.
+// Restore persisted per-account flags (needsSignIn, offline) into memory.
 // Runs as part of init; exported so tests can simulate a restart.
+// Backoff is transient rate-limit state and is not restored: a fresh
+// worker polls immediately and re-backs-off if the server still says so.
 export async function hydrateAccountState() {
   const stored = await readAccountState();
   for (const [key, value] of Object.entries(stored ?? {})) {
     if (value?.needsSignIn) needsSignInByKey.add(key);
     else needsSignInByKey.delete(key);
+    if (value?.offline) offlineByKey.add(key);
+    else offlineByKey.delete(key);
   }
 }
 
@@ -81,6 +108,8 @@ function isBackingOff(acct, now) {
 
 function recordBackoff(acct, now) {
   const key = accountKey(acct);
+  // Backoff follows an HTTP response, so we are online.
+  offlineByKey.delete(key);
   const failures = (backoffByKey.get(key)?.failures ?? 0) + 1;
   const delay = Math.min(BACKOFF_BASE_MS * 2 ** (failures - 1), BACKOFF_MAX_MS);
   backoffByKey.set(key, { failures, nextAllowedAt: now + delay });
@@ -111,15 +140,21 @@ export async function pollAccount(acct, deps) {
   try {
     token = await deps.getToken(acct);
   } catch (err) {
-    return { key, error: sanitizeError(err, acct) };
+    // Silent token failure means the grant is gone: surface needs-sign-in
+    // so the popup offers its button instead of a generic error.
+    markNeedsSignIn(acct);
+    return { key, needsSignIn: true, error: sanitizeError(err, acct) };
   }
 
   try {
     const items = await fetcher(token, deps.since);
     clearBackoff(acct);
     clearNeedsSignIn(acct);
+    clearOffline(acct);
     return { key, items };
   } catch (err) {
+    // Any HTTP response proves we are online, even an error status.
+    if (typeof err?.status === "number") clearOffline(acct);
     if (err?.status === 401 && deps.refreshToken) {
       // One silent refresh, one retry. The needs-sign-in flag is reserved
       // for auth failures; transient retry errors back off instead.
@@ -134,6 +169,7 @@ export async function pollAccount(acct, deps) {
         const items = await fetcher(fresh, deps.since);
         clearBackoff(acct);
         clearNeedsSignIn(acct);
+        clearOffline(acct);
         return { key, items, refreshed: true };
       } catch (retryErr) {
         if (isRateOrServer(retryErr?.status)) {
@@ -144,12 +180,19 @@ export async function pollAccount(acct, deps) {
           markNeedsSignIn(acct);
           return { key, needsSignIn: true, error: sanitizeError(retryErr, acct) };
         }
+        if (typeof retryErr?.status === "number") clearOffline(acct);
         return { key, refreshed: true, error: sanitizeError(retryErr, acct) };
       }
     }
     if (isRateOrServer(err?.status)) {
       const { retryAt } = recordBackoff(acct, now);
       return { key, backedOff: true, retryAt, error: sanitizeError(err, acct) };
+    }
+    if (err?.status === undefined && isOfflineNow()) {
+      // No HTTP status and the browser reports offline: keep the stale
+      // cache visible and let the popup show its offline note.
+      markOffline(acct);
+      return { key, offline: true, error: sanitizeError(err, acct) };
     }
     return { key, error: sanitizeError(err, acct) };
   }
@@ -183,7 +226,11 @@ export async function pollAll(accounts, deps = {}) {
 
   const newIds = new Set(diffNewIds(oldKeys, inbox.map((i) => i.key)));
   const newItems = inbox.filter((i) => newIds.has(i.key));
-  const failures = settled.filter((r) => r.error && !r.backedOff && !r.needsSignIn);
+  // Offline and backoff keep the stale cache by design; only genuine
+  // failures reach onError.
+  const failures = settled.filter(
+    (r) => r.error && !r.backedOff && !r.needsSignIn && !r.offline,
+  );
   if (failures.length && deps.onError) {
     for (const f of failures) deps.onError(f);
   }
@@ -215,11 +262,11 @@ export async function pollAll(accounts, deps = {}) {
   await setBadge(badge);
   await persistCache(inbox);
   // Merge with stored flags so accounts absent from this poll keep theirs.
-  const mergedState = await readAccountState();
-  for (const a of accounts) {
-    mergedState[accountKey(a)] = { needsSignIn: needsSignInFor(a) };
-  }
-  await persistAccountState(mergedState);
+  // Shape per account: needsSignIn, offline, backedOff, plus retryAt and
+  // the numeric status code when the last attempt produced them. The popup
+  // renders these as address-plus-code lines only, never mail content.
+  const byKey = new Map(settled.map((r) => [r.key, r]));
+  await storeAccountEntries(accounts, byKey);
 
   return {
     badge,
@@ -227,8 +274,30 @@ export async function pollAll(accounts, deps = {}) {
     succeeded: settled.filter((r) => r.items !== undefined).map((r) => r.key),
     backedOff: settled.filter((r) => r.backedOff).map((r) => r.key),
     needsSignIn: settled.filter((r) => r.needsSignIn).map((r) => r.key),
+    offline: settled.filter((r) => r.offline).map((r) => r.key),
     failed: failures.map((r) => r.key),
   };
+}
+
+// One persisted entry per account for the popup's error UI.
+function stateEntry(acct, result) {
+  const key = accountKey(acct);
+  return {
+    needsSignIn: needsSignInByKey.has(key),
+    offline: offlineByKey.has(key),
+    backedOff: result?.backedOff === true,
+    ...(result?.retryAt ? { retryAt: result.retryAt } : {}),
+    ...(typeof result?.error?.status === "number" ? { status: result.error.status } : {}),
+  };
+}
+
+async function storeAccountEntries(accounts, resultsByKey) {
+  const merged = await readAccountState();
+  for (const a of accounts) {
+    const key = accountKey(a);
+    merged[key] = stateEntry(a, resultsByKey.get(key));
+  }
+  await persistAccountState(merged);
 }
 
 // Packaged icon for toasts. Chrome requires iconUrl; without it the
@@ -264,23 +333,42 @@ function defaultSetBadge(count) {
   ]).then(() => {}).catch(() => {});
 }
 
-// ---- chrome wiring (inactive under Node: typeof chrome is "undefined") ----
+// ---- real token wiring (Task 6 flows, silent from the worker) ----
 
-async function loadAccounts() {
-  const data = await globalThis.chrome?.storage?.local?.get?.("accounts");
-  return data?.accounts ?? [];
+let lastConfiguredClientId = null;
+
+// Per-account silent tokens backed by the real Task 6 flows: gmail via
+// getGmailToken, outlook via getGraphToken, always interactive:false so a
+// background poll never pops a sign-in window. The Microsoft side is
+// configured once from the Entra app id on the account record (a public
+// identifier, never a secret).
+export function buildTokenProvider(accounts = []) {
+  const clientId = getMicrosoftClientId(accounts ?? []);
+  if (clientId && clientId !== lastConfiguredClientId) {
+    try {
+      configureMicrosoftAuth({ clientId });
+      lastConfiguredClientId = clientId;
+    } catch {
+      // Per-account errors surface at poll time; never break wiring here.
+    }
+  }
+  return {
+    getToken: (acct) => silentTokenFor(acct),
+    refreshToken: (acct) => silentTokenFor(acct),
+  };
 }
 
-function defaultTokenProvider() {
-  return {
-    // Task 6 replaces these with real identity/auth flows.
-    getToken: async () => {
-      throw new Error("no token provider: auth arrives in Task 6");
-    },
-    refreshToken: async () => {
-      throw new Error("no token provider: auth arrives in Task 6");
-    },
-  };
+function silentTokenFor(acct) {
+  if (acct?.provider === "outlook") return getGraphToken(false);
+  if (acct?.provider === "gmail") return getGmailToken(false);
+  return Promise.reject(new Error(`unknown provider ${acct?.provider}`));
+}
+
+// Fill missing token callbacks with the real silent provider. Explicit
+// test doubles always win via the spread.
+function withRealTokens(accounts, deps = {}) {
+  const real = buildTokenProvider(accounts ?? []);
+  return { getToken: real.getToken, refreshToken: real.refreshToken, ...deps };
 }
 
 async function ensureAlarm() {
@@ -308,20 +396,61 @@ async function start() {
   await ready;
   const accounts = await loadAccounts();
   if (accounts.length) {
-    await pollAll(accounts, { ...defaultTokenProvider() });
+    await pollAll(accounts, withRealTokens(accounts));
   }
+}
+
+// Interactive recovery for one account, driven by the popup's sign-in
+// button: one visible auth flow, then an immediate silent poll so the
+// account recovers without waiting for the next alarm. Other accounts
+// are untouched. Returns the poll result; never throws.
+export async function handleSignIn(accounts, target, deps = {}) {
+  await ready;
+  const list = accounts ?? [];
+  const acct = list.find(
+    (a) =>
+      a?.provider === target?.provider &&
+      (a?.account ?? a?.address) === (target?.account ?? target?.address),
+  ) ?? target;
+  const key = accountKey(acct);
+  const { interactiveGet, ...pollDeps } = deps;
+  const interactive =
+    interactiveGet ??
+    ((a) => (a?.provider === "outlook" ? getGraphToken(true) : getGmailToken(true)));
+  try {
+    await interactive(acct);
+  } catch (err) {
+    markNeedsSignIn(acct);
+    const failure = { key, needsSignIn: true, error: sanitizeError(err, acct) };
+    await storeAccountEntries([acct], new Map([[key, failure]]));
+    return failure;
+  }
+  clearNeedsSignIn(acct);
+  clearOffline(acct);
+  const real = buildTokenProvider(list);
+  const result = await pollAccount(acct, {
+    getToken: real.getToken,
+    refreshToken: real.refreshToken,
+    ...pollDeps,
+  }).catch((error) => ({ key, error: sanitizeError(error, acct) }));
+  if (result.items?.length) {
+    mergeMessages(result.items);
+    await persistCache(getInbox());
+  }
+  await storeAccountEntries([acct], new Map([[key, result]]));
+  return result;
 }
 
 // Polling entry points. Each awaits ready first; tests drive these directly
 // to simulate a fresh worker woken by an alarm with no startup events.
 export async function handleAlarm(accounts, deps = {}) {
   await ready;
-  return pollAll(accounts, deps);
+  return pollAll(accounts, withRealTokens(accounts, deps));
 }
 
 export async function handleManualRefresh(accounts, deps = {}) {
   await ready;
-  return pollAll(accounts, { ...deps, manual: true });
+  return pollAll(accounts, { ...withRealTokens(accounts, deps), manual: true });
 }
 
 if (typeof chrome !== "undefined" && chrome?.alarms) {
@@ -331,14 +460,25 @@ if (typeof chrome !== "undefined" && chrome?.alarms) {
     if (alarm?.name !== ALARM_NAME) return;
     void (async () => {
       const accounts = await loadAccounts();
-      await handleAlarm(accounts, { ...defaultTokenProvider() });
+      await handleAlarm(accounts);
     })();
   });
   chrome.runtime?.onMessage?.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "sign-in") {
+      void (async () => {
+        const accounts = await loadAccounts();
+        const result = await handleSignIn(accounts, {
+          provider: msg.provider,
+          account: msg.account ?? msg.address,
+        });
+        sendResponse?.({ ok: !result.needsSignIn, badge: undefined });
+      })();
+      return true;
+    }
     if (msg?.type !== "refresh") return false;
     void (async () => {
       const accounts = await loadAccounts();
-      const summary = await handleManualRefresh(accounts, { ...defaultTokenProvider() });
+      const summary = await handleManualRefresh(accounts);
       sendResponse?.({ ok: true, badge: summary.badge });
     })();
     return true;

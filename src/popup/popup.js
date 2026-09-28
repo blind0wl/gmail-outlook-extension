@@ -2,9 +2,11 @@
 // key "mailCache" only (shape from src/store/cache.js):
 // { key, provider, account, from, subject, snippet, date, unread, localRead }
 // where `key` is `provider + ':' + id`. Makes no network calls.
-// Sign-in buttons and error states belong to Task 9, not this task.
+// Per-account error rows (stale, offline, needs sign in) read the worker's
+// "accountState" flags and recover via a "sign-in" runtime message.
 
 import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
+import { accountStatusLabel } from "../notify/notify.js";
 import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
 
 (function () {
@@ -19,6 +21,12 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   // mail cache. Settings keys stay `provider:account`.
   var ACCOUNTS_KEY = "accounts";
   var configuredAccounts = [];
+  // Per-account error flags persisted by the worker under ACCOUNT_STATE_KEY
+  // ({ needsSignIn, offline, backedOff, retryAt, status } per
+  // "provider:address"). Rendered as address-plus-code lines only — never
+  // subject, snippet, or body. One failed account never hides the others.
+  var ACCOUNT_STATE_KEY = "accountState";
+  var accountState = {};
   // Sound settings mirror the worker's storage shape
   // ({ masterMuted, volume, mutedAccounts }) so both sides agree.
   var sound = { masterMuted: false, volume: 0.5, mutedAccounts: {} };
@@ -270,7 +278,105 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     renderHeader();
     renderPills();
     renderList();
+    renderStatus();
     renderSound();
+  }
+
+  // Union of configured accounts and cached-mail accounts, so an account
+  // with an error but no cached messages still gets its status row.
+  function statusAccounts() {
+    var seen = {};
+    var out = [];
+    function push(provider, account) {
+      var key = provider + ":" + (account || "");
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push({ provider: provider, account: account || "", key: key });
+    }
+    var i;
+    for (i = 0; i < configuredAccounts.length; i++) {
+      push(configuredAccounts[i].provider, configuredAccounts[i].account || configuredAccounts[i].address);
+    }
+    for (i = 0; i < items.length; i++) {
+      push(items[i].provider, items[i].account);
+    }
+    return out;
+  }
+
+  function renderStatus() {
+    var section = document.getElementById("account-status");
+    var list = document.getElementById("account-status-list");
+    if (!section || !list) return;
+    while (list.firstChild) list.removeChild(list.firstChild);
+    var offlineNow = typeof navigator !== "undefined" && navigator.onLine === false;
+    var rows = 0;
+    statusAccounts().forEach(function (entry) {
+      var stored = accountState[entry.key] || {};
+      var state = {};
+      for (var k in stored) state[k] = stored[k];
+      if (offlineNow && !stored.needsSignIn) state.offline = true;
+      var label = accountStatusLabel(entry, state);
+      if (!label) return;
+      rows += 1;
+      var li = document.createElement("li");
+      li.className = "status-row";
+      li.appendChild(document.createTextNode(label));
+      if (state.needsSignIn) {
+        (function (provider, account) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "status-signin";
+          btn.textContent = "Sign in";
+          btn.setAttribute("aria-label", "Sign in " + account);
+          btn.addEventListener("click", function () {
+            btn.disabled = true;
+            btn.textContent = "Signing in\u2026";
+            signInAccount(provider, account, function () {
+              btn.disabled = false;
+              btn.textContent = "Sign in";
+            });
+          });
+          li.appendChild(btn);
+        })(entry.provider, entry.account);
+      }
+      list.appendChild(li);
+    });
+    section.hidden = rows === 0;
+  }
+
+  // Interactive recovery for one account. The worker runs the visible auth
+  // flow and repolls that account; storage-only here, no network calls.
+  function signInAccount(provider, account, done) {
+    function finish() {
+      loadStatus();
+      if (done) done();
+    }
+    try {
+      if (globalThis.chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage(
+          { type: "sign-in", provider: provider, account: account },
+          function () { finish(); },
+        );
+      } else {
+        finish();
+      }
+    } catch {
+      finish();
+    }
+  }
+
+  function loadStatus() {
+    var store = storageLocal();
+    if (!store) {
+      accountState = {};
+      renderStatus();
+      return;
+    }
+    Promise.resolve(store.get(ACCOUNT_STATE_KEY)).then(function (data) {
+      var next = data ? data[ACCOUNT_STATE_KEY] : null;
+      accountState = next && typeof next === "object" ? next : {};
+      renderStatus();
+    });
   }
 
   function load() {
@@ -337,12 +443,19 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
             var anext = changes[ACCOUNTS_KEY].newValue;
             configuredAccounts = Array.isArray(anext) ? anext : [];
             renderSound();
+            renderStatus();
+          }
+          if (changes[ACCOUNT_STATE_KEY]) {
+            var stnext = changes[ACCOUNT_STATE_KEY].newValue;
+            accountState = stnext && typeof stnext === "object" ? stnext : {};
+            renderStatus();
           }
         }
       });
     }
     loadSound();
     loadSoundAccounts();
+    loadStatus();
     load();
   }
 

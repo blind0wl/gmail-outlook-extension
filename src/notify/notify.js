@@ -64,6 +64,34 @@ function storageLocal() {
   return globalThis.chrome?.storage?.local;
 }
 
+// Short retry text for stale labels. Under a minute reads "in Ns",
+// older reads the local clock ("14:03"). Pure, for popup and tests.
+export function formatRetryAt(retryAt, now = Date.now()) {
+  const ms = retryAt - now;
+  if (ms <= 0) return "now";
+  if (ms <= 60_000) return `in ${Math.round(ms / 1000)}s`;
+  return new Date(retryAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+// One plain line per account error state, address plus code only — never
+// subject, snippet, or body. Extra fields on state are ignored by design.
+// Returns null when the account is healthy (no error UI).
+export function accountStatusLabel(acct, state = {}) {
+  const address = acct?.account ?? acct?.address ?? "";
+  if (state.needsSignIn) return `${address} — needs sign in`;
+  if (state.offline) return `${address} — offline, showing saved mail`;
+  if (state.backedOff) {
+    const when = state.retryAt ? `retry ${formatRetryAt(state.retryAt)}` : "retry pending";
+    const code = state.status !== undefined ? ` (${state.status})` : "";
+    return `${address} — stale, ${when}${code}`;
+  }
+  if (state.status !== undefined || state.error) {
+    const code = state.status !== undefined ? ` (${state.status})` : "";
+    return `${address} — last poll failed${code}`;
+  }
+  return null;
+}
+
 // Persist the merged inbox after every successful poll. No-op without chrome.
 export async function persistCache(items) {
   const store = storageLocal();
