@@ -523,11 +523,16 @@ export async function clearGraphToken() {
         "microsoft auth unavailable: chrome.storage.session missing",
       );
     }
+    // Without get there is no way to enumerate slots that may remain
+    // usable: report incomplete sign-out instead of blind success.
+    if (typeof store.get !== "function") {
+      throw new Error("microsoft sign out failed");
+    }
     let keys = [MS_SESSION_KEY];
     try {
       // get(null) returns every key in the area; fall back to the legacy
-      // slot when enumeration is unavailable.
-      const all = await store.get?.(null);
+      // slot when it yields nothing usable.
+      const all = await store.get(null);
       if (all && typeof all === "object") {
         const found = Object.keys(all).filter(
           (k) => k === MS_SESSION_KEY || k.startsWith(`${MS_SESSION_KEY}:`),
@@ -535,7 +540,14 @@ export async function clearGraphToken() {
         if (found.length) keys = found;
       }
     } catch {
-      // Fall back to the legacy slot.
+      // Enumeration failed: slots may remain usable. Remove the legacy
+      // slot best-effort, then report incomplete sign-out.
+      try {
+        await store.remove(MS_SESSION_KEY);
+      } catch {
+        // Removal failure is already reported below via the throw.
+      }
+      throw new Error("microsoft sign out failed");
     }
     try {
       for (const k of keys) await store.remove(k);

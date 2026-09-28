@@ -42,37 +42,12 @@ export function getGmailToken(interactive = true) {
   });
 }
 
-// Sign out helper. Removes every per-account session slot this extension
-// writes plus one token from Chrome's cache; callers clear each token they
-// hold. Resolves true when anything was removed, false when there was
-// nothing to remove (no token, no slots, or no chrome.identity), and
-// rejects with a sanitized error when removal itself fails so callers can
-// report incomplete sign-out. Previously acquired credentials stay
-// unusable: slots are gone and the epoch-free Chrome token is evicted.
-export async function clearGmailToken(token) {
-  let cleared = false;
-  try {
-    const store = globalThis.chrome?.storage?.session;
-    if (store) {
-      let keys = [];
-      try {
-        // get(null) returns every key in the area.
-        const all = await store.get?.(null);
-        if (all && typeof all === "object") {
-          keys = Object.keys(all).filter((k) => k.startsWith(googleSessionKey("")));
-        }
-      } catch {
-        // Enumeration unavailable; Chrome cache eviction still proceeds.
-      }
-      for (const k of keys) {
-        await store.remove(k);
-        cleared = true;
-      }
-    }
-  } catch {
-    throw new Error(`google sign out failed at=${new Date().toISOString()}`);
-  }
-  const evicted = await new Promise((resolve, reject) => {
+// Single-token Chrome cache eviction, for renewal paths. Removes only
+// the given token: other accounts' slots and credentials are untouched.
+// Resolves true when evicted, false when there was nothing to evict, and
+// rejects with a sanitized error when eviction itself fails.
+export function evictGmailToken(token) {
+  return new Promise((resolve, reject) => {
     const id = identity();
     if (!id?.removeCachedAuthToken || !token) {
       resolve(false);
@@ -93,6 +68,45 @@ export async function clearGmailToken(token) {
       reject(new Error(`google sign out threw at=${new Date().toISOString()}`));
     }
   });
+}
+
+// Sign out helper. Removes every per-account session slot this extension
+// writes plus one token from Chrome's cache; callers clear each token they
+// hold. Resolves true when anything was removed, false when there was
+// nothing to remove (no token, no slots, or no chrome.identity), and
+// rejects with a sanitized error when removal itself fails — including
+// when slot enumeration fails, since slots may then remain usable and the
+// caller must report incomplete sign-out. Previously acquired credentials
+// stay unusable: slots are gone and the Chrome token is evicted.
+export async function clearGmailToken(token) {
+  let cleared = false;
+  const store = globalThis.chrome?.storage?.session;
+  if (store) {
+    // Without get there is no way to enumerate slots that may remain
+    // usable: report incomplete sign-out instead of blind success.
+    if (typeof store.get !== "function") {
+      throw new Error(`google sign out failed at=${new Date().toISOString()}`);
+    }
+    let keys;
+    try {
+      // get(null) returns every key in the area.
+      const all = await store.get(null);
+      keys = all && typeof all === "object"
+        ? Object.keys(all).filter((k) => k.startsWith(googleSessionKey("")))
+        : [];
+    } catch {
+      throw new Error(`google sign out failed at=${new Date().toISOString()}`);
+    }
+    try {
+      for (const k of keys) {
+        await store.remove(k);
+        cleared = true;
+      }
+    } catch {
+      throw new Error(`google sign out failed at=${new Date().toISOString()}`);
+    }
+  }
+  const evicted = await evictGmailToken(token);
   return cleared || evicted;
 }
 
@@ -468,28 +482,57 @@ export async function signInGoogleForAccount(account) {
   return record.accessToken;
 }
 
-// Forced silent renewal after a 401: evict the rejected credential from
-// the Chrome cache and the account slot, then acquire silently. Never
-// returns the rejected token; throws AUTH_REQUIRED when renewal fails so
-// the caller drives explicit interactive recovery.
+// Forced silent renewal after a 401. Eviction happens only for proven-bad
+// credentials, never upfront: the stored refresh grant is spent first
+// (the slot is rewritten only on success), and only this account's
+// rejected access token is dropped so the silent path cannot return it
+// again. Other accounts' slots are never touched. Never returns the
+// rejected token; throws AUTH_REQUIRED when renewal fails so the caller
+// drives explicit interactive recovery, or the transient blip when the
+// session is retained and a retry may succeed.
 export async function renewGmailToken(account, rejectedToken) {
+  const store = globalThis.chrome?.storage?.session;
+  if (account && store) {
+    let rec = null;
+    try {
+      const key = googleSessionKey(account);
+      const data = await store.get?.(key);
+      rec = data?.[key] ?? null;
+    } catch {
+      rec = null;
+    }
+    if (rec?.accessToken === rejectedToken && rec?.refreshToken) {
+      try {
+        const fresh = await refreshGoogleRecord(account, rec);
+        // Fresh credential secured: now evict the rejected Chrome copy.
+        try {
+          await evictGmailToken(rejectedToken);
+        } catch {
+          // Eviction is best-effort; renewal already succeeded.
+        }
+        if (fresh !== rejectedToken) return fresh;
+      } catch (err) {
+        // Transient: the session is retained untouched for the retry.
+        if (err?.transient) throw err;
+        // Dead grant: fall through to Chrome-cache acquisition below.
+      }
+    }
+    // Drop only this account's known-rejected access token (the refresh
+    // grant, if any, is preserved): it can never be used again, so
+    // nothing of value is lost before a replacement is secured.
+    if (rec?.accessToken === rejectedToken) {
+      try {
+        const key = googleSessionKey(account);
+        await store.set?.({ [key]: { ...rec, accessToken: null, expiresAt: 0 } });
+      } catch {
+        // Best-effort; the guard below still rejects a repeat.
+      }
+    }
+  }
   try {
-    await clearGmailToken(rejectedToken);
+    await evictGmailToken(rejectedToken);
   } catch {
     // Eviction is best-effort; renewal still proceeds.
-  }
-  if (account) {
-    try {
-      const store = globalThis.chrome?.storage?.session;
-      const key = googleSessionKey(account);
-      const data = await store?.get?.(key);
-      const rec = data?.[key];
-      if (rec && rec.accessToken === rejectedToken) {
-        await store.set({ [key]: { ...rec, accessToken: null, expiresAt: 0 } });
-      }
-    } catch {
-      // Eviction is best-effort; renewal still proceeds.
-    }
   }
   const token = await getGmailTokenForAccount(account, false);
   if (rejectedToken && token === rejectedToken) throw authRequired(account);

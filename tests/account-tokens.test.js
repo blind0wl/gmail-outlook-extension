@@ -872,3 +872,226 @@ test("google sign-out clears slots and cache; grants stay unusable", async () =>
     globalThis.fetch = prevFetch;
   }
 });
+
+// Fix round 3.1 (microsoft): a seeded credential whose /me identity differs
+// from the requested account is rejected through the real worker wiring —
+// never stored, never used for fetching.
+test("worker rejects a mismatched microsoft identity instead of using it", async () => {
+  const key = sessionKeyFor("r31@o.c");
+  const stores = memoryStores({}, {
+    [key]: {
+      accessToken: "bad-tok",
+      refreshToken: "rt-31",
+      expiresAt: Date.now() + 3600_000,
+      account: "r31@o.c",
+    },
+  });
+  const prev = installChrome(stores.chrome);
+  const usedTokens = [];
+  const prevFetch = stubFetch(async (url) => {
+    if (String(url).startsWith("https://graph.microsoft.com/v1.0/me")) {
+      return { ok: true, status: 200, json: async () => ({ mail: "someone-else@o.c" }) };
+    }
+    assert.equal(String(url), MS_TOKEN_URL);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "rotated-tok", expires_in: 3600 }),
+    };
+  });
+  try {
+    const accounts = [{ provider: "outlook", account: "r31@o.c", clientId: "entra-renew-31" }];
+    const provider = buildTokenProvider(accounts);
+    const r = await pollAccount(accounts[0], {
+      fetchers: {
+        outlook: async (token) => {
+          usedTokens.push(token);
+          if (token === "bad-tok") throw err401();
+          return [item(`outlook:r31-${token}`, "outlook", "r31@o.c")];
+        },
+      },
+      getToken: provider.getToken,
+      refreshToken: provider.refreshToken,
+    });
+    assert.equal(r.needsSignIn, true, "foreign grant drives interactive recovery");
+    assert.ok(!usedTokens.includes("rotated-tok"), "rotated credential never used");
+    assert.ok(!getInbox().find((i) => i.key.startsWith("outlook:r31-")), "nothing fetched");
+    assert.equal(stores.session[key] ?? null, null, "mismatched slot evicted, never rebound");
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 3.2 (google): renewal 503 through the worker stays transient
+// with no needs-sign-in, and the pre-existing session is retained.
+test("gmail renewal 503 through the worker retains the session", async () => {
+  const slot = googleSessionKey("r32@gmail.com");
+  const stores = memoryStores({}, {
+    [slot]: {
+      accessToken: "bad-tok",
+      refreshToken: "rt-32",
+      expiresAt: Date.now() - 1000,
+      account: "r32@gmail.com",
+    },
+  });
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: { getManifest: () => ({ oauth2: { client_id: "g-id" } }) },
+    identity: { getAuthToken: (_opts, cb) => cb(null) },
+  });
+  const prevFetch = stubFetch(async (url) => {
+    assert.equal(String(url), GOOGLE_TOKEN_URL);
+    return { ok: false, status: 503, json: async () => ({}) };
+  });
+  try {
+    const accounts = [{ provider: "gmail", account: "r32@gmail.com" }];
+    const provider = buildTokenProvider(accounts);
+    const r = await pollAccount(accounts[0], {
+      fetchers: {
+        gmail: async (token) => {
+          assert.equal(token, "bad-tok");
+          throw err401();
+        },
+      },
+      getToken: async () => "bad-tok",
+      refreshToken: provider.refreshToken,
+    });
+    assert.ok(r.error, "generic error recorded");
+    assert.equal(r.refreshed, true);
+    assert.equal(r.needsSignIn, undefined, "no sign-in for a 503 blip");
+    assert.equal(stores.session[slot]?.accessToken, "bad-tok", "rejected token retained for retry");
+    assert.equal(stores.session[slot]?.refreshToken, "rt-32", "refresh grant retained");
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+// Fix round 3.3 (google): enumeration failure rejects instead of reporting
+// success over slots that may remain usable.
+test("google sign-out rejects when slot enumeration fails", async () => {
+  const stores = memoryStores({}, {
+    [googleSessionKey("r33@gmail.com")]: {
+      accessToken: "tok-33",
+      expiresAt: Date.now() + 3600_000,
+      account: "r33@gmail.com",
+    },
+  });
+  const session = stores.chrome.storage.session;
+  session.get = async (k) => {
+    if (k == null) throw new Error("quota db locked");
+    return { [k]: null };
+  };
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: {},
+    identity: { removeCachedAuthToken: (_details, cb) => cb() },
+  });
+  try {
+    await assert.rejects(clearGmailToken("tok-33"), /sign out failed/);
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+// Fix round 3.3 (microsoft): enumeration failure rejects instead of
+// reporting success over slots that may remain usable.
+test("microsoft sign-out rejects when slot enumeration fails", async () => {
+  const keyA = sessionKeyFor("r33a@o.c");
+  const stores = memoryStores({}, {
+    [keyA]: { accessToken: "tok-33a", expiresAt: Date.now() + 3600_000, account: "r33a@o.c" },
+  });
+  const session = stores.chrome.storage.session;
+  session.get = async (k) => {
+    if (k == null) throw new Error("quota db locked");
+    return { [k]: null };
+  };
+  const prev = installChrome(stores.chrome);
+  try {
+    configureMicrosoftAuth({ clientId: "entra-enum-3" });
+    await assert.rejects(clearGraphToken(), /sign out failed/);
+    assert.ok(stores.session[keyA], "unverifiable slot left untouched, failure reported");
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+// Fix round 3.4 (google): a 401 on one Gmail account leaves a second Gmail
+// account's credentials usable — renewal evicts one token, not every slot.
+test("one gmail 401 leaves a second gmail account usable", async () => {
+  const slotA = googleSessionKey("r34a@gmail.com");
+  const slotB = googleSessionKey("r34b@gmail.com");
+  const stores = memoryStores({}, {
+    [slotA]: {
+      accessToken: "bad-A",
+      refreshToken: "rt-A",
+      expiresAt: Date.now() - 1000,
+      account: "r34a@gmail.com",
+    },
+    [slotB]: {
+      accessToken: "good-B",
+      refreshToken: "rt-B",
+      expiresAt: Date.now() + 3600_000,
+      account: "r34b@gmail.com",
+    },
+  });
+  const evicted = [];
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: { getManifest: () => ({ oauth2: { client_id: "g-id" } }) },
+    identity: {
+      removeCachedAuthToken: ({ token }, cb) => void (evicted.push(token), cb()),
+      // No grant in the Chrome cache: without its slot, B could not recover.
+      getAuthToken: (_opts, cb) => cb(null),
+    },
+  });
+  const prevFetch = stubFetch(async (url, opts) => {
+    if (String(url) === GOOGLE_TOKEN_URL) {
+      const body = new URLSearchParams(opts?.body);
+      assert.equal(body.get("refresh_token"), "rt-A", "only A's grant is spent");
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: "fresh-A", expires_in: 3600 }),
+      };
+    }
+    if (String(url) === GMAIL_PROFILE_URL) {
+      return { ok: true, status: 200, json: async () => ({ emailAddress: "r34a@gmail.com" }) };
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  });
+  try {
+    const accounts = [
+      { provider: "gmail", account: "r34a@gmail.com" },
+      { provider: "gmail", account: "r34b@gmail.com" },
+    ];
+    const provider = buildTokenProvider(accounts);
+    const fetchers = {
+      gmail: async (token) => {
+        if (token === "bad-A") throw err401();
+        if (token === "fresh-A") return [item("gmail:r34a", "gmail", "r34a@gmail.com")];
+        if (token === "good-B") return [item("gmail:r34b", "gmail", "r34b@gmail.com")];
+        const e = new Error("foreign token");
+        e.status = 403;
+        throw e;
+      },
+    };
+    const summary = await pollAll(accounts, {
+      fetchers,
+      getToken: provider.getToken,
+      refreshToken: provider.refreshToken,
+      notify: async () => {},
+      setBadge: async () => {},
+    });
+    assert.ok(summary.succeeded.includes("gmail:r34a@gmail.com"), "A recovered via its own grant");
+    assert.ok(summary.succeeded.includes("gmail:r34b@gmail.com"), "B polled from its slot");
+    assert.ok(!evicted.includes("good-B"), "B's credential never evicted");
+    assert.equal(stores.session[slotB]?.accessToken, "good-B", "B's slot untouched");
+    assert.equal(stores.session[slotB]?.refreshToken, "rt-B", "B's grant untouched");
+    assert.equal(stores.session[slotA]?.accessToken, "fresh-A", "A rotated in its own slot");
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
