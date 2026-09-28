@@ -1,7 +1,7 @@
 // A v5 inbox popup. Reads the normalized cache from chrome.storage.local
 // key "mailCache" only (shape from src/store/cache.js):
 // { key, provider, account, from, subject, snippet, date, unread, localRead }
-// where `key` is `provider + ':' + id`. Makes no network calls.
+// Keys include provider, encoded account, and message ID. No network calls.
 // Per-account error rows (stale, offline, needs sign in) read the worker's
 // "accountState" flags and recover via a "sign-in" runtime message.
 
@@ -63,26 +63,47 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     return s ? s.charAt(0).toUpperCase() : "?";
   }
 
-  function persist(itemsToSave) {
-    var store = storageLocal();
-    if (!store) return;
-    var payload = {};
-    payload[CACHE_KEY] = itemsToSave;
-    store.set(payload);
+  var expanded = new Set();
+
+  async function sendAction(message, button) {
+    if (button) button.disabled = true;
+    var status = document.getElementById("lifecycle-message");
+    try {
+      var result = await chrome.runtime.sendMessage(message);
+      status.textContent = result?.ok ? "" : "Account action failed. Check the account details and try Sign in.";
+      return result;
+    } catch {
+      status.textContent = "Account action failed. Try again.";
+    } finally {
+      if (button) button.disabled = false;
+    }
   }
 
   function markRead(key) {
-    var changed = false;
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].key === key && items[i].localRead !== true) {
-        items[i].localRead = true;
-        changed = true;
-      }
-    }
-    if (changed) {
-      persist(items);
-      render();
-    }
+    for (var item of items) if (item.key === key) item.localRead = true;
+    // The worker serializes the mutation with poll commits and updates badge.
+    void sendAction({type: "mark-read", key: key});
+    renderHeader();
+  }
+
+  function renderAccounts() {
+    var list = document.getElementById("account-controls");
+    list.replaceChildren();
+    configuredAccounts.forEach(function (acct) {
+      var row = document.createElement("li");
+      row.appendChild(document.createTextNode(acct.account + " "));
+      [["Sign in", "sign-in"], ["Sign out", "sign-out"], ["Remove", "remove-account"]].forEach(function (entry) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = entry[0];
+        button.setAttribute("aria-label", entry[0] + " " + acct.account);
+        button.addEventListener("click", function () {
+          void sendAction({type: entry[1], provider: acct.provider, account: acct.account}, button);
+        });
+        row.appendChild(button);
+      });
+      list.appendChild(row);
+    });
   }
 
   function visibleItems() {
@@ -120,6 +141,9 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   function renderList() {
     var list = document.getElementById("inbox-list");
     var empty = document.getElementById("inbox-empty");
+    var active = document.activeElement;
+    var focusedKey = active?.closest?.(".card")?.getAttribute("data-key");
+    var focusedOpen = active?.classList?.contains("card-open");
     while (list.firstChild) list.removeChild(list.firstChild);
     var shown = visibleItems();
     empty.hidden = shown.length !== 0;
@@ -133,7 +157,9 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       // sets: focus the card, press Enter or Space. Never opens provider.
       card.setAttribute("tabindex", "0");
       card.setAttribute("role", "button");
-      card.setAttribute("aria-label", "Mark as read: " + (item.subject || "(no subject)"));
+      card.setAttribute("aria-label", "Read: " + (item.subject || "(no subject)"));
+      card.setAttribute("data-key", item.key);
+      card.setAttribute("aria-expanded", String(expanded.has(item.key)));
 
       if (!read) {
         var dot = document.createElement("span");
@@ -197,18 +223,34 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       main.appendChild(text);
       card.appendChild(main);
 
-      card.addEventListener("click", function () {
+      var preview = document.createElement("div");
+      preview.className = "card-preview";
+      preview.hidden = !expanded.has(item.key);
+      var fullSubject = document.createElement("p");
+      fullSubject.textContent = item.subject || "(no subject)";
+      var fullSnippet = document.createElement("p");
+      fullSnippet.textContent = item.snippet || "";
+      preview.append(fullSubject, fullSnippet);
+      card.appendChild(preview);
+      function selectCard() {
+        expanded.add(item.key);
+        preview.hidden = false;
+        card.setAttribute("aria-expanded", "true");
+        card.classList.add("read");
+        card.querySelector(".unread-dot")?.remove();
         markRead(item.key);
-      });
+      }
+      card.addEventListener("click", selectCard);
       // Card-level keys only: keydowns bubbling up from the nested Open
       // button are ignored so the button keeps native Enter/Space behavior.
       card.addEventListener("keydown", function (event) {
         if (!isCardSelfKeydown(event)) return;
         event.preventDefault();
-        markRead(item.key);
+        selectCard();
       });
 
       list.appendChild(card);
+      if (focusedKey === item.key) (focusedOpen ? open : card).focus();
     });
   }
 
@@ -263,6 +305,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     Promise.resolve(store.get(ACCOUNTS_KEY)).then(function (data) {
       var list = data ? data[ACCOUNTS_KEY] : null;
       configuredAccounts = Array.isArray(list) ? list : [];
+      renderAccounts();
       renderSound();
     });
   }
@@ -275,6 +318,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function render() {
+    renderAccounts();
     renderHeader();
     renderPills();
     renderList();
@@ -396,6 +440,28 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function init() {
+    var focusedToggle = document.getElementById("skip-focused");
+    storageLocal()?.get("skipFocusedProvider").then(function (value) {
+      focusedToggle.checked = value?.skipFocusedProvider !== false;
+    });
+    focusedToggle.addEventListener("change", function () {
+      void storageLocal()?.set({skipFocusedProvider: focusedToggle.checked});
+    });
+    ["gmail", "outlook"].forEach(function (provider) {
+      var button = document.getElementById("add-" + provider);
+      button.addEventListener("click", async function () {
+        var account = globalThis.prompt("Email address for " + provider);
+        if (!account) return;
+        var clientId = globalThis.prompt(provider === "outlook"
+          ? "Microsoft application client ID from your personal-account registration"
+          : "Google Web application client ID with this extension redirect registered");
+        if (!clientId) return;
+        await sendAction({type: "add-account", provider, account, clientId}, button);
+      });
+    });
+    document.getElementById("refresh-mail").addEventListener("click", function (event) {
+      void sendAction({type: "refresh"}, event.currentTarget);
+    });
     var buttons = document.querySelectorAll(".pills button");
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].addEventListener("click", function (event) {
@@ -442,6 +508,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           if (changes[ACCOUNTS_KEY]) {
             var anext = changes[ACCOUNTS_KEY].newValue;
             configuredAccounts = Array.isArray(anext) ? anext : [];
+            renderAccounts();
             renderSound();
             renderStatus();
           }

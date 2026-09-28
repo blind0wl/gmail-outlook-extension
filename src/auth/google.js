@@ -1,9 +1,17 @@
+import {
+  capture,
+  assertCurrent,
+  invalidate,
+  sessionOp,
+  checkSignedOut,
+  markSignedOut,
+} from "./session-guard.js";
 // Google auth for Gmail read-only access.
 //
 // Uses chrome.identity.getAuthToken (Chrome manages the OAuth dance against
 // the client id pinned in manifest.json oauth2 section). Clearing uses
-// chrome.identity.removeCachedAuthToken. No tokens are logged or persisted
-// here; Chrome holds the cached token and charge of refresh.
+// chrome.identity.removeCachedAuthToken. Account-bound credentials stay in
+// session storage; Chrome manages renewal of its own credentials.
 
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
@@ -78,64 +86,75 @@ export function evictGmailToken(token) {
 // when slot enumeration fails, since slots may then remain usable and the
 // caller must report incomplete sign-out. Previously acquired credentials
 // stay unusable: slots are gone and the Chrome token is evicted.
-export async function clearGmailToken(token) {
-  let cleared = false;
-  const store = globalThis.chrome?.storage?.session;
-  if (store) {
-    // Without get there is no way to enumerate slots that may remain
-    // usable: report incomplete sign-out instead of blind success.
-    if (typeof store.get !== "function") {
-      throw new Error(`google sign out failed at=${new Date().toISOString()}`);
+export async function clearGmailToken(token, account) {
+  const guardKey = account === undefined ? "gmail" : `gmail:${account}`;
+  invalidate(guardKey);
+  return sessionOp(async () => {
+    if (account !== undefined) {
+      await markSignedOut(guardKey, true);
+      const store = globalThis.chrome?.storage?.session;
+      if (!store?.get || !store?.remove)
+        throw new Error("google sign out failed");
+      const record = (await store.get(googleSessionKey(account)))?.[
+        googleSessionKey(account)
+      ];
+      if (record?.accessToken) await evictGmailToken(record.accessToken);
+      await store.remove(googleSessionKey(account));
+      if (token && token !== record?.accessToken) await evictGmailToken(token);
+      return true;
     }
-    let keys;
-    try {
-      // get(null) returns every key in the area.
-      const all = await store.get(null);
-      keys = all && typeof all === "object"
-        ? Object.keys(all).filter((k) => k.startsWith(googleSessionKey("")))
-        : [];
-    } catch {
-      throw new Error(`google sign out failed at=${new Date().toISOString()}`);
-    }
-    try {
-      for (const k of keys) {
-        await store.remove(k);
-        cleared = true;
+    let cleared = false;
+    const store = globalThis.chrome?.storage?.session;
+    if (store) {
+      // Without get there is no way to enumerate slots that may remain
+      // usable: report incomplete sign-out instead of blind success.
+      if (typeof store.get !== "function") {
+        throw new Error(
+          `google sign out failed at=${new Date().toISOString()}`,
+        );
       }
-    } catch {
-      throw new Error(`google sign out failed at=${new Date().toISOString()}`);
+      let keys;
+      try {
+        // get(null) returns every key in the area.
+        const all = await store.get(null);
+        keys =
+          all && typeof all === "object"
+            ? Object.keys(all).filter((k) => k.startsWith(googleSessionKey("")))
+            : [];
+      } catch {
+        throw new Error(
+          `google sign out failed at=${new Date().toISOString()}`,
+        );
+      }
+      try {
+        for (const k of keys) {
+          const record = (await store.get(k))?.[k];
+          if (record?.accessToken) await evictGmailToken(record.accessToken);
+          await markSignedOut(
+            `gmail:${k.slice(googleSessionKey("").length)}`,
+            true,
+          );
+          await store.remove(k);
+          cleared = true;
+        }
+      } catch {
+        throw new Error(
+          `google sign out failed at=${new Date().toISOString()}`,
+        );
+      }
     }
-  }
-  const evicted = await evictGmailToken(token);
-  return cleared || evicted;
+    const evicted = await evictGmailToken(token);
+    return cleared || evicted;
+  });
 }
 
-// ---- Per-account Gmail tokens (multi-mailbox support) ----
-//
-// chrome.identity.getAuthToken takes no account parameter: it always
-// resolves the default-account credential. Handing that token to a second
-// Gmail record would poll the wrong mailbox, so the worker must never use
-// the bare default token for a named account. It calls
-// getGmailTokenForAccount instead:
-//
-// - Silent: prefer the account-bound session record (with its refresh
-//   token), else take the Chrome-cached token and verify it belongs to the
-//   requested account via the Gmail profile endpoint. A mismatch rejects
-//   with ACCOUNT_MISMATCH; the wrong mailbox's credential is never returned.
-// - Interactive (account switch): chrome.identity.launchWebAuthFlow against
-//   Google OAuth with login_hint=<account> plus PKCE (code flow, offline
-//   access so a refresh token is issued), then verify the profile email
-//   before persisting the account-bound record. This is the chosen switch
-//   mechanism because getAuthToken cannot target a non-default account.
-//
-// Records live in chrome.storage.session under googleSessionKey(account).
-// All errors are sanitized (no tokens, no response bodies). Network-level
-// failures carry transient=true so callers can tell a blip from a dead
-// grant; authentication failures carry code AUTH_REQUIRED or
-// ACCOUNT_MISMATCH.
+// Chrome supports TokenDetails.account with a stable Google account ID,
+// but getAccounts is Dev-channel-only. Stable Chrome cannot enumerate IDs
+// for an arbitrary email address. Additional accounts use a registered Web
+// application redirect and an implicit token, verified against Gmail profile.
+// No token exchange, refresh grant, extra host, or client secret is used.
 
 export const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
-export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const GMAIL_PROFILE_URL =
   "https://gmail.googleapis.com/gmail/v1/users/me/profile";
 
@@ -148,32 +167,12 @@ export function googleSessionKey(account) {
   return `auth.google.${account}`;
 }
 
-function googleClientId() {
-  const id = globalThis.chrome?.runtime?.getManifest?.()?.oauth2?.client_id;
-  if (!id) throw new Error("google auth unavailable: oauth client id missing");
-  return id;
-}
-
-function base64UrlBytes(bytes) {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-// PKCE pair per RFC 7636, local so this module stays self-contained.
-export async function generateGooglePkce() {
-  const random = new Uint8Array(32);
-  const cryptoObj = globalThis.crypto;
-  if (!cryptoObj?.getRandomValues || !cryptoObj?.subtle) {
-    throw new Error("google auth unavailable: webcrypto missing");
-  }
-  cryptoObj.getRandomValues(random);
-  const verifier = base64UrlBytes(random);
-  const digest = await cryptoObj.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(verifier),
-  );
-  return { verifier, challenge: base64UrlBytes(new Uint8Array(digest)) };
+async function googleClientId() {
+  const data =
+    await globalThis.chrome?.storage?.local?.get("googleWebClientId");
+  if (!data?.googleWebClientId)
+    throw new Error("google web client id required");
+  return data.googleWebClientId;
 }
 
 function googleState() {
@@ -181,9 +180,9 @@ function googleState() {
   const cryptoObj = globalThis.crypto;
   if (cryptoObj?.getRandomValues) {
     cryptoObj.getRandomValues(bytes);
-    return base64UrlBytes(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
   }
-  return `gs-${Date.now()}`;
+  throw new Error("google auth unavailable: webcrypto missing");
 }
 
 // Account-switch authorize URL: login_hint pins the chooser to the
@@ -192,23 +191,18 @@ export function buildGoogleAuthorizeUrl({
   clientId,
   redirectUri,
   loginHint,
-  codeChallenge,
   state,
 }) {
   if (!clientId) throw new Error("google auth: clientId required");
   if (!redirectUri) throw new Error("google auth: redirectUri required");
   if (!loginHint) throw new Error("google auth: loginHint required");
-  if (!codeChallenge) throw new Error("google auth: codeChallenge required");
   const params = new URLSearchParams({
     client_id: clientId,
-    response_type: "code",
+    response_type: "token",
     redirect_uri: redirectUri,
     scope: GMAIL_SCOPE,
-    access_type: "offline",
     prompt: "consent",
     login_hint: loginHint,
-    code_challenge: codeChallenge,
-    code_challenge_method: "S256",
     state: state ?? googleState(),
   });
   return `${GOOGLE_AUTH_URL}?${params}`;
@@ -221,15 +215,15 @@ export function parseGoogleCallback(callbackUrl, expectedState) {
   } catch {
     throw new Error("google auth callback invalid");
   }
-  const err = parsed.searchParams.get("error");
-  if (err) throw new Error(`google auth denied: ${err}`);
-  const state = parsed.searchParams.get("state");
-  if (expectedState && state !== expectedState) {
+  const params = new URLSearchParams(parsed.hash.slice(1));
+  if (!expectedState || params.get("state") !== expectedState)
     throw new Error("google auth state mismatch");
-  }
-  const code = parsed.searchParams.get("code");
-  if (!code) throw new Error("google auth callback missing code");
-  return code;
+  if (params.has("error") || !params.get("access_token"))
+    throw new Error("google sign in failed");
+  return {
+    access_token: params.get("access_token"),
+    expires_in: Number(params.get("expires_in")) || 3600,
+  };
 }
 
 function transientError(message) {
@@ -244,39 +238,6 @@ function isTransientStatus(status) {
   return status === 408 || status === 429 || (status >= 500 && status <= 599);
 }
 
-async function exchangeGoogleCode({ clientId, redirectUri, code, verifier }) {
-  let res;
-  try {
-    res = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: redirectUri,
-        code_verifier: verifier,
-      }),
-    });
-  } catch {
-    throw transientError("google token request failed");
-  }
-  if (!res.ok) {
-    const err = new Error(`google token exchange failed: ${res.status}`);
-    err.status = res.status;
-    if (isTransientStatus(res.status)) err.transient = true;
-    throw err;
-  }
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    throw transientError("google token exchange parse failed");
-  }
-  if (!data.access_token) throw new Error("google token exchange missing token");
-  return data;
-}
-
 // Verified owner of a credential. 401/403 carry the status so callers
 // treat a rejected token as an auth failure; transient statuses and
 // network failure are transient so a blip never becomes needs-sign-in.
@@ -285,6 +246,7 @@ export async function getGmailProfileEmail(token) {
   try {
     res = await fetch(GMAIL_PROFILE_URL, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
     });
   } catch {
     throw transientError("google profile request failed");
@@ -313,55 +275,25 @@ async function readGoogleRecord(account) {
   return data?.[key] ?? null;
 }
 
-async function writeGoogleRecord(account, record) {
-  const store = globalThis.chrome?.storage?.session;
-  if (!store?.set) {
-    throw new Error("google auth unavailable: chrome.storage.session missing");
-  }
-  await store.set({ [googleSessionKey(account)]: record });
+async function writeGoogleRecord(account, record, generation) {
+  return sessionOp(async () => {
+    assertCurrent(`gmail:${account}`, generation);
+    const store = globalThis.chrome?.storage?.session;
+    if (!store?.set) {
+      throw new Error(
+        "google auth unavailable: chrome.storage.session missing",
+      );
+    }
+    await store.set({ [googleSessionKey(account)]: record });
+    await markSignedOut(`gmail:${account}`, false);
+    assertCurrent(`gmail:${account}`, generation);
+  });
 }
 
 function isRecordFresh(record, now = Date.now()) {
-  return !!record?.accessToken && now < (record.expiresAt ?? 0) - GOOGLE_SKEW_MS;
-}
-
-async function refreshGoogleRecord(account, record) {
-  const clientId = googleClientId();
-  let res;
-  try {
-    res = await fetch(GOOGLE_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        grant_type: "refresh_token",
-        refresh_token: record.refreshToken,
-      }),
-    });
-  } catch {
-    throw transientError("google token refresh failed");
-  }
-  if (!res.ok) {
-    const err = new Error(`google token refresh failed: ${res.status}`);
-    err.status = res.status;
-    if (isTransientStatus(res.status)) err.transient = true;
-    throw err;
-  }
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    throw transientError("google token refresh parse failed");
-  }
-  if (!data.access_token) throw new Error("google token refresh missing token");
-  const next = {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token ?? record.refreshToken,
-    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
-    account,
-  };
-  await writeGoogleRecord(account, next);
-  return next.accessToken;
+  return (
+    !!record?.accessToken && now < (record.expiresAt ?? 0) - GOOGLE_SKEW_MS
+  );
 }
 
 function accountMismatch(account) {
@@ -379,22 +311,13 @@ function authRequired(account) {
 // Account-scoped silent token. Empty account keeps the legacy default
 // behavior. Never resolves a credential owned by another mailbox.
 export async function getGmailTokenForAccount(account, interactive = false) {
+  const generation = capture(`gmail:${account}`);
+  await checkSignedOut(`gmail:${account}`, interactive);
   if (!account) return getGmailToken(interactive);
   const now = Date.now();
   const stored = await readGoogleRecord(account);
+  assertCurrent(`gmail:${account}`, generation);
   if (isRecordFresh(stored, now)) return stored.accessToken;
-  // A transient refresh failure is remembered: the Chrome-cache fallback
-  // below may still hold a verified credential, but when it cannot help,
-  // the original blip (not a spurious grant failure) is what surfaces.
-  let transientErr = null;
-  if (stored?.refreshToken) {
-    try {
-      return await refreshGoogleRecord(account, stored);
-    } catch (err) {
-      if (err?.transient) transientErr = err;
-      // Otherwise fall through to the Chrome cache, then interactive.
-    }
-  }
   try {
     const token = await getGmailToken(false);
     const email = await getGmailProfileEmail(token);
@@ -402,14 +325,19 @@ export async function getGmailTokenForAccount(account, interactive = false) {
       throw accountMismatch(account);
     }
     try {
-      await writeGoogleRecord(account, {
-        accessToken: token,
-        refreshToken: stored?.refreshToken ?? null,
-        expiresAt: now + CHROME_TOKEN_TTL_MS,
+      await writeGoogleRecord(
         account,
-      });
-    } catch {
-      // Stateless fallback: the verified token is still returned.
+        {
+          accessToken: token,
+          refreshToken: null,
+          expiresAt: now + CHROME_TOKEN_TTL_MS,
+          account,
+        },
+        generation,
+      );
+    } catch (error) {
+      assertCurrent(`gmail:${account}`, generation);
+      throw error;
     }
     return token;
   } catch (err) {
@@ -418,38 +346,38 @@ export async function getGmailTokenForAccount(account, interactive = false) {
     // the cached credential is revoked — both start interactive auth
     // instead of stranding the Sign in button on a dead token.
     if (err?.code === "ACCOUNT_MISMATCH" && interactive) {
-      return signInGoogleForAccount(account);
+      return signInGoogleForAccount(account, generation);
     }
     if (err?.status === 401 && interactive) {
-      return signInGoogleForAccount(account);
+      return signInGoogleForAccount(account, generation);
     }
     if (err?.transient) throw err;
-    if (transientErr) throw transientErr;
     if (err?.code === "ACCOUNT_MISMATCH" || err?.status !== undefined) {
       throw err;
     }
     if (!interactive) throw authRequired(account);
-    return signInGoogleForAccount(account);
+    return signInGoogleForAccount(account, generation);
   }
 }
 
 // Interactive account switch for one Gmail address. Verifies the fresh
 // credential before persisting it under that address.
-export async function signInGoogleForAccount(account) {
+export async function signInGoogleForAccount(
+  account,
+  generation = capture(`gmail:${account}`),
+) {
   if (!account) return getGmailToken(true);
   const id = identity();
   if (!id?.launchWebAuthFlow) {
     throw new Error("google auth unavailable: chrome.identity missing");
   }
-  const clientId = googleClientId();
+  const clientId = await googleClientId();
   const redirectUri = id.getRedirectURL();
-  const { verifier, challenge } = await generateGooglePkce();
   const state = googleState();
   const authUrl = buildGoogleAuthorizeUrl({
     clientId,
     redirectUri,
     loginHint: account,
-    codeChallenge: challenge,
     state,
   });
   const callbackUrl = await new Promise((resolve, reject) => {
@@ -466,8 +394,9 @@ export async function signInGoogleForAccount(account) {
       reject(new Error("google sign in threw"));
     }
   });
-  const code = parseGoogleCallback(callbackUrl, state);
-  const data = await exchangeGoogleCode({ clientId, redirectUri, code, verifier });
+  if (!callbackUrl?.startsWith(redirectUri + "#"))
+    throw new Error("google auth callback invalid");
+  const data = parseGoogleCallback(callbackUrl, state);
   const record = {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? null,
@@ -478,63 +407,25 @@ export async function signInGoogleForAccount(account) {
   if (email.toLowerCase() !== String(account).toLowerCase()) {
     throw accountMismatch(account);
   }
-  await writeGoogleRecord(account, record);
+  await writeGoogleRecord(account, record, generation);
   return record.accessToken;
 }
 
-// Forced silent renewal after a 401. Eviction happens only for proven-bad
-// credentials, never upfront: the stored refresh grant is spent first
-// (the slot is rewritten only on success), and only this account's
-// rejected access token is dropped so the silent path cannot return it
-// again. Other accounts' slots are never touched. Never returns the
-// rejected token; throws AUTH_REQUIRED when renewal fails so the caller
-// drives explicit interactive recovery, or the transient blip when the
-// session is retained and a retry may succeed.
+// Chrome manages native token renewal. Web-flow tokens require explicit
+// sign-in after expiry if Chrome cannot supply this account's credential.
 export async function renewGmailToken(account, rejectedToken) {
-  const store = globalThis.chrome?.storage?.session;
-  if (account && store) {
-    let rec = null;
-    try {
-      const key = googleSessionKey(account);
-      const data = await store.get?.(key);
-      rec = data?.[key] ?? null;
-    } catch {
-      rec = null;
-    }
-    if (rec?.accessToken === rejectedToken && rec?.refreshToken) {
-      try {
-        const fresh = await refreshGoogleRecord(account, rec);
-        // Fresh credential secured: now evict the rejected Chrome copy.
-        try {
-          await evictGmailToken(rejectedToken);
-        } catch {
-          // Eviction is best-effort; renewal already succeeded.
-        }
-        if (fresh !== rejectedToken) return fresh;
-      } catch (err) {
-        // Transient: the session is retained untouched for the retry.
-        if (err?.transient) throw err;
-        // Dead grant: fall through to Chrome-cache acquisition below.
-      }
-    }
-    // Drop only this account's known-rejected access token (the refresh
-    // grant, if any, is preserved): it can never be used again, so
-    // nothing of value is lost before a replacement is secured.
-    if (rec?.accessToken === rejectedToken) {
-      try {
-        const key = googleSessionKey(account);
-        await store.set?.({ [key]: { ...rec, accessToken: null, expiresAt: 0 } });
-      } catch {
-        // Best-effort; the guard below still rejects a repeat.
-      }
-    }
-  }
-  try {
-    await evictGmailToken(rejectedToken);
-  } catch {
-    // Eviction is best-effort; renewal still proceeds.
-  }
+  const generation = capture(`gmail:${account}`);
+  await checkSignedOut(`gmail:${account}`, false);
+  await evictGmailToken(rejectedToken);
+  await sessionOp(async () => {
+    assertCurrent(`gmail:${account}`, generation);
+    await globalThis.chrome?.storage?.session?.remove(
+      googleSessionKey(account),
+    );
+  });
+  assertCurrent(`gmail:${account}`, generation);
   const token = await getGmailTokenForAccount(account, false);
-  if (rejectedToken && token === rejectedToken) throw authRequired(account);
+  assertCurrent(`gmail:${account}`, generation);
+  if (token === rejectedToken) throw authRequired(account);
   return token;
 }

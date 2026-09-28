@@ -9,7 +9,7 @@ import raw from "../tests/fixtures/graph-list.json" with { type: "json" };
 test("graph normalize keeps provider key", () => {
   const out = normalizeGraphMessage(raw.value[0], "you@outlook.com");
   assert.equal(out.provider, "outlook");
-  assert.equal(out.key, "outlook:" + raw.value[0].id);
+  assert.equal(out.key, "outlook:you%40outlook.com:" + raw.value[0].id);
 });
 
 test("graph normalize maps full cache shape", () => {
@@ -66,7 +66,7 @@ test("outlook fetch follows @odata.nextLink across two pages", async () => {
     const out = await fetchOutlookMessages("tok");
     assert.deepEqual(
       out.map((m) => m.key),
-      ["outlook:" + raw.value[0].id, "outlook:" + raw.value[1].id],
+      ["outlook:you%40outlook.com:" + raw.value[0].id, "outlook:you%40outlook.com:" + raw.value[1].id],
     );
     assert.ok(out.every((m) => m.account === "you@outlook.com"));
     assert.ok(

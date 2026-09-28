@@ -20,6 +20,7 @@ function installChromeStub() {
   const data = {};
   globalThis.chrome = {
     storage: {
+      session: {get: async () => ({}), set: async () => {}, remove: async () => {}},
       local: {
         set: async (obj) => void Object.assign(data, obj),
         get: async (key) => ({ [key]: data[key] }),
@@ -155,6 +156,7 @@ test("real token provider calls gmail or graph silently per account", async () =
             : null,
         }),
         set: async () => {},
+        remove: async () => {},
       },
     },
   };

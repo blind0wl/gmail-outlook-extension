@@ -1,6 +1,6 @@
 // In-memory cache for normalized mail items.
 // Normalized shape: { key, provider, account, from, subject, snippet, date, unread, localRead }
-// `key` is `provider + ':' + id`. `localRead` is never cleared by a merge.
+// `key` is `provider + ':' + encodeURIComponent(account) + ':' + id`. `localRead` is never cleared by a merge.
 
 const MAX_ITEMS = 200;
 const EXPIRY_MS = 7 * 24 * 3600 * 1000;
@@ -46,4 +46,15 @@ export function pruneCache(now) {
     if (now - item.date > EXPIRY_MS) byKey.delete(key);
   }
   return getInbox();
+}
+
+// Only a completed bounded query is authoritative for this account.
+export function reconcileAccount(acct, items, complete = true) {
+  if (complete) {
+    const present = new Set(items.map(i => i.key));
+    for (const [key, item] of byKey) {
+      if (item.provider === acct.provider && item.account === acct.account && !present.has(key)) byKey.delete(key);
+    }
+  }
+  return mergeMessages(items);
 }

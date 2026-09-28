@@ -45,12 +45,21 @@ tick each box by hand in a real browser.
       the provider. Tabbing into a card's `Open` button keeps native
       behavior: Enter/Space on the button opens the thread (the card
       handler ignores keydowns bubbled from nested controls).
-- [ ] No compose, reply, archive, delete, or other destructive controls exist.
-- [ ] No sign-in buttons and no error/stale/offline states render
-      (those belong to Task 9).
+- [ ] No compose, reply, archive, or message-delete controls exist. Remove only removes the account from the extension.
+- [ ] Add Gmail and Add Outlook prompt for an address and registration client ID.
+      Sign in, Sign out, and Remove appear for each configured account. Refresh
+      fetches mail without alerts. No storage edits are needed.
+- [ ] Per-account stale, offline, retry, and needs-sign-in states render. Signing
+      out one account leaves other accounts usable and stays signed out after reload.
+- [ ] Selection expands the full cached subject and snippet without HTML execution;
+      Enter/Space and storage updates preserve keyboard focus.
+- [ ] Mark-read updates the badge immediately and survives a later automatic poll.
+- [ ] Focused-provider suppression defaults on; toggling it off permits alerts.
+      An unfocused Chrome window does not suppress alerts.
+- [ ] Use Mute all sounds during OS DND; automatic OS DND detection is unavailable.
 - [ ] No console errors while rendering, filtering, marking read, or opening threads.
 - [ ] DevTools Network shows zero requests from the popup itself
-      (it reads `chrome.storage.local` only).
+      (it reads the cache and sends worker messages; settings use local storage).
 - [ ] Sound section: master mute checkbox, volume slider with % label, and
       one `Chime for <account> (<provider>)` toggle per configured account
       from storage key `accounts` — including a configured account with no

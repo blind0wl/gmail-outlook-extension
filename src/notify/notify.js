@@ -108,7 +108,11 @@ export async function hydrateCache() {
   if (!store) return [];
   const data = await store.get(CACHE_KEY);
   const items = data?.[CACHE_KEY] ?? [];
-  if (items.length) mergeMessages(items);
+  if (items.length) mergeMessages(items.map(item => {
+    const prefix = `${item.provider}:${encodeURIComponent(item.account)}:`;
+    const key = item.key.startsWith(prefix) ? item.key : prefix + item.key.slice(item.key.indexOf(":") + 1);
+    return {...item, key};
+  }));
   return getInbox();
 }
 

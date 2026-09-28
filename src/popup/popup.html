@@ -19,6 +19,15 @@
     <button type="button" data-filter="gmail" aria-pressed="false">Gmail</button>
     <button type="button" data-filter="outlook" aria-pressed="false">Outlook</button>
   </nav>
+  <section aria-label="Accounts">
+    <p>Connect an account to read recent inbox mail and receive alerts. Mail stays in this browser.</p>
+    <button id="add-gmail" type="button">Add Gmail</button>
+    <button id="add-outlook" type="button">Add Outlook</button>
+    <button id="refresh-mail" type="button">Refresh</button>
+    <label><input id="skip-focused" type="checkbox" checked> Pause alerts while a provider tab is focused</label>
+    <p id="lifecycle-message" role="status"></p>
+    <ul id="account-controls"></ul>
+  </section>
   <main>
     <ul id="inbox-list"></ul>
     <p id="inbox-empty" hidden>No mail cached yet.</p>

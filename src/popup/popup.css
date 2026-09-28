@@ -262,3 +262,11 @@ body {
   border-color: #5f6368;
   cursor: default;
 }
+
+/* Expansion uses only cached text. Keep long subjects and snippets readable. */
+.card-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 12px; }
+.card-preview p { margin: 6px 0; }
+#account-controls { list-style: none; padding: 0; }
+#account-controls li { margin: 8px 0; overflow-wrap: anywhere; }
+#account-controls button { margin: 4px; }
+#lifecycle-message { color: #8b1b1b; }

@@ -79,7 +79,7 @@ test("persist plus hydrate round-trips the merged cache", async () => {
     await persistCache([item("gmail:p1", "gmail", "persist@g.c")]);
     assert.equal(backing[CACHE_KEY].length, 1);
     const inbox = await hydrateCache();
-    assert.ok(inbox.find((i) => i.key === "gmail:p1"));
+    assert.ok(inbox.find((i) => i.key === "gmail:persist%40g.c:p1"));
   } finally {
     uninstallChromeStub();
   }
@@ -182,7 +182,7 @@ test("one failed account never blocks the others", async () => {
     });
     assert.ok(summary.succeeded.includes("gmail:ok1@g.c"));
     assert.ok(getInbox().find((i) => i.key === "gmail:iso"));
-    assert.equal(toasts.length, 1, "one grouped toast for the working account");
+    assert.equal(toasts.length, 0, "first population establishes a quiet baseline");
   } finally {
     uninstallChromeStub();
   }
@@ -210,19 +210,21 @@ test("manual refresh updates badge but sends no toast", async () => {
   }
 });
 
-test("zero item poll keeps the stale cache", async () => {
+test("failed poll keeps the same account stale cache", async () => {
   installChromeStub();
   try {
     const acct = { provider: "gmail", account: "stale@g.c" };
+    mergeMessages([item("gmail:stale", "gmail", "stale@g.c")]);
     const before = getInbox().length;
     const summary = await pollAll([acct], {
-      fetchers: { gmail: async () => [] },
+      fetchers: { gmail: async () => { throw new Error("network unavailable"); } },
       getToken: async () => "t",
       notify: async () => {},
       setBadge: async () => {},
     });
     assert.deepEqual(summary.newIds, []);
-    assert.ok(getInbox().length >= before);
+    assert.equal(getInbox().length, before);
+    assert.ok(getInbox().some(i => i.key === "gmail:stale"));
   } finally {
     uninstallChromeStub();
   }
@@ -426,19 +428,19 @@ test("fresh worker woken by alarm hydrates before polling", async () => {
     const toasts = [];
     // Alarm entry point with no startup events and a zero-item poll.
     const summary = await fresh.handleAlarm([acct], {
-      fetchers: { gmail: async () => [] },
+      fetchers: { gmail: async () => { throw new Error("offline"); } },
       getToken: async () => "t",
       notify: async (group, toast) => void toasts.push(toast),
       setBadge: async () => {},
     });
     assert.ok(
-      getInbox().find((i) => i.key === "gmail:wake1"),
+      getInbox().find((i) => i.key === "gmail:wake%40g.c:wake1"),
       "memory hydrated from storage before polling",
     );
     assert.equal(
-      backing[CACHE_KEY]?.find((i) => i.key === "gmail:wake1")?.key,
-      "gmail:wake1",
-      "empty poll does not overwrite stored mail",
+      backing[CACHE_KEY]?.find((i) => i.key === "gmail:wake%40g.c:wake1")?.key,
+      "gmail:wake%40g.c:wake1",
+      "failed poll does not overwrite stored mail",
     );
     assert.deepEqual(toasts, [], "stored mail is not toasted as new");
     assert.deepEqual(summary.newIds, []);

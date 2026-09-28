@@ -60,7 +60,7 @@ test("late refresh cannot restore a cleared session", async () => {
   try {
     const pending = getGraphToken(false);
     await clearGraphToken();
-    await assert.rejects(pending, /needs sign in/);
+    await assert.rejects(pending, /needs sign in|superseded by sign out/);
     assert.equal(await readSessionRecord(), null);
   } finally {
     globalThis.chrome = prevChrome;

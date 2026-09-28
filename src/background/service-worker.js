@@ -9,16 +9,32 @@
 
 import { fetchGmailMessages } from "../providers/gmail.js";
 import { fetchOutlookMessages } from "../providers/outlook.js";
-import { getGmailTokenForAccount, renewGmailToken } from "../auth/google.js";
+import {
+  getGmailTokenForAccount,
+  renewGmailToken,
+  clearGmailToken,
+} from "../auth/google.js";
 import {
   getGraphTokenForAccount,
   renewGraphToken,
+  clearGraphToken,
   configureMicrosoftAuth,
 } from "../auth/microsoft.js";
-import { accountKey, getMicrosoftClientId, loadAccounts } from "../store/accounts.js";
-import { mergeMessages, getInbox, pruneCache } from "../store/cache.js";
 import {
-  diffNewIds,
+  accountKey,
+  getMicrosoftClientId,
+  loadAccounts,
+  saveAccounts,
+  normalizeAccount,
+} from "../store/accounts.js";
+import {
+  mergeMessages,
+  getInbox,
+  pruneCache,
+  reconcileAccount,
+  setLocalRead,
+} from "../store/cache.js";
+import {
   unreadCount,
   groupByAccount,
   buildToast,
@@ -48,6 +64,17 @@ const fetchers = { gmail: fetchGmailMessages, outlook: fetchOutlookMessages };
 
 const backoffByKey = new Map(); // accountKey -> { failures, nextAllowedAt }
 const needsSignInByKey = new Set();
+const baselineByKey = new Set();
+const seenByKey = new Map();
+const signedOutByKey = new Set();
+const accountGeneration = new Map();
+let writerTail = Promise.resolve();
+function write(op) {
+  const run = writerTail.then(op, op);
+  writerTail = run.catch(() => {});
+  return run;
+}
+let pollTail = Promise.resolve();
 const offlineByKey = new Set(); // accountKey -> last fetch failed with no HTTP status while offline
 
 export { accountKey };
@@ -96,11 +123,18 @@ export function clearNeedsSignIn(acct) {
 
 // Restore persisted per-account flags (needsSignIn, offline) into memory.
 // Runs as part of init; exported so tests can simulate a restart.
-// Backoff is transient rate-limit state and is not restored: a fresh
-// worker polls immediately and re-backs-off if the server still says so.
+// Retry deadlines and failure counts survive worker termination.
 export async function hydrateAccountState() {
   const stored = await readAccountState();
   for (const [key, value] of Object.entries(stored ?? {})) {
+    if (value?.baseline) baselineByKey.add(key);
+    if (Array.isArray(value?.seen)) seenByKey.set(key, value.seen);
+    if (value?.signedOut) signedOutByKey.add(key);
+    if (value?.retryAt)
+      backoffByKey.set(key, {
+        failures: value.failures ?? 1,
+        nextAllowedAt: value.retryAt,
+      });
     if (value?.needsSignIn) needsSignInByKey.add(key);
     else needsSignInByKey.delete(key);
     if (value?.offline) offlineByKey.add(key);
@@ -135,9 +169,14 @@ function isRateOrServer(status) {
 export async function pollAccount(acct, deps) {
   const now = deps.now ?? Date.now();
   const key = accountKey(acct);
+  if (signedOutByKey.has(key)) return { key, needsSignIn: true, skipped: true };
   if (!isEnabled(acct)) return { key, skipped: true };
   if (isBackingOff(acct, now)) {
-    return { key, backedOff: true, retryAt: backoffByKey.get(key).nextAllowedAt };
+    return {
+      key,
+      backedOff: true,
+      retryAt: backoffByKey.get(key).nextAllowedAt,
+    };
   }
   const fetcher = deps.fetchers?.[acct.provider] ?? fetchers[acct.provider];
   if (!fetcher) return { key, error: `unknown provider ${acct.provider}` };
@@ -153,6 +192,14 @@ export async function pollAccount(acct, deps) {
       markOffline(acct);
       return { key, offline: true, error: sanitizeError(err, acct) };
     }
+    if (isRateOrServer(err?.status)) {
+      return {
+        key,
+        backedOff: true,
+        ...recordBackoff(acct, now),
+        error: sanitizeError(err, acct),
+      };
+    }
     if (err?.transient) {
       return { key, error: sanitizeError(err, acct) };
     }
@@ -161,7 +208,7 @@ export async function pollAccount(acct, deps) {
   }
 
   try {
-    const items = await fetcher(token, deps.since);
+    const items = await fetcher(token, deps.since ?? now - 7 * 86400000);
     clearBackoff(acct);
     clearNeedsSignIn(acct);
     clearOffline(acct);
@@ -182,15 +229,31 @@ export async function pollAccount(acct, deps) {
           markOffline(acct);
           return { key, offline: true, error: sanitizeError(refreshErr, acct) };
         }
+        if (isRateOrServer(refreshErr?.status)) {
+          return {
+            key,
+            backedOff: true,
+            ...recordBackoff(acct, now),
+            error: sanitizeError(refreshErr, acct),
+          };
+        }
         if (refreshErr?.transient) {
-          return { key, refreshed: true, error: sanitizeError(refreshErr, acct) };
+          return {
+            key,
+            refreshed: true,
+            error: sanitizeError(refreshErr, acct),
+          };
         }
         clearOffline(acct);
         markNeedsSignIn(acct);
-        return { key, needsSignIn: true, error: sanitizeError(refreshErr, acct) };
+        return {
+          key,
+          needsSignIn: true,
+          error: sanitizeError(refreshErr, acct),
+        };
       }
       try {
-        const items = await fetcher(fresh, deps.since);
+        const items = await fetcher(fresh, deps.since ?? now - 7 * 86400000);
         clearBackoff(acct);
         clearNeedsSignIn(acct);
         clearOffline(acct);
@@ -198,12 +261,22 @@ export async function pollAccount(acct, deps) {
       } catch (retryErr) {
         if (isRateOrServer(retryErr?.status)) {
           const { retryAt } = recordBackoff(acct, now);
-          return { key, backedOff: true, retryAt, refreshed: true, error: sanitizeError(retryErr, acct) };
+          return {
+            key,
+            backedOff: true,
+            retryAt,
+            refreshed: true,
+            error: sanitizeError(retryErr, acct),
+          };
         }
         if (retryErr?.status === 401) {
           clearOffline(acct);
           markNeedsSignIn(acct);
-          return { key, needsSignIn: true, error: sanitizeError(retryErr, acct) };
+          return {
+            key,
+            needsSignIn: true,
+            error: sanitizeError(retryErr, acct),
+          };
         }
         if (typeof retryErr?.status === "number") clearOffline(acct);
         return { key, refreshed: true, error: sanitizeError(retryErr, acct) };
@@ -226,76 +299,143 @@ export async function pollAccount(acct, deps) {
 // Poll every account concurrently, merge successes, update badge, toast once
 // per account with new mail (never on manual refresh), persist the cache.
 // Returns a summary; never throws.
-export async function pollAll(accounts, deps = {}) {
-  const now = deps.now ?? Date.now();
-  const manual = deps.manual === true;
-  const oldKeys = getInbox().map((i) => i.key);
+export function pollAll(accounts, deps = {}) {
+  // Serialize complete poll cycles. Account commits use the shared writer,
+  // so a slow account cannot block mark-read or completed accounts.
+  const run = pollTail.then(() => runPoll(accounts, deps));
+  pollTail = run.catch(() => {});
+  return run;
+}
 
-  const settled = await Promise.all(
-    accounts.map((acct) =>
-      pollAccount(acct, { ...deps, now }).catch((error) => ({ key: accountKey(acct), error })),
-    ),
-  );
-
-  const fetched = [];
-  for (const r of settled) {
-    // Zero-item polls contribute nothing; mergeMessages keeps the stale cache.
-    if (r.items?.length) fetched.push(...r.items);
+async function focusedProvider() {
+  try {
+    const window = await chrome.windows.getLastFocused();
+    if (!window.focused) return null;
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      windowId: window.id,
+    });
+    const host = new URL(tab?.url).hostname;
+    if (host === "mail.google.com") return "gmail";
+    if (host === "outlook.live.com") return "outlook";
+  } catch {
+    /* Tab details may be unavailable. */
   }
-  if (fetched.length) mergeMessages(fetched);
-  pruneCache(now);
-  const inbox = getInbox();
+  return null;
+}
 
-  const enabledSet = new Set(accounts.filter(isEnabled).map(accountKey));
-  const badge = unreadCount(inbox.filter((i) => enabledSet.has(`${i.provider}:${i.account}`)));
+async function badgeFor(accounts, deps = {}) {
+  const enabled = new Set(
+    accounts
+      .filter((a) => isEnabled(a) && !signedOutByKey.has(accountKey(a)))
+      .map(accountKey),
+  );
+  const count = unreadCount(
+    getInbox().filter((i) => enabled.has(accountKey(i))),
+  );
+  await (deps.setBadge ?? defaultSetBadge)(count);
+  return count;
+}
 
-  const newIds = new Set(diffNewIds(oldKeys, inbox.map((i) => i.key)));
-  const newItems = inbox.filter((i) => newIds.has(i.key));
-  // Offline and backoff keep the stale cache by design; only genuine
-  // failures reach onError.
+export async function handleMarkRead(key, accounts, deps = {}) {
+  await ready;
+  return write(async () => {
+    setLocalRead(key);
+    await persistCache(getInbox());
+    return { ok: true, badge: await badgeFor(accounts, deps) };
+  });
+}
+
+async function runPoll(accounts, deps) {
+  const now = deps.now ?? Date.now();
+  const newIds = [];
+  let badge = 0;
+  const settled = await Promise.all(
+    accounts.map(async (acct) => {
+      const key = accountKey(acct);
+      const generation = accountGeneration.get(key) ?? 0;
+      const result = await pollAccount(acct, { ...deps, now }).catch(
+        (error) => ({ key, error: sanitizeError(error, acct) }),
+      );
+      await write(async () => {
+        if (generation !== (accountGeneration.get(key) ?? 0)) return;
+        const old = new Set([
+          ...(seenByKey.get(key) ?? []),
+          ...getInbox().map((i) => i.key),
+        ]);
+        // Existing cache also establishes a baseline when upgrading.
+        const baseline =
+          baselineByKey.has(key) ||
+          getInbox().some((i) => accountKey(i) === key);
+        if (result.items !== undefined) {
+          reconcileAccount(acct, result.items, result.items.complete !== false);
+          baselineByKey.add(key);
+          seenByKey.set(
+            key,
+            [
+              ...new Set([
+                ...result.items.map((i) => i.key),
+                ...(seenByKey.get(key) ?? []),
+              ]),
+            ].slice(0, 200),
+          );
+        }
+        pruneCache(now);
+        const fresh = getInbox().filter(
+          (i) => accountKey(i) === key && !old.has(i.key),
+        );
+        newIds.push(...fresh.map((i) => i.key));
+        await persistCache(getInbox());
+        await storeAccountEntries([acct], new Map([[key, result]]));
+        badge = await badgeFor(accounts, deps);
+        const eligible = fresh.filter((i) => i.unread && !i.localRead);
+        const settings = await globalThis.chrome?.storage?.local?.get(
+          "skipFocusedProvider",
+        );
+        const focused =
+          settings?.skipFocusedProvider === false
+            ? null
+            : await (deps.focusedProvider ?? focusedProvider)();
+        if (
+          !signedOutByKey.has(key) &&
+          generation === (accountGeneration.get(key) ?? 0) &&
+          baseline &&
+          !deps.manual &&
+          acct.notify !== false &&
+          focused !== acct.provider &&
+          eligible.length &&
+          !deps.dnd
+        ) {
+          for (const group of groupByAccount(eligible))
+            await (deps.notify ?? sendNotification)(group, buildToast(group));
+          try {
+            const settings = await (
+              deps.readSoundSettings ?? getSoundSettings
+            )();
+            if (
+              shouldPlay({
+                manual: false,
+                muted: isMuted(settings, [key]),
+                dnd: false,
+              })
+            ) {
+              await (deps.playSound ?? playChime)(settings.volume);
+            }
+          } catch {
+            /* Sound failure does not undo the cache commit. */
+          }
+        }
+      });
+      return result;
+    }),
+  );
   const failures = settled.filter(
     (r) => r.error && !r.backedOff && !r.needsSignIn && !r.offline,
   );
-  if (failures.length && deps.onError) {
-    for (const f of failures) deps.onError(f);
-  }
-
-  const notify = deps.notify ?? sendNotification;
-  const setBadge = deps.setBadge ?? defaultSetBadge;
-  if (!manual && newItems.length) {
-    for (const group of groupByAccount(newItems)) {
-      await notify(group, buildToast(group));
-    }
-  }
-  // New-mail chime: automatic polls with new mail only, never manual
-  // refresh. Mute plus volume come from storage so the worker and the
-  // popup read the same settings. Sound never breaks polling and never
-  // carries mail content: playSound receives only the volume level.
-  if (!manual && newItems.length) {
-    try {
-      const readSettings = deps.readSoundSettings ?? getSoundSettings;
-      const settings = await readSettings();
-      const keys = newItems.map((i) => `${i.provider}:${i.account}`);
-      if (shouldPlay({ manual, muted: isMuted(settings, keys), dnd: deps.dnd === true })) {
-        const playSound = deps.playSound ?? playChime;
-        await playSound(settings.volume);
-      }
-    } catch {
-      // Silent by design; no mail content in logs.
-    }
-  }
-  await setBadge(badge);
-  await persistCache(inbox);
-  // Merge with stored flags so accounts absent from this poll keep theirs.
-  // Shape per account: needsSignIn, offline, backedOff, plus retryAt and
-  // the numeric status code when the last attempt produced them. The popup
-  // renders these as address-plus-code lines only, never mail content.
-  const byKey = new Map(settled.map((r) => [r.key, r]));
-  await storeAccountEntries(accounts, byKey);
-
+  for (const failure of failures) deps.onError?.(failure);
   return {
     badge,
-    newIds: [...newIds],
+    newIds,
     succeeded: settled.filter((r) => r.items !== undefined).map((r) => r.key),
     backedOff: settled.filter((r) => r.backedOff).map((r) => r.key),
     needsSignIn: settled.filter((r) => r.needsSignIn).map((r) => r.key),
@@ -307,7 +447,7 @@ export async function pollAll(accounts, deps = {}) {
 // One persisted entry per account for the popup's error UI.
 function stateEntry(acct, result) {
   const key = accountKey(acct);
-  const needsSignIn = needsSignInByKey.has(key);
+  const needsSignIn = signedOutByKey.has(key) || needsSignInByKey.has(key);
   const offline = offlineByKey.has(key);
   const backedOff = result?.backedOff === true;
   // Status-less online failures carry no retry or code marker of their own,
@@ -315,11 +455,17 @@ function stateEntry(acct, result) {
   const stale = !!result?.error && !needsSignIn && !offline && !backedOff;
   return {
     needsSignIn,
+    baseline: baselineByKey.has(key),
+    seen: seenByKey.get(key) ?? [],
+    signedOut: signedOutByKey.has(key),
+    failures: backoffByKey.get(key)?.failures ?? 0,
     offline,
     backedOff,
     ...(stale ? { stale: true } : {}),
     ...(result?.retryAt ? { retryAt: result.retryAt } : {}),
-    ...(typeof result?.error?.status === "number" ? { status: result.error.status } : {}),
+    ...(typeof result?.error?.status === "number"
+      ? { status: result.error.status }
+      : {}),
   };
 }
 
@@ -338,7 +484,10 @@ export const NOTIFICATION_ICON = "src/notify/icon.png";
 
 function notificationIconUrl() {
   try {
-    return globalThis.chrome?.runtime?.getURL?.(NOTIFICATION_ICON) ?? NOTIFICATION_ICON;
+    return (
+      globalThis.chrome?.runtime?.getURL?.(NOTIFICATION_ICON) ??
+      NOTIFICATION_ICON
+    );
   } catch {
     return NOTIFICATION_ICON;
   }
@@ -349,6 +498,7 @@ export function sendNotification(group, toast) {
   if (!chromeNotify) return Promise.resolve();
   const result = chromeNotify.create(`${accountKey(group)}:${Date.now()}`, {
     type: "basic",
+    silent: true,
     iconUrl: notificationIconUrl(),
     title: toast.title,
     message: toast.message,
@@ -362,7 +512,9 @@ function defaultSetBadge(count) {
   return Promise.all([
     action.setBadgeText({ text: count > 0 ? String(count) : "" }),
     action.setBadgeBackgroundColor({ color: "#1a73e8" }),
-  ]).then(() => {}).catch(() => {});
+  ])
+    .then(() => {})
+    .catch(() => {});
 }
 
 // ---- real token wiring (Task 6 flows, silent from the worker) ----
@@ -393,13 +545,16 @@ export function buildTokenProvider(accounts = []) {
   const clientId = ensureMicrosoftConfigured(accounts);
   return {
     getToken: (acct) => silentTokenFor(acct, clientId),
-    refreshToken: (acct, rejectedToken) => renewTokenFor(acct, rejectedToken, clientId),
+    refreshToken: (acct, rejectedToken) =>
+      renewTokenFor(acct, rejectedToken, clientId),
   };
 }
 
 function silentTokenFor(acct, clientId) {
   if (acct?.provider === "outlook") {
-    return getGraphTokenForAccount(acct?.account ?? "", false, { clientId });
+    return getGraphTokenForAccount(acct?.account ?? "", false, {
+      clientId: acct.clientId ?? clientId,
+    });
   }
   if (acct?.provider === "gmail") {
     return getGmailTokenForAccount(acct?.account ?? "", false);
@@ -412,7 +567,9 @@ function silentTokenFor(acct, clientId) {
 // Sign in button) or a transient-marked error (generic retry next poll).
 function renewTokenFor(acct, rejectedToken, clientId) {
   if (acct?.provider === "outlook") {
-    return renewGraphToken(acct?.account ?? "", rejectedToken, { clientId });
+    return renewGraphToken(acct?.account ?? "", rejectedToken, {
+      clientId: acct.clientId ?? clientId,
+    });
   }
   if (acct?.provider === "gmail") {
     return renewGmailToken(acct?.account ?? "", rejectedToken);
@@ -430,9 +587,11 @@ function withRealTokens(accounts, deps = {}) {
 async function ensureAlarm() {
   const alarms = globalThis.chrome?.alarms;
   if (!alarms) return;
-  const stored = await globalThis.chrome?.storage?.local?.get?.("pollIntervalMs");
+  const stored =
+    await globalThis.chrome?.storage?.local?.get?.("pollIntervalMs");
   await alarms.create(ALARM_NAME, {
-    periodInMinutes: clampInterval(stored?.pollIntervalMs ?? DEFAULT_POLL_MS) / 60000,
+    periodInMinutes:
+      clampInterval(stored?.pollIntervalMs ?? DEFAULT_POLL_MS) / 60000,
   });
 }
 
@@ -463,12 +622,14 @@ async function start() {
 export async function handleSignIn(accounts, target, deps = {}) {
   await ready;
   const list = accounts ?? [];
-  const acct = list.find(
-    (a) =>
-      a?.provider === target?.provider &&
-      (a?.account ?? a?.address) === (target?.account ?? target?.address),
-  ) ?? target;
+  const acct =
+    list.find(
+      (a) =>
+        a?.provider === target?.provider &&
+        (a?.account ?? a?.address) === (target?.account ?? target?.address),
+    ) ?? target;
   const key = accountKey(acct);
+  const generation = accountGeneration.get(key) ?? 0;
   const { interactiveGet, ...pollDeps } = deps;
   // Configure Microsoft before any interactive callback: on a fresh worker
   // this is the first event, and the graph flow would otherwise reject
@@ -478,27 +639,53 @@ export async function handleSignIn(accounts, target, deps = {}) {
     interactiveGet ??
     ((a) =>
       a?.provider === "outlook"
-        ? getGraphTokenForAccount(a?.account ?? "", true, { clientId })
+        ? getGraphTokenForAccount(a?.account ?? "", true, {
+            clientId: a.clientId ?? clientId,
+          })
         : getGmailTokenForAccount(a?.account ?? "", true));
   try {
     await interactive(acct);
   } catch (err) {
+    if (generation !== (accountGeneration.get(key) ?? 0))
+      return { key, needsSignIn: true };
+    if (isRateOrServer(err?.status)) {
+      const result = {
+        key,
+        backedOff: true,
+        ...recordBackoff(acct, deps.now ?? Date.now()),
+        error: sanitizeError(err, acct),
+      };
+      await write(() => storeAccountEntries([acct], new Map([[key, result]])));
+      return result;
+    }
     if (isOfflineNow()) {
       markOffline(acct);
-      const offlineResult = { key, offline: true, error: sanitizeError(err, acct) };
-      await storeAccountEntries([acct], new Map([[key, offlineResult]]));
+      const offlineResult = {
+        key,
+        offline: true,
+        error: sanitizeError(err, acct),
+      };
+      await write(() =>
+        storeAccountEntries([acct], new Map([[key, offlineResult]])),
+      );
       return offlineResult;
     }
     if (err?.transient) {
       const transientResult = { key, error: sanitizeError(err, acct) };
-      await storeAccountEntries([acct], new Map([[key, transientResult]]));
+      await write(() =>
+        storeAccountEntries([acct], new Map([[key, transientResult]])),
+      );
       return transientResult;
     }
     markNeedsSignIn(acct);
     const failure = { key, needsSignIn: true, error: sanitizeError(err, acct) };
-    await storeAccountEntries([acct], new Map([[key, failure]]));
+    await write(() => storeAccountEntries([acct], new Map([[key, failure]])));
     return failure;
   }
+  if (generation !== (accountGeneration.get(key) ?? 0))
+    return { key, needsSignIn: true };
+  signedOutByKey.delete(key);
+  clearBackoff(acct);
   clearNeedsSignIn(acct);
   clearOffline(acct);
   const real = buildTokenProvider(list);
@@ -507,11 +694,17 @@ export async function handleSignIn(accounts, target, deps = {}) {
     refreshToken: real.refreshToken,
     ...pollDeps,
   }).catch((error) => ({ key, error: sanitizeError(error, acct) }));
-  if (result.items?.length) {
-    mergeMessages(result.items);
-    await persistCache(getInbox());
-  }
-  await storeAccountEntries([acct], new Map([[key, result]]));
+  await write(async () => {
+    if (generation !== (accountGeneration.get(key) ?? 0)) return;
+    if (result.items !== undefined) {
+      reconcileAccount(acct, result.items, result.items.complete !== false);
+      baselineByKey.add(key);
+      seenByKey.set(key, result.items.map((i) => i.key).slice(0, 200));
+      await persistCache(getInbox());
+    }
+    await storeAccountEntries([acct], new Map([[key, result]]));
+    await badgeFor(list, pollDeps);
+  });
   return result;
 }
 
@@ -527,34 +720,107 @@ export async function handleManualRefresh(accounts, deps = {}) {
   return pollAll(accounts, { ...withRealTokens(accounts, deps), manual: true });
 }
 
-if (typeof chrome !== "undefined" && chrome?.alarms) {
+export async function handleMessage(msg, deps = {}) {
+  await ready;
+  if (msg.type === "refresh") {
+    const result = await handleManualRefresh(await loadAccounts(), deps);
+    return { ok: true, badge: result.badge };
+  }
+  if (msg.type === "mark-read")
+    return handleMarkRead(msg.key, await loadAccounts(), deps);
+  if (
+    !["add-account", "sign-in", "sign-out", "remove-account"].includes(msg.type)
+  )
+    return { ok: false };
+  const target = normalizeAccount({
+    ...msg,
+    account: String(msg.account ?? "")
+      .trim()
+      .toLowerCase(),
+  });
+  if (
+    !["gmail", "outlook"].includes(target.provider) ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(target.account)
+  )
+    return { ok: false };
+  const key = accountKey(target);
+  if (msg.type === "add-account") {
+    if (target.provider === "outlook" && !target.clientId?.trim())
+      return { ok: false };
+    await write(async () => {
+      const accounts = await loadAccounts();
+      if (accounts.some((a) => accountKey(a) === key))
+        throw new Error("account already exists");
+      if (target.provider === "gmail" && msg.clientId) {
+        await chrome.storage.local.set({
+          googleWebClientId: msg.clientId.trim(),
+        });
+      }
+      await saveAccounts([...accounts, target]);
+    });
+  }
+  const accounts = await loadAccounts();
+  const acct = accounts.find((a) => accountKey(a) === key);
+  if (!acct) return { ok: false };
+  if (msg.type === "add-account" || msg.type === "sign-in") {
+    const result = await handleSignIn(accounts, acct, deps);
+    return {
+      ok: !result.error && !result.needsSignIn && !result.offline,
+      needsSignIn: !!result.needsSignIn,
+    };
+  }
+  accountGeneration.set(key, (accountGeneration.get(key) ?? 0) + 1);
+  signedOutByKey.add(key);
+  markNeedsSignIn(acct);
+  // Invalidate provider operations immediately, before waiting for the writer.
+  const clearing =
+    acct.provider === "gmail"
+      ? clearGmailToken(undefined, acct.account)
+      : clearGraphToken(acct.account);
+  const cleared = clearing.then(
+    () => true,
+    () => false,
+  );
+  await write(async () => {
+    clearBackoff(acct);
+    await storeAccountEntries([acct], new Map());
+    if (msg.type === "remove-account") {
+      await saveAccounts(
+        (await loadAccounts()).filter((a) => accountKey(a) !== key),
+      );
+      reconcileAccount(acct, [], true);
+      await persistCache(getInbox());
+      const state = await readAccountState();
+      delete state[key];
+      await persistAccountState(state);
+      baselineByKey.delete(key);
+      seenByKey.delete(key);
+    }
+    await badgeFor(await loadAccounts(), deps);
+  });
+  return { ok: await cleared };
+}
+
+if (typeof chrome !== "undefined") {
   chrome.runtime?.onStartup?.addListener(() => void start());
   chrome.runtime?.onInstalled?.addListener(() => void start());
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm?.name !== ALARM_NAME) return;
-    void (async () => {
-      const accounts = await loadAccounts();
-      await handleAlarm(accounts);
-    })();
+  chrome.alarms?.onAlarm?.addListener((alarm) => {
+    if (alarm?.name === ALARM_NAME)
+      void loadAccounts().then((accounts) => handleAlarm(accounts));
   });
   chrome.runtime?.onMessage?.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === "sign-in") {
-      void (async () => {
-        const accounts = await loadAccounts();
-        const result = await handleSignIn(accounts, {
-          provider: msg.provider,
-          account: msg.account ?? msg.address,
-        });
-        sendResponse?.({ ok: !result.needsSignIn, badge: undefined });
-      })();
-      return true;
-    }
-    if (msg?.type !== "refresh") return false;
-    void (async () => {
-      const accounts = await loadAccounts();
-      const summary = await handleManualRefresh(accounts);
-      sendResponse?.({ ok: true, badge: summary.badge });
-    })();
+    if (
+      ![
+        "refresh",
+        "mark-read",
+        "add-account",
+        "sign-in",
+        "sign-out",
+        "remove-account",
+      ].includes(msg?.type)
+    )
+      return false;
+    handleMessage(msg).then(sendResponse, () => sendResponse({ ok: false }));
     return true;
   });
 }

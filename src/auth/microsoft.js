@@ -1,3 +1,11 @@
+import {
+  capture,
+  assertCurrent,
+  invalidate,
+  sessionOp,
+  checkSignedOut,
+  markSignedOut,
+} from "./session-guard.js";
 // Microsoft auth for Outlook.com personal accounts.
 //
 // Public client using chrome.identity.launchWebAuthFlow with PKCE against
@@ -26,13 +34,14 @@ let configuredClientId = null;
 
 // Monotonic epoch: every sign-out bumps it synchronously, invalidating
 // in-flight sign-in/refresh writes captured under an older epoch.
-let sessionGeneration = 0;
+function guardKey(sessionKey = MS_SESSION_KEY) {
+  return `outlook:${sessionKey === MS_SESSION_KEY ? "" : sessionKey.slice(MS_SESSION_KEY.length + 1)}`;
+}
 
 // Serializes session writes with removals in FIFO order. Combined with the
 // generation guard, an earlier operation can never restore a cleared
 // session. The tail stays rejection-free so one failure cannot wedge the
 // queue; each caller observes errors through its own handle.
-let sessionTail = Promise.resolve();
 
 function identity() {
   return globalThis.chrome?.identity;
@@ -69,9 +78,7 @@ function resolveClientId(override) {
 }
 
 function enqueueSessionOp(op) {
-  const run = sessionTail.then(op, op);
-  sessionTail = run.catch(() => {});
-  return run;
+  return sessionOp(op);
 }
 
 // Marks network-level failures so callers can tell a blip from a dead
@@ -104,6 +111,7 @@ export async function getGraphAccountAddress(token) {
   try {
     res = await fetch(GRAPH_ME_URL, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
     });
   } catch {
     throw asTransient(new Error("microsoft profile request failed"));
@@ -131,10 +139,10 @@ export async function getGraphAccountAddress(token) {
 // removals.
 function guardedSessionWrite(record, generation, sessionKey = MS_SESSION_KEY) {
   return enqueueSessionOp(async () => {
-    if (generation !== sessionGeneration) {
-      throw new Error("microsoft auth superseded by sign out");
-    }
+    assertCurrent(guardKey(sessionKey), generation);
     await writeSessionRecord(record, sessionKey);
+    await markSignedOut(guardKey(sessionKey), false);
+    assertCurrent(guardKey(sessionKey), generation);
     return record.accessToken;
   });
 }
@@ -152,7 +160,10 @@ export function getRedirectUri() {
 function base64Url(bytes) {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 // PKCE pair per RFC 7636: 43-128 char verifier, S256 challenge.
@@ -219,7 +230,7 @@ export function parseAuthCallback(callbackUrl, expectedState) {
   }
   const err = parsed.searchParams.get("error");
   if (err) {
-    throw new Error(`microsoft auth denied: ${err}`);
+    throw new Error("microsoft auth denied");
   }
   const state = parsed.searchParams.get("state");
   if (expectedState && state !== expectedState) {
@@ -237,6 +248,7 @@ async function postToken(body) {
   try {
     res = await fetch(`${MS_AUTHORITY}/oauth2/v2.0/token`, {
       method: "POST",
+      signal: AbortSignal.timeout(15_000),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(body),
     });
@@ -279,7 +291,9 @@ export async function readSessionRecord(sessionKey = MS_SESSION_KEY) {
 export async function writeSessionRecord(record, sessionKey = MS_SESSION_KEY) {
   const store = sessionStore();
   if (!store?.set) {
-    throw new Error("microsoft auth unavailable: chrome.storage.session missing");
+    throw new Error(
+      "microsoft auth unavailable: chrome.storage.session missing",
+    );
   }
   await store.set({ [sessionKey]: record });
 }
@@ -294,9 +308,7 @@ async function evictSessionRecord(sessionKey) {
 }
 
 export function isFresh(record, now = Date.now()) {
-  return (
-    !!record?.accessToken && now < (record.expiresAt ?? 0) - TOKEN_SKEW_MS
-  );
+  return !!record?.accessToken && now < (record.expiresAt ?? 0) - TOKEN_SKEW_MS;
 }
 
 // Full interactive sign in: PKCE -> authorize -> code -> token -> session.
@@ -305,8 +317,13 @@ export function isFresh(record, now = Date.now()) {
 // configureMicrosoftAuth, with an explicit argument winning when given.
 // opts selects the session slot and pins the chooser: { loginHint,
 // sessionKey, account }. Defaults preserve the legacy single-slot flow.
-export async function signInMicrosoft(clientId, generation = sessionGeneration, opts = {}) {
+export async function signInMicrosoft(
+  clientId,
+  generation = undefined,
+  opts = {},
+) {
   const { loginHint, sessionKey = MS_SESSION_KEY, account } = opts;
+  generation ??= capture(guardKey(sessionKey));
   const resolvedId = resolveClientId(clientId);
   // Epoch is fixed at entry (synchronously, via the default above for
   // direct callers). getGraphToken captures it before any await and passes
@@ -361,8 +378,14 @@ export async function signInMicrosoft(clientId, generation = sessionGeneration, 
   return guardedSessionWrite(record, generation, sessionKey);
 }
 
-async function tryRefresh(clientId, refreshToken, generation = sessionGeneration, opts = {}) {
+async function tryRefresh(
+  clientId,
+  refreshToken,
+  generation = undefined,
+  opts = {},
+) {
   const { sessionKey = MS_SESSION_KEY, account } = opts;
+  generation ??= capture(guardKey(sessionKey));
   const data = await postToken({
     client_id: clientId,
     grant_type: "refresh_token",
@@ -396,12 +419,18 @@ async function tryRefresh(clientId, refreshToken, generation = sessionGeneration
 // Account-scoped token matching the worker's per-record shape. Empty
 // account keeps the legacy single-slot behavior. Never resolves a
 // credential stored under another address: each account owns its slot.
-export async function getGraphTokenForAccount(account, interactive = true, { clientId } = {}) {
+export async function getGraphTokenForAccount(
+  account,
+  interactive = true,
+  { clientId } = {},
+) {
   const resolvedId = resolveClientId(clientId);
   const key = sessionKeyFor(account);
   // Epoch for the whole operation, fixed before any await.
-  const generation = sessionGeneration;
+  const generation = capture(guardKey(key));
+  await checkSignedOut(guardKey(key), interactive);
   const cached = await readSessionRecord(key);
+  assertCurrent(guardKey(key), generation);
   if (isFresh(cached)) return cached.accessToken;
   let refreshErr = null;
   if (cached?.refreshToken) {
@@ -442,11 +471,15 @@ function classifyRenewalError(err) {
   if (
     typeof err?.status === "number" ||
     /failed: \d+/.test(message) ||
-    /missing token|needs sign in|superseded by sign out|not configured|unavailable|mismatch/.test(message)
+    /missing token|needs sign in|superseded by sign out|not configured|unavailable|mismatch/.test(
+      message,
+    )
   ) {
     return authRequiredError();
   }
-  return asTransient(err instanceof Error ? err : new Error("microsoft token renewal failed"));
+  return asTransient(
+    err instanceof Error ? err : new Error("microsoft token renewal failed"),
+  );
 }
 
 // Forced silent renewal after a 401: the locally unexpired cached token is
@@ -454,18 +487,25 @@ function classifyRenewalError(err) {
 // refresh token. Evicts the slot when the grant is dead (never on a
 // transient blip). Never returns the rejected token; throws AUTH_REQUIRED
 // when renewal fails so the caller drives explicit interactive recovery.
-export async function renewGraphToken(account, rejectedToken, { clientId } = {}) {
+export async function renewGraphToken(
+  account,
+  rejectedToken,
+  { clientId } = {},
+) {
   const resolvedId = resolveClientId(clientId);
   const key = sessionKeyFor(account);
+  const generation = capture(guardKey(key));
+  await checkSignedOut(guardKey(key), false);
   const store = sessionStore();
   const data = await store?.get?.(key);
+  assertCurrent(guardKey(key), generation);
   const rec = data?.[key] ?? null;
   if (rec?.accessToken && rec.accessToken !== rejectedToken && isFresh(rec)) {
     return rec.accessToken;
   }
   if (rec?.refreshToken) {
     try {
-      const fresh = await tryRefresh(resolvedId, rec.refreshToken, sessionGeneration, {
+      const fresh = await tryRefresh(resolvedId, rec.refreshToken, generation, {
         sessionKey: key,
         account: account || rec.account,
       });
@@ -473,12 +513,19 @@ export async function renewGraphToken(account, rejectedToken, { clientId } = {})
       return fresh;
     } catch (err) {
       const classified = classifyRenewalError(err);
-      if (!classified.transient) await evictSessionRecord(key);
+      if (!classified.transient)
+        await enqueueSessionOp(async () => {
+          assertCurrent(guardKey(key), generation);
+          await evictSessionRecord(key);
+        });
       throw classified;
     }
   }
   // No refresh path: evict the rejected slot so it is never reused.
-  await evictSessionRecord(key);
+  await enqueueSessionOp(async () => {
+    assertCurrent(guardKey(key), generation);
+    await evictSessionRecord(key);
+  });
   throw authRequiredError();
 }
 
@@ -488,10 +535,13 @@ export async function renewGraphToken(account, rejectedToken, { clientId } = {})
 // Silent when interactive=false: cached-or-refresh only, never a popup.
 // Interactive when true: falls back to the full sign-in flow.
 export async function getGraphToken(interactive = true, { clientId } = {}) {
+  const key = MS_SESSION_KEY;
   const resolvedId = resolveClientId(clientId);
   // Epoch for the whole operation, fixed before any await.
-  const generation = sessionGeneration;
+  const generation = capture(guardKey(key));
+  await checkSignedOut(guardKey(), interactive);
   const cached = await readSessionRecord();
+  assertCurrent(guardKey(), generation);
   if (isFresh(cached)) return cached.accessToken;
   let refreshErr = null;
   if (cached?.refreshToken) {
@@ -514,10 +564,16 @@ export async function getGraphToken(interactive = true, { clientId } = {}) {
 // callers can report incomplete sign-out. Previously cleared credentials
 // stay unusable: the epoch bump invalidates in-flight writes and every
 // slot they could land in is removed.
-export async function clearGraphToken() {
-  sessionGeneration += 1;
+export async function clearGraphToken(account) {
+  invalidate(account === undefined ? "outlook" : `outlook:${account}`);
   return enqueueSessionOp(async () => {
     const store = sessionStore();
+    if (account !== undefined) {
+      await markSignedOut(`outlook:${account}`, true);
+      if (!store?.remove) throw new Error("microsoft sign out failed");
+      await store.remove(sessionKeyFor(account));
+      return true;
+    }
     if (!store?.remove) {
       throw new Error(
         "microsoft auth unavailable: chrome.storage.session missing",
@@ -550,7 +606,10 @@ export async function clearGraphToken() {
       throw new Error("microsoft sign out failed");
     }
     try {
-      for (const k of keys) await store.remove(k);
+      for (const k of keys) {
+        await markSignedOut(guardKey(k), true);
+        await store.remove(k);
+      }
     } catch {
       throw new Error("microsoft sign out failed");
     }

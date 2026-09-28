@@ -11,10 +11,12 @@ export const GMAIL_SEARCH_URL = "https://mail.google.com/mail/#search";
 const GMAIL_THREAD_BASE = "https://mail.google.com/mail/";
 const OUTLOOK_MAIL_BASE = "https://outlook.live.com/mail/";
 
-// Suffix of the normalized cache key `provider + ':' + id`.
+// Extract the message ID from provider:encoded-account:id; accept legacy keys.
 export function messageIdOf(key) {
   const raw = String(key ?? "");
-  const idx = raw.indexOf(":");
+  const first = raw.indexOf(":");
+  const second = raw.indexOf(":", first + 1);
+  const idx = second === -1 ? first : second;
   return idx === -1 ? raw : raw.slice(idx + 1);
 }
 

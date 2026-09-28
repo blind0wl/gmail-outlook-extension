@@ -27,10 +27,15 @@ export class GmailFetchError extends Error {
   }
 }
 
-async function getJson(url, token, op, extra) {
+async function getJson(url, token, op, extra, deadline) {
   let res;
   try {
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: deadline
+        ? AbortSignal.any([deadline, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
+    });
   } catch {
     throw new GmailFetchError(op, extra);
   }
@@ -54,7 +59,7 @@ export function normalizeGmailMessage(raw, account) {
   const parsed = dateHeader ? Date.parse(dateHeader) : NaN;
   const date = Number.isNaN(parsed) ? Number(raw.internalDate) || 0 : parsed;
   return {
-    key: "gmail:" + raw.id,
+    key: "gmail:" + encodeURIComponent(account) + ":" + raw.id,
     provider: "gmail",
     account,
     from: header(raw.payload, "From"),
@@ -67,21 +72,36 @@ export function normalizeGmailMessage(raw, account) {
 }
 
 export async function fetchGmailMessages(token, since) {
-  const base = new URLSearchParams({ format: "metadata", maxResults: "25" });
-  if (since) base.set("q", `after:${Math.floor(since / 1000)}`);
+  const deadline = AbortSignal.timeout(45_000);
+  const base = new URLSearchParams({ maxResults: "25" });
+  since ??= Date.now() - 7 * 86400000;
+  if (since) base.set("q", `after:${Math.floor(since / 1000)} in:inbox`);
   const ids = [];
   let pageToken;
+  let pages = 0;
   do {
     const params = new URLSearchParams(base);
     if (pageToken) params.set("pageToken", pageToken);
-    const list = await getJson(`${LIST_URL}?${params}`, token, "list");
+    const list = await getJson(
+      `${LIST_URL}?${params}`,
+      token,
+      "list",
+      undefined,
+      deadline,
+    );
     if (list.messages?.length) {
-      for (const { id } of list.messages) ids.push(id);
+      for (const { id } of list.messages.slice(0, 25)) ids.push(id);
     }
     pageToken = list.nextPageToken;
-  } while (pageToken);
-  if (!ids.length) return [];
-  const profile = await getJson(PROFILE_URL, token, "profile");
+  } while (pageToken && ++pages < 4);
+  if (!ids.length) return Object.assign([], { complete: !pageToken });
+  const profile = await getJson(
+    PROFILE_URL,
+    token,
+    "profile",
+    undefined,
+    deadline,
+  );
   const account = profile.emailAddress ?? "gmail";
   const out = [];
   for (const id of ids) {
@@ -90,8 +110,9 @@ export async function fetchGmailMessages(token, since) {
       token,
       "get",
       { id, account },
+      deadline,
     );
     out.push(normalizeGmailMessage(detail, account));
   }
-  return out;
+  return Object.assign(out, { complete: !pageToken });
 }

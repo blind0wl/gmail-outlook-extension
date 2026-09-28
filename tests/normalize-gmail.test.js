@@ -8,7 +8,7 @@ import {
 import raw from "../tests/fixtures/gmail-list.json" with { type: "json" };
 test("gmail normalize keeps account and key", () => {
   const out = normalizeGmailMessage(raw.messages[0], "work@gmail.com");
-  assert.equal(out.key, "gmail:" + raw.messages[0].id);
+  assert.equal(out.key, "gmail:work%40gmail.com:" + raw.messages[0].id);
   assert.equal(out.account, "work@gmail.com");
 });
 
@@ -43,7 +43,7 @@ test("gmail fetch follows nextPageToken across two pages", async () => {
     const out = await fetchGmailMessages("tok", Date.now());
     assert.deepEqual(
       out.map((m) => m.key),
-      ["gmail:" + raw.messages[0].id, "gmail:" + raw.messages[1].id],
+      ["gmail:work%40gmail.com:" + raw.messages[0].id, "gmail:work%40gmail.com:" + raw.messages[1].id],
     );
     assert.ok(out.every((m) => m.account === "work@gmail.com"));
     assert.ok(

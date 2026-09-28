@@ -98,6 +98,7 @@ test("worker chimes once on automatic new mail, never on manual refresh", async 
       ],
     };
     const quiet = { notify: async () => {}, setBadge: async () => {} };
+    await pollAll([acct], { fetchers: {gmail: async () => []}, getToken: async () => "t", ...quiet });
     let chimes = 0;
     await pollAll([acct], {
       fetchers,

@@ -7,8 +7,7 @@
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 const GRAPH_ORIGIN = "https://graph.microsoft.com";
-const SELECT =
-  "subject,from,receivedDateTime,bodyPreview,isRead";
+const SELECT = "subject,from,receivedDateTime,bodyPreview,isRead";
 const MAX_REDIRECTS = 5;
 
 // Sanitized fetch error. Carries only safe identifiers (operation, HTTP
@@ -47,7 +46,7 @@ function checkGraphUrl(url, op, extra) {
   return parsed.href;
 }
 
-async function readJson(url, token, op, extra) {
+async function readJson(url, token, op, extra, deadline) {
   let current = checkGraphUrl(url, op, extra);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     let res;
@@ -56,14 +55,18 @@ async function readJson(url, token, op, extra) {
       // token before we can re-check the target against the allowlist.
       res = await fetch(current, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: deadline
+          ? AbortSignal.any([deadline, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
         redirect: "manual",
       });
     } catch {
       throw new OutlookFetchError(op, extra);
     }
-    const location = res.status >= 300 && res.status < 400
-      ? res.headers?.get?.("location")
-      : null;
+    const location =
+      res.status >= 300 && res.status < 400
+        ? res.headers?.get?.("location")
+        : null;
     if (location) {
       // Refuse cross-origin targets without sending them a request.
       let target;
@@ -91,11 +94,9 @@ async function readJson(url, token, op, extra) {
 }
 
 export function normalizeGraphMessage(raw, account) {
-  const parsed = raw.receivedDateTime
-    ? Date.parse(raw.receivedDateTime)
-    : NaN;
+  const parsed = raw.receivedDateTime ? Date.parse(raw.receivedDateTime) : NaN;
   return {
-    key: "outlook:" + raw.id,
+    key: "outlook:" + encodeURIComponent(account) + ":" + raw.id,
     provider: "outlook",
     account,
     from: raw.from?.emailAddress?.address ?? "",
@@ -108,24 +109,37 @@ export function normalizeGraphMessage(raw, account) {
 }
 
 function listUrl(since) {
-  const params = new URLSearchParams({ $top: "25", $select: SELECT });
-  if (since) params.set("$filter", `receivedDateTime ge ${new Date(since).toISOString()}`);
-  return `${GRAPH_BASE}/me/messages?${params}`;
+  since ??= Date.now() - 7 * 86400000;
+  const params = new URLSearchParams({
+    $top: "25",
+    $select: SELECT,
+    $orderby: "receivedDateTime desc",
+  });
+  if (since)
+    params.set(
+      "$filter",
+      `receivedDateTime ge ${new Date(since).toISOString()}`,
+    );
+  return `${GRAPH_BASE}/me/mailFolders/inbox/messages?${params}`;
 }
 
 export async function fetchOutlookMessages(token, since) {
+  const deadline = AbortSignal.timeout(45_000);
   const me = await readJson(
     `${GRAPH_BASE}/me?$select=mail,userPrincipalName`,
     token,
     "profile",
+    undefined,
+    deadline,
   );
   const account = me.mail ?? me.userPrincipalName ?? "outlook";
   const out = [];
   let next = listUrl(since);
-  while (next) {
-    const page = await readJson(next, token, "list", { account });
+  let pages = 0;
+  while (next && pages++ < 4) {
+    const page = await readJson(next, token, "list", { account }, deadline);
     if (page.value?.length) {
-      for (const raw of page.value) {
+      for (const raw of page.value.slice(0, 25)) {
         out.push(normalizeGraphMessage(raw, account));
       }
     }
@@ -133,5 +147,5 @@ export async function fetchOutlookMessages(token, since) {
       ? checkGraphUrl(page["@odata.nextLink"], "list", { account })
       : null;
   }
-  return out;
+  return Object.assign(out, { complete: !next });
 }

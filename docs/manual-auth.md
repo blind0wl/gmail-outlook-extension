@@ -1,92 +1,54 @@
-# Manual auth test (Task 6)
+# Manual auth and account lifecycle
 
-No tokens are recorded here. Use your own accounts and follow the flows
-below against an unpacked build. Requires two one-time console
-registrations (see Prerequisites); the bundle itself holds no secrets.
+Ordinary use requires no DevTools or storage edits. Register the public OAuth clients once, load the unpacked extension, and enter client IDs through the popup. Never enter a client secret.
 
-## Prerequisites
+## Registration
 
-- Google Cloud project with an OAuth client of type **Chrome extension**,
-  extension ID pinned to your unpacked ID. Copy the client ID into
-  `manifest.json` `oauth2.client_id` (developer-local edit, never
-  committed with a real ID). `oauth2.scopes` stays exactly
-  `https://www.googleapis.com/auth/gmail.readonly`.
-- Entra app registration with **Personal Microsoft accounts only**
-  (consumers), redirect `https://<extension-id>.chromiumapp.org`
-  (from `chrome.identity.getRedirectURL`), public client, no secret.
-  Supply its application (client) ID at sign-in time when prompted.
+### Gmail
 
-## Flow A: Gmail sign in
+Enable Gmail API in a Google Cloud project. Configure the OAuth consent screen for personal testing and add your accounts as test users. Request only `https://www.googleapis.com/auth/gmail.readonly`.
 
-1. Load unpacked (`chrome://extensions` > Developer mode > Load unpacked).
-2. Open the popup, click **Sign in with Gmail**.
-3. Expected: Google account chooser, then a consent screen listing
-   **"Read your Gmail messages"** (readonly) and nothing about send,
-   delete, or manage.
-4. Accept. Expected: popup shows the Gmail account address; polling
-   starts on the next alarm tick.
-5. Reload the extension. Expected: still signed in (Chrome token cache).
+Create an OAuth client of type **Web application** for the account chooser. Register the exact authorized redirect URI `https://<extension-id>.chromiumapp.org/`, including the trailing slash. Find the extension ID on chrome://extensions. Paste this client's public ID when Add Gmail asks for it. Do not paste the client secret. This flow requests `response_type=token`, validates state and redirect, verifies the returned token through the Gmail profile endpoint, and stores it only in session storage. There is no code exchange or refresh grant.
 
-## Second Gmail account (account switch)
+Optionally configure a separate **Chrome extension** client, pinned to the extension ID, as `oauth2.client_id` in the developer's manifest. Chrome-managed credentials can then renew silently. They are always checked against the requested Gmail address before use. The Web client is separate and is stored from the popup prompt.
 
-`chrome.identity.getAuthToken` takes no account parameter: it always
-resolves the default-account credential. A second Gmail record therefore
-signs via `chrome.identity.launchWebAuthFlow` with `login_hint` pinned to
-its address (PKCE code flow, offline access), and the worker verifies the
-fresh credential against the Gmail profile before storing it under that
-address. Silent polls re-verify the same way and never return another
-mailbox's token (a mismatch surfaces needs-sign-in, never the other
-mailbox's mail).
+### Outlook.com
 
-1. With one Gmail account already signed in, add a second Gmail record
-   and click **Sign in** on its row.
-2. Expected: Google chooser pre-targeted at the second address
-   (pick it if asked), then the same readonly-only consent screen.
-3. Accept. Expected: each Gmail row polls its own mailbox; revoking one
-grant marks only that row needs-sign-in.
+Create an Entra registration for **Personal Microsoft accounts only**. Add the exact `https://<extension-id>.chromiumapp.org/` redirect as a Mobile and desktop application public-client redirect. Enable public client flows as required by that registration. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Paste the public application client ID when Add Outlook asks for it. The extension uses the consumers authority and PKCE.
 
-## Second Outlook account (ownership check)
+## Chrome identity verification and contract note
 
-Like Gmail, Outlook sign-in pins the chooser with `login_hint`, but a hint
-is not proof: the worker confirms the fresh credential against Graph `/me`
-and compares `mail`/`userPrincipalName` to the requested address before
-storing it. Picking another account in the flow rejects with an account
-mismatch and stores nothing, so one record can never poll another mailbox.
+Checked Chrome's published [identity reference](https://developer.chrome.com/docs/extensions/reference/api/identity) on 2026-09-29. No installed local Chrome identity documentation or Chrome binary was available in this environment, so this is documentation verification, not live Chrome verification.
 
-## Flow B: Outlook.com sign in
+`TokenDetails.account` is supported and takes an `AccountInfo` containing a stable Google account ID. The earlier claim that getAuthToken has no account parameter was wrong. An email address is not that ID. The documented `getAccounts` enumeration API is Dev-channel-only, and `getProfileUserInfo` exposes only the primary account. This does not provide a stable-channel, arbitrary-secondary-account chooser for the extension's email-address model without additional identity discovery.
 
-1. In the popup, click **Sign in with Outlook**.
-2. Expected: Microsoft consumers sign-in page
-   (`login.microsoftonline.com/consumers`), personal account only;
-   work/school accounts are rejected by design.
-3. Expected consent lists **User.Read** (sign you in, read profile),
-   **Mail.Read** (read your mail), and **offline_access** (stay signed
-   in). Nothing about send or Mail.Read.Shared.
-4. Accept. Expected: popup shows the Outlook address; the session record
-   lands in `chrome.storage.session` (check
-   Application > Storage > Session in DevTools, values redacted).
+The custom chooser therefore remains, but the old code exchange at oauth2.googleapis.com is removed. Google's [OAuth implicit-flow documentation](https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow) describes the Web-client token response and registered redirect. The only extension fetch is to the existing Gmail API host. **The four approved host permissions do not change.** Tokens returned to the redirect are never logged or stored locally. A Web-flow credential expires and may require Sign in again when Chrome cannot renew that same account. Browser restart also clears session storage. This is an explicit auth-contract amendment and a live acceptance concern.
 
-## Flow C: sign out each
+The separate `tabs` permission amendment allows the worker to inspect the active tab URL in the focused window for notification suppression. It does not add fetch hosts or persist tab URLs.
 
-1. Gmail: click **Sign out** next to the Gmail account. Expected:
-   cached token removed via `removeCachedAuthToken`; next poll for that
-   account reports needs-sign-in instead of failing silently.
-2. Outlook: click **Sign out** next to the Outlook account. Expected:
-   `chrome.storage.session` key `auth.microsoft.graph` removed; next
-   poll reports needs-sign-in.
-3. Sign back in via Flow A/B. Expected: fresh consent only if the grant
-   was revoked; otherwise silent.
+## Account flows
 
-## Revocation check (optional)
+1. Click Add Gmail, enter the mailbox address and Web client ID, and accept the read-only consent. Repeat for a second Gmail address. Choosing a different mailbox must reject rather than store a foreign token.
+2. Click Add Outlook, enter a personal mailbox address and Entra application client ID, and accept consent. Work or school accounts are outside this registration and scope.
+3. Both providers immediately fetch recent inbox mail. The first successful population creates a quiet baseline, with no toast or chime for history. Empty inboxes also establish a baseline.
+4. Click Refresh. Cache and badge update, but manual refresh never toasts or chimes.
+5. Click Sign out for one account. Its tokens are removed and explicit signed-out state survives worker restart. Automatic polling must not sign it back in. Other accounts remain usable. Sign in explicitly to resume.
+6. Click Remove. The account and its cached messages disappear from the extension; no server mail is deleted. Other account rows remain.
+7. Revoke a grant in the provider's account settings. A failed silent renewal shows needs sign in for that account. Transient 429/5xx shows a retry deadline instead.
 
-- Google: remove the grant at myaccount.google.com > Security.
-  Expected: next poll 401s once, silent refresh fails, account shows
-  needs-sign-in with a button.
-- Microsoft: remove the app at account.microsoft.com > Privacy > Apps.
-  Expected: refresh grant fails, account shows needs-sign-in.
+## Focus and OS DND
 
-## PR checklist
+Pause alerts while a provider tab is focused defaults on. It suppresses toast and chime for that provider while its tab is active in the focused Chrome window. Turning the option off permits alerts; cache and badge update either way.
 
-- [ ] Flow A PASS (manual, own account)
-- [ ] Flow B PASS (manual, own account)
-- [ ] Flow C PASS (both sign-outs clear, sign-in recovers)
+Chrome's [notifications API](https://developer.chrome.com/docs/extensions/reference/api/notifications) exposes `granted` or `denied` permission, not OS DND. Native toast visibility follows OS policy. The extension cannot infer DND for offscreen audio, so enable Mute all sounds when using OS DND. Toasts themselves are silent, and the offscreen chime follows master and per-account mute. Automatic OS DND sound suppression is explicitly withdrawn from the original requirement.
+
+## Live acceptance checklist
+
+- [ ] Two Gmail accounts and one Outlook account add successfully from popup prompts.
+- [ ] Mailbox ownership mismatch rejects without caching a foreign credential.
+- [ ] Per-account sign-out remains effective after worker restart and does not affect another account.
+- [ ] Explicit sign-in resumes that account; removal drops only its extension cache.
+- [ ] Google Web redirect registration and renewal behavior verified with actual accounts.
+- [ ] Refresh, baseline, focused-tab suppression, master mute, chime, and badge verified in Chrome.
+
+These boxes require live accounts. Automated fixtures and DOM tests do not mark them complete.
