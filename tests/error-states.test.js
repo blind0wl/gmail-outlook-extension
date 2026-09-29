@@ -162,6 +162,15 @@ test("sign-in failures carry a diagnostic code for the popup", async () => {
       assert.equal(r.needsSignIn, true);
       assert.equal(r.code, code, message);
     }
+    // Endpoint identifiers ride along on token-exchange failures.
+    const exchange = new Error("microsoft token exchange failed: 400");
+    exchange.code = "invalid_client/AADSTS70011";
+    const r = await handleSignIn([target], { provider: "outlook", account: "code@o.c" }, {
+      interactiveGet: async () => {
+        throw exchange;
+      },
+    });
+    assert.equal(r.code, "token-exchange/invalid_client/AADSTS70011");
   } finally {
     uninstallChromeStub();
   }

@@ -75,6 +75,20 @@ test("empty-string client id falls through to the baked-in default", async () =>
   }
 });
 
+test("tokenErrorDetail keeps identifiers only, never description text", async () => {
+  const { tokenErrorDetail } = await import("../src/auth/microsoft.js");
+  assert.equal(
+    tokenErrorDetail({
+      error: "invalid_client",
+      error_description: "AADSTS70011: The provided request must include a 'client_secret'.",
+    }),
+    "invalid_client/AADSTS70011",
+  );
+  assert.equal(tokenErrorDetail({ error: "invalid_grant" }), "invalid_grant");
+  assert.equal(tokenErrorDetail(null), null);
+  assert.equal(tokenErrorDetail({ error_description: "no code here" }), null);
+});
+
 test("configureMicrosoftAuth enables the promised one-arg form", async () => {
   assert.throws(() => configureMicrosoftAuth({}), /clientId required/);
   configureMicrosoftAuth({ clientId: "test-client-id" });

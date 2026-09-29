@@ -113,7 +113,12 @@ function signInCode(err) {
     return "no-identity";
   if (/cancelled or failed|sign in threw/.test(message))
     return "flow-cancelled";
-  if (/token exchange/.test(message)) return "token-exchange";
+  if (/token exchange/.test(message)) {
+    // err.code carries the endpoint's own identifiers
+    // (error name + AADSTS number), safe to display.
+    const detail = String(err?.code ?? "").replace(/[^a-zA-Z0-9/_-]/g, "");
+    return detail ? `token-exchange/${detail}` : "token-exchange";
+  }
   if (/mismatch/.test(message)) return "account-mismatch";
   if (/needs sign in|AUTH_REQUIRED|auth needs sign in/.test(message))
     return "auth-required";

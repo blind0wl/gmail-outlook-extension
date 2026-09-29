@@ -279,6 +279,28 @@ export function parseAuthCallback(callbackUrl, expectedState) {
   return code;
 }
 
+// Pure extraction of the token endpoint's machine identifiers from an
+// error body: the OAuth error name plus the AADSTS number. The human
+// description is dropped (it can echo request details).
+export function tokenErrorDetail(body) {
+  if (!body || typeof body !== "object") return null;
+  const parts = [];
+  if (typeof body.error === "string" && body.error) parts.push(body.error);
+  const match = /AADSTS(\d+)/i.exec(
+    typeof body.error_description === "string" ? body.error_description : "",
+  );
+  if (match) parts.push(`AADSTS${match[1]}`);
+  return parts.length ? parts.join("/") : null;
+}
+
+async function readTokenErrorDetail(res) {
+  try {
+    return tokenErrorDetail(await res.json());
+  } catch {
+    return null;
+  }
+}
+
 async function postToken(body) {
   let res;
   try {
@@ -295,6 +317,10 @@ async function postToken(body) {
     const err = new Error(`microsoft token exchange failed: ${res.status}`);
     err.status = res.status;
     if (isTransientStatus(res.status)) err.transient = true;
+    // The body names the exact rejection (error + AADSTS code): capture
+    // those two identifiers only, never the description text.
+    const detail = await readTokenErrorDetail(res);
+    if (detail) err.code = detail;
     throw err;
   }
   let data;
