@@ -1,35 +1,29 @@
 # Manual auth and account lifecycle
 
-Ordinary use requires no DevTools or storage edits. Register the public OAuth clients once, load the unpacked extension, and enter client IDs through the popup. Never enter a client secret.
+Ordinary use requires no DevTools, no storage edits, and no IDs of any kind. Load the unpacked extension and add accounts from the popup. Never enter a client secret anywhere.
 
 ## Registration
 
-### Gmail
+### Gmail: none needed
 
-Enable Gmail API in a Google Cloud project: open [Google Cloud Console, Credentials](https://console.cloud.google.com/apis/credentials), creating a project first if you have none. Configure the OAuth consent screen for personal testing and add your accounts as test users. Request only `https://www.googleapis.com/auth/gmail.readonly`.
+Gmail reads the browser session you already have. Log into Gmail in any tab, click Add Gmail, enter the address, and the account appears. There is no Google Cloud project, no OAuth client, no consent screen, and no token stored anywhere. The extension fetches the unread feed with your session cookie and nothing else. If the session lapses, the account shows Sign in, which opens the Gmail login tab.
 
-Create an OAuth client of type **Web application** for the account chooser. Register the exact authorized redirect URI `https://<extension-id>.chromiumapp.org/`, including the trailing slash. Find the extension ID on chrome://extensions. Paste this client's public ID when Add Gmail asks for it. Do not paste the client secret. This flow requests `response_type=token`, validates state and redirect, verifies the returned token through the Gmail profile endpoint, and stores it only in session storage. There is no code exchange or refresh grant.
+### Outlook.com: one developer registration
 
-Optionally configure a separate **Chrome extension** client, pinned to the extension ID, as `oauth2.client_id` in the developer's manifest. Chrome-managed credentials can then renew silently. They are always checked against the requested Gmail address before use. The Web client is separate and is stored from the popup prompt.
+Create an Entra registration for **Personal Microsoft accounts only**: open [Entra admin center, App registrations](https://entra.microsoft.com/) and start a New registration. Add the exact `https://<extension-id>.chromiumapp.org/` redirect as a Mobile and desktop application public-client redirect. Enable public client flows as required by that registration. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Put the public application client ID into `ENTRA_APP_ID` in `src/auth/microsoft.js` (it is a public identifier, safe to commit). Users then click Add Outlook, enter their address, and accept the consent screen. The extension uses the consumers authority and PKCE.
 
-### Outlook.com
+## Auth contract note (feed transport)
 
-Create an Entra registration for **Personal Microsoft accounts only**: open [Entra admin center, App registrations](https://entra.microsoft.com/) and start a New registration. Add the exact `https://<extension-id>.chromiumapp.org/` redirect as a Mobile and desktop application public-client redirect. Enable public client flows as required by that registration. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Paste the public application client ID when Add Outlook asks for it. The extension uses the consumers authority and PKCE.
+Gmail uses no OAuth at all: no Cloud project, no client ID, no consent screen, no verification or assessment, no tokens in any storage. The only Gmail fetch host is `mail.google.com`. Outlook keeps delegated Microsoft OAuth with the developer-owned app id; its tokens live in `chrome.storage.session` only. Allowed fetch hosts are `mail.google.com`, `graph.microsoft.com`, and `login.microsoftonline.com`.
 
-## Chrome identity verification and contract note
-
-Checked Chrome's published [identity reference](https://developer.chrome.com/docs/extensions/reference/api/identity) on 2026-09-29. No installed local Chrome identity documentation or Chrome binary was available in this environment, so this is documentation verification, not live Chrome verification.
-
-`TokenDetails.account` is supported and takes an `AccountInfo` containing a stable Google account ID. The earlier claim that getAuthToken has no account parameter was wrong. An email address is not that ID. The documented `getAccounts` enumeration API is Dev-channel-only, and `getProfileUserInfo` exposes only the primary account. This does not provide a stable-channel, arbitrary-secondary-account chooser for the extension's email-address model without additional identity discovery.
-
-The custom chooser therefore remains, but the old code exchange at oauth2.googleapis.com is removed. Google's [OAuth implicit-flow documentation](https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow) describes the Web-client token response and registered redirect. The only extension fetch is to the existing Gmail API host. **The four approved host permissions do not change.** Tokens returned to the redirect are never logged or stored locally. A Web-flow credential expires and may require Sign in again when Chrome cannot renew that same account. Browser restart also clears session storage. This is an explicit auth-contract amendment and a live acceptance concern.
+A lapsed Gmail session shows Sign in, which opens the Gmail login tab. Outlook sign-in uses the baked-in developer app id plus PKCE with no secret.
 
 The separate `tabs` permission amendment allows the worker to inspect the active tab URL in the focused window for notification suppression. It does not add fetch hosts or persist tab URLs.
 
 ## Account flows
 
-1. Click Add Gmail, enter the mailbox address and Web client ID, and accept the read-only consent. Repeat for a second Gmail address. Choosing a different mailbox must reject rather than store a foreign token.
-2. Click Add Outlook, enter a personal mailbox address and Entra application client ID, and accept consent. Work or school accounts are outside this registration and scope.
+1. Log into Gmail in a tab. Click Add Gmail and enter the mailbox address. No consent screen appears. Repeat for each Gmail address.
+2. Click Add Outlook, enter a personal mailbox address, and accept the Microsoft consent screen. Work or school accounts are outside this registration and scope.
 3. Both providers immediately fetch recent inbox mail. The first successful population creates a quiet baseline, with no toast or chime for history. Empty inboxes also establish a baseline.
 4. Click Refresh. Cache and badge update, but manual refresh never toasts or chimes.
 5. Click Sign out for one account. Its tokens are removed and explicit signed-out state survives worker restart. Automatic polling must not sign it back in. Other accounts remain usable. Sign in explicitly to resume.

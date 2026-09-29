@@ -1,11 +1,11 @@
-// Auth static asserts (Task 6). No live OAuth, no network, no tokens.
-// Asserts scope strings, authority, redirect shape, and public-client
-// posture only.
+// Auth static asserts. No live OAuth, no network, no tokens.
+// Gmail uses the browser session cookie (no OAuth at all); Outlook uses
+// delegated Microsoft OAuth. Asserts authority, redirect shape, host
+// allowlist, and public-client posture only.
 
 import test from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { GMAIL_SCOPE, GMAIL_SCOPES } from "../src/auth/google.js";
 import {
   MS_AUTHORITY,
   MS_SCOPES,
@@ -19,15 +19,16 @@ import {
 } from "../src/auth/microsoft.js";
 import manifest from "../manifest.json" with { type: "json" };
 
-test("gmail scope is readonly only", () => {
-  assert.equal(GMAIL_SCOPE, "https://www.googleapis.com/auth/gmail.readonly");
-  assert.deepEqual(GMAIL_SCOPES, [GMAIL_SCOPE]);
-});
-
-test("manifest oauth2.scopes holds gmail.readonly only", () => {
-  assert.deepEqual(manifest.oauth2?.scopes, [
-    "https://www.googleapis.com/auth/gmail.readonly",
-  ]);
+test("gmail uses no OAuth: no oauth2 block, feed host only", () => {
+  assert.equal(manifest.oauth2, undefined);
+  assert.ok(
+    manifest.host_permissions.includes("https://mail.google.com/*"),
+    "feed host permitted",
+  );
+  assert.ok(
+    !manifest.host_permissions.some((h) => h.includes("gmail.googleapis.com")),
+    "no gmail api host",
+  );
 });
 
 test("microsoft authority is consumers only", () => {
@@ -106,20 +107,19 @@ test("session posture: tokens keyed in session storage, freshness with skew", ()
 });
 
 test("bundle posture: public client, no secrets, no overbroad scopes", () => {
-  const googleSrc = readFileSync(new URL("../src/auth/google.js", import.meta.url), "utf8");
+  const gmailSrc = readFileSync(new URL("../src/providers/gmail.js", import.meta.url), "utf8");
   const msSrc = readFileSync(new URL("../src/auth/microsoft.js", import.meta.url), "utf8");
   const manifestSrc = readFileSync(new URL("../manifest.json", import.meta.url), "utf8");
-  const bundle = googleSrc + msSrc + manifestSrc;
+  const bundle = gmailSrc + msSrc + manifestSrc;
   assert.ok(!/client_secret\s*[=:]\s*["'][^"']+["']/i.test(bundle), "no secret value in bundle");
   for (const line of bundle.split("\n")) {
     if (/Mail\.Read\.Shared/.test(line)) {
       assert.ok(/never/i.test(line), `shared-scope mention must be a never-request caution: ${line.trim()}`);
     }
   }
-  assert.ok(!/gmail\.(send|modify|compose)/i.test(bundle), "no gmail write scope");
+  assert.ok(!/gmail\.googleapis\.com/i.test(bundle), "no gmail api host");
+  assert.ok(!/getAuthToken|removeCachedAuthToken/i.test(gmailSrc), "gmail uses session cookie, no identity tokens");
   assert.ok(!/Mail\.Send|Mail\.ReadWrite/i.test(bundle), "no graph write scope");
-  assert.ok(googleSrc.includes("getAuthToken"), "google uses getAuthToken");
-  assert.ok(googleSrc.includes("removeCachedAuthToken"), "google clears cached token");
   assert.ok(msSrc.includes("launchWebAuthFlow"), "microsoft uses launchWebAuthFlow");
   assert.ok(msSrc.includes("getRedirectURL"), "redirect from chrome.identity");
   assert.ok(msSrc.includes("code_challenge_method"), "PKCE challenge method present");

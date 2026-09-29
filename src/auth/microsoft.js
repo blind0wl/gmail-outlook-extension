@@ -62,6 +62,16 @@ export function sessionKeyFor(account) {
   return account ? `${MS_SESSION_KEY}:${account}` : MS_SESSION_KEY;
 }
 
+// Developer-owned Entra application id shipped with the extension. A
+// client id is a public identifier, never a secret. Replace the
+// placeholder with the real id once the app registration exists;
+// per-account clientId values still override it.
+export const ENTRA_APP_ID = "YOUR_ENTRA_APP_ID";
+
+export function defaultAppId() {
+  return /^YOUR_/i.test(ENTRA_APP_ID) ? undefined : ENTRA_APP_ID;
+}
+
 export function configureMicrosoftAuth({ clientId } = {}) {
   if (!clientId) throw new Error("microsoft auth: clientId required");
   configuredClientId = clientId;
@@ -72,8 +82,8 @@ export function getConfiguredClientId() {
 }
 
 function resolveClientId(override) {
-  const id = override ?? configuredClientId;
-  if (!id) throw new Error("microsoft auth: clientId not configured");
+  const id = override ?? configuredClientId ?? defaultAppId();
+  if (!id || /^YOUR_/i.test(id)) throw new Error("microsoft auth: clientId not configured");
   return id;
 }
 

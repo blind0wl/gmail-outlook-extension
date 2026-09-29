@@ -29,31 +29,20 @@
       <label>Your email address
         <input id="add-account-email" type="email" required autocomplete="email" placeholder="you@example.com">
       </label>
-      <label><span id="add-account-client-label">Client ID</span>
-        <input id="add-account-client" required spellcheck="false" autocomplete="off" placeholder="Paste the client ID here">
+      <label id="add-account-client-row"><span id="add-account-client-label">Client ID</span>
+        <input id="add-account-client" spellcheck="false" autocomplete="off" placeholder="Paste the client ID here">
       </label>
+      <p id="add-account-note" class="form-note" hidden></p>
       <details id="add-account-help">
-        <summary>Where do I find the client ID?</summary>
+        <summary>How does this work?</summary>
         <div id="add-account-help-gmail" hidden>
-          <ol>
-            <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud Console, Credentials</a> (create a project first if you have none).</li>
-            <li>Click Create Credentials, then OAuth client ID, then application type Web application.</li>
-            <li>Under Authorized redirect URIs, add the redirect URI shown below, copied exactly.</li>
-            <li>If Google asks for a consent screen, choose External and add your Gmail address under Test users. Request only Gmail read-only access.</li>
-            <li>Copy the Client ID, not the client secret, into the field above.</li>
-          </ol>
+          <p>Gmail needs no setup and no IDs. Just log into Gmail in any browser tab and the account appears here automatically. The extension reads the same unread view you see, and nothing leaves this browser.</p>
+          <p><a href="https://mail.google.com/" target="_blank" rel="noreferrer">Open Gmail to log in</a></p>
         </div>
         <div id="add-account-help-outlook" hidden>
-          <ol>
-            <li>Open <a href="https://entra.microsoft.com/" target="_blank" rel="noreferrer">Entra admin center, App registrations</a> and start a New registration.</li>
-            <li>Under Supported account types choose Personal Microsoft accounts only.</li>
-            <li>Add a Mobile and desktop applications redirect URI with the value shown below.</li>
-            <li>Under API permissions add Microsoft Graph delegated User.Read and Mail.Read, plus offline_access. No admin consent is needed for a personal account.</li>
-            <li>Copy the Application (client) ID, not a secret, into the field above.</li>
-          </ol>
+          <p>Outlook signs in with your normal Microsoft account. Press Add account and accept the consent screen. There is nothing to register and no ID to paste.</p>
         </div>
       </details>
-      <p class="form-redirect">Redirect URI to register: <code id="add-account-redirect"></code></p>
       <p id="add-account-error" role="alert" hidden></p>
       <button type="submit" id="add-account-submit">Add account</button>
       <button type="button" id="add-account-cancel">Cancel</button>

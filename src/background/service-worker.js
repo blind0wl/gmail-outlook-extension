@@ -7,18 +7,14 @@
 // interactive:false). Interactive recovery passes the same account identity
 // through handleSignIn. Tests supply fakes via deps.
 
-import { fetchGmailMessages } from "../providers/gmail.js";
+import { fetchGmailMessages, GmailFetchError } from "../providers/gmail.js";
 import { fetchOutlookMessages } from "../providers/outlook.js";
-import {
-  getGmailTokenForAccount,
-  renewGmailToken,
-  clearGmailToken,
-} from "../auth/google.js";
 import {
   getGraphTokenForAccount,
   renewGraphToken,
   clearGraphToken,
   configureMicrosoftAuth,
+  defaultAppId,
 } from "../auth/microsoft.js";
 import {
   accountKey,
@@ -208,7 +204,7 @@ export async function pollAccount(acct, deps) {
   }
 
   try {
-    const items = await fetcher(token, deps.since ?? now - 7 * 86400000);
+    const items = await fetcher(token, deps.since ?? now - 7 * 86400000, acct?.account);
     clearBackoff(acct);
     clearNeedsSignIn(acct);
     clearOffline(acct);
@@ -253,7 +249,7 @@ export async function pollAccount(acct, deps) {
         };
       }
       try {
-        const items = await fetcher(fresh, deps.since ?? now - 7 * 86400000);
+        const items = await fetcher(fresh, deps.since ?? now - 7 * 86400000, acct?.account);
         clearBackoff(acct);
         clearNeedsSignIn(acct);
         clearOffline(acct);
@@ -529,7 +525,8 @@ let lastConfiguredClientId = null;
 // side is configured once from the Entra app id on the account record (a
 // public identifier, never a secret).
 export function ensureMicrosoftConfigured(accounts = []) {
-  const clientId = getMicrosoftClientId(accounts ?? []);
+  const clientId =
+    getMicrosoftClientId(accounts ?? []) ?? defaultAppId();
   if (clientId && clientId !== lastConfiguredClientId) {
     try {
       configureMicrosoftAuth({ clientId });
@@ -557,7 +554,8 @@ function silentTokenFor(acct, clientId) {
     });
   }
   if (acct?.provider === "gmail") {
-    return getGmailTokenForAccount(acct?.account ?? "", false);
+    // Feed transport uses the browser session cookie; no credential exists.
+    return null;
   }
   return Promise.reject(new Error(`unknown provider ${acct?.provider}`));
 }
@@ -572,7 +570,8 @@ function renewTokenFor(acct, rejectedToken, clientId) {
     });
   }
   if (acct?.provider === "gmail") {
-    return renewGmailToken(acct?.account ?? "", rejectedToken);
+    // Nothing to renew for cookie transport; the retry refetches.
+    return null;
   }
   return Promise.reject(new Error(`unknown provider ${acct?.provider}`));
 }
@@ -637,12 +636,24 @@ export async function handleSignIn(accounts, target, deps = {}) {
   const clientId = ensureMicrosoftConfigured([...list, target]);
   const interactive =
     interactiveGet ??
-    ((a) =>
-      a?.provider === "outlook"
-        ? getGraphTokenForAccount(a?.account ?? "", true, {
-            clientId: a.clientId ?? clientId,
-          })
-        : getGmailTokenForAccount(a?.account ?? "", true));
+    ((a) => {
+      if (a?.provider === "gmail") {
+        // No OAuth for Gmail: open the inbox so the user logs in with
+        // their normal Google session, then the next poll picks it up.
+        try {
+          void globalThis.chrome?.tabs?.create?.({
+            url: "https://mail.google.com/",
+          });
+        } catch {}
+        throw new GmailFetchError("feed-auth", {
+          status: 401,
+          account: a?.account ?? "",
+        });
+      }
+      return getGraphTokenForAccount(a?.account ?? "", true, {
+        clientId: a.clientId ?? clientId,
+      });
+    });
   try {
     await interactive(acct);
   } catch (err) {
@@ -745,17 +756,10 @@ export async function handleMessage(msg, deps = {}) {
     return { ok: false };
   const key = accountKey(target);
   if (msg.type === "add-account") {
-    if (target.provider === "outlook" && !target.clientId?.trim())
-      return { ok: false };
     await write(async () => {
       const accounts = await loadAccounts();
       if (accounts.some((a) => accountKey(a) === key))
         throw new Error("account already exists");
-      if (target.provider === "gmail" && msg.clientId) {
-        await chrome.storage.local.set({
-          googleWebClientId: msg.clientId.trim(),
-        });
-      }
       await saveAccounts([...accounts, target]);
     });
   }
@@ -773,9 +777,11 @@ export async function handleMessage(msg, deps = {}) {
   signedOutByKey.add(key);
   markNeedsSignIn(acct);
   // Invalidate provider operations immediately, before waiting for the writer.
+  // Gmail keeps no credentials (session cookie transport), so sign-out
+  // only stops polling; Outlook clears its session slots.
   const clearing =
     acct.provider === "gmail"
-      ? clearGmailToken(undefined, acct.account)
+      ? Promise.resolve(true)
       : clearGraphToken(acct.account);
   const cleared = clearing.then(
     () => true,

@@ -15,7 +15,7 @@
 - Manifest V3 only.
 - No custom backend or proxy in v1.
 - Allowed hosts only: gmail.googleapis.com, accounts.google.com, graph.microsoft.com, login.microsoftonline.com.
-- Gmail scope is https://www.googleapis.com/auth/gmail.readonly, Outlook scopes are User.Read plus Mail.Read plus offline_access, no send or write scopes.
+- Gmail uses no OAuth scope at all (session-cookie feed); Outlook scopes are User.Read plus Mail.Read plus offline_access, no send or write scopes.
 - Tokens live in chrome.storage.session, mail cache lives in chrome.storage.local with 200 item cap and 7 day expiry.
 - Logs and diagnostic errors may carry ids, timestamps, a fixed operation label `op`, and numeric HTTP `status`; mail content, tokens, request or response bodies, and exception text are forbidden.
 - Outlook covers Outlook.com, Hotmail, and Live personal only, authority https://login.microsoftonline.com/consumers, no M365 work accounts.

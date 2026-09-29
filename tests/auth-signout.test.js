@@ -3,7 +3,6 @@
 
 import test from "node:test";
 import assert from "node:assert";
-import { clearGmailToken } from "../src/auth/google.js";
 import {
   configureMicrosoftAuth,
   getGraphToken,
@@ -140,39 +139,6 @@ test("clearGraphToken resolves true and empties the session", async () => {
   try {
     assert.equal(await clearGraphToken(), true);
     assert.equal(await readSessionRecord(), null);
-  } finally {
-    globalThis.chrome = prev;
-  }
-});
-
-test("clearGmailToken reports cache removal failure", async () => {
-  const prev = globalThis.chrome;
-  globalThis.chrome = {
-    runtime: { lastError: { message: "cache busy" } },
-    identity: { removeCachedAuthToken: (_details, cb) => cb() },
-  };
-  try {
-    await assert.rejects(() => clearGmailToken("tok"), /google sign out failed/);
-  } finally {
-    globalThis.chrome = prev;
-  }
-});
-
-test("clearGmailToken resolves true on success, false when nothing to clear", async () => {
-  const prev = globalThis.chrome;
-  globalThis.chrome = {
-    runtime: {},
-    identity: { removeCachedAuthToken: (_details, cb) => cb() },
-  };
-  try {
-    assert.equal(await clearGmailToken("tok"), true);
-    assert.equal(await clearGmailToken(undefined), false);
-  } finally {
-    globalThis.chrome = prev;
-  }
-  globalThis.chrome = undefined;
-  try {
-    assert.equal(await clearGmailToken("tok"), false);
   } finally {
     globalThis.chrome = prev;
   }

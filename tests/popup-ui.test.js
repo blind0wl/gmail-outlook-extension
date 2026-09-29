@@ -75,7 +75,6 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   assert.equal(document.getElementById("add-account-form").hidden, false);
   assert.equal(document.getElementById("add-account-help-gmail").hidden, false);
   assert.equal(document.getElementById("add-account-help-outlook").hidden, true);
-  assert.ok(document.getElementById("add-account-redirect").textContent.length > 0);
   await submitAddForm("second@gmail.com", "google-web-client");
   assert.deepEqual(messages.at(-1), {
     type: "add-account",

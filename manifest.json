@@ -11,15 +11,8 @@
     "offscreen",
     "tabs"
   ],
-  "oauth2": {
-    "client_id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
-    "scopes": [
-      "https://www.googleapis.com/auth/gmail.readonly"
-    ]
-  },
   "host_permissions": [
-    "https://gmail.googleapis.com/*",
-    "https://accounts.google.com/*",
+    "https://mail.google.com/*",
     "https://graph.microsoft.com/*",
     "https://login.microsoftonline.com/*"
   ],

@@ -61,12 +61,14 @@ Setup for the whole pass (human-only):
 
 ## Auth flows in docs/manual-auth.md (human-only)
 
-- [ ] Flow A PASS: Gmail sign in, readonly consent only, still signed in
-      after extension reload.
+- [ ] Flow A PASS: Gmail works with no OAuth at all. Log into Gmail in a tab,
+      add each address from the popup with no consent screen, mail appears,
+      still present after extension reload.
 - [ ] Flow B PASS: Outlook.com sign in, consumers authority, User.Read
       plus Mail.Read plus offline_access consent only.
-- [ ] Flow C PASS: both sign-outs clear (Gmail cached token removed,
-      session key `auth.microsoft.graph` removed); sign-in recovers.
+- [ ] Flow C PASS: both sign-outs clear (Gmail keeps no tokens, so sign-out
+      only stops polling; Outlook session key `auth.microsoft.graph` removed);
+      sign-in recovers.
 
 ## Automated gate (machine)
 

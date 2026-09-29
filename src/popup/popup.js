@@ -450,32 +450,26 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var addForm = document.getElementById("add-account-form");
     var addTitle = document.getElementById("add-account-title");
     var addEmail = document.getElementById("add-account-email");
-    var addClientLabel = document.getElementById("add-account-client-label");
+    var addClientRow = document.getElementById("add-account-client-row");
     var addClient = document.getElementById("add-account-client");
+    var addNote = document.getElementById("add-account-note");
     var addHelpGmail = document.getElementById("add-account-help-gmail");
     var addHelpOutlook = document.getElementById("add-account-help-outlook");
-    var addRedirect = document.getElementById("add-account-redirect");
     var addError = document.getElementById("add-account-error");
     var addProvider = null;
-    function redirectUri() {
-      try {
-        if (globalThis.chrome && chrome.identity && chrome.identity.getRedirectURL) {
-          return chrome.identity.getRedirectURL();
-        }
-      } catch {}
-      var id = (globalThis.chrome && chrome.runtime && chrome.runtime.id) || "<extension-id>";
-      return "https://" + id + ".chromiumapp.org/";
-    }
     function showAddForm(provider) {
       addProvider = provider;
       var isGmail = provider === "gmail";
       addTitle.textContent = isGmail ? "Add Gmail account" : "Add Outlook account";
-      addClientLabel.textContent = isGmail
-        ? "Google Web application client ID"
-        : "Microsoft application (client) ID";
+      // Neither provider asks users for IDs anymore: Gmail reads the
+      // browser session, Outlook consent is handled by the extension.
+      addClientRow.hidden = true;
+      addNote.hidden = false;
+      addNote.textContent = isGmail
+        ? "No setup needed. Log into Gmail in any tab and press Add account."
+        : "No setup needed. Press Add account and accept the Microsoft consent screen.";
       addHelpGmail.hidden = !isGmail;
       addHelpOutlook.hidden = isGmail;
-      addRedirect.textContent = redirectUri();
       addError.hidden = true;
       addError.textContent = "";
       addForm.hidden = false;
@@ -497,8 +491,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       event.preventDefault();
       var account = addEmail.value.trim();
       var clientId = addClient.value.trim();
-      if (!account || !clientId) {
-        addError.textContent = "Enter both your email address and the client ID.";
+      if (!account) {
+        addError.textContent = "Enter your email address.";
         addError.hidden = false;
         return;
       }

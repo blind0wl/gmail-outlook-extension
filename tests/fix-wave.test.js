@@ -178,30 +178,21 @@ test("auth-stage 503 persists retry deadline", async () => {
     now + 30000,
   );
 });
-test("large Gmail mailbox has bounded requests and reports partial snapshot", async () => {
+test("large Gmail mailbox has bounded requests across capped slots", async () => {
   let calls = 0;
-  globalThis.fetch = async (url) => {
+  const recent = new Date(now - 3600000).toISOString();
+  const entry = (i) => `<entry><title>s${i}</title><summary>p</summary><link rel="alternate" href="https://mail.google.com/mail/u/0/#inbox/${i.toString(16).padStart(8, "a")}"/><issued>${recent}</issued><author><name>a</name><email>a@x.y</email></author></entry>`;
+  const feed = (account, n) =>
+    `<?xml version="1.0"?><feed xmlns="http://purl.org/atom/ns#"><title>Gmail - Inbox for ${account}</title><fullcount>${n}</fullcount>${Array.from({ length: n }, (_, i) => entry(`id${i}`)).join("")}</feed>`;
+  globalThis.fetch = async () => {
     calls++;
-    if (calls > 200) throw new Error("unbounded");
-    const u = String(url);
-    return {
-      ok: true,
-      json: async () =>
-        u.includes("/profile")
-          ? { emailAddress: acct.account }
-          : u.includes("/messages?")
-            ? {
-                messages: Array.from({ length: 25 }, (_, i) => ({
-                  id: String(i),
-                })),
-                nextPageToken: "more",
-              }
-            : { id: u.split("/messages/")[1]?.split("?")[0] },
-    };
+    if (calls > 20) throw new Error("unbounded");
+    return { ok: true, status: 200, text: async () => feed(acct.account, 50) };
   };
   const rows = await fetchGmailMessages("t", now - 86400000);
-  assert.ok(calls <= 105);
-  assert.equal(rows.complete, false);
+  assert.ok(calls <= 11, `slot probes capped, saw ${calls}`);
+  assert.equal(rows.complete, true);
+  assert.ok(rows.length > 0);
 });
 test("large Outlook mailbox has bounded requests and reports partial snapshot", async () => {
   let calls = 0;
@@ -447,14 +438,16 @@ test("removing an account during a poll cannot restore its cache or account stat
   assert.equal(local.data.mailCache.length, 0);
   assert.equal(local.data.accountState[`gmail:${acct.account}`], undefined);
 });
-test("request signals enforce timeouts and both adapters send a recent inbox query", async () => {
-  let gmailQuery, graphQuery;
+test("request signals enforce timeouts and both adapters scope to recent mail", async () => {
+  let gmailHost, gmailCreds, graphQuery;
   globalThis.fetch = async (url, options) => {
     assert.ok(options.signal instanceof AbortSignal);
     const u = new URL(url);
-    if (u.hostname === "gmail.googleapis.com") {
-      gmailQuery = u.searchParams.get("q");
-      return { ok: true, json: async () => ({ messages: [] }) };
+    if (u.hostname === "mail.google.com") {
+      gmailHost = u.hostname;
+      gmailCreds = options.credentials;
+      assert.equal(options.headers?.Authorization, undefined, "no bearer on feed");
+      return { ok: false, status: 404, text: async () => "" };
     }
     if (u.pathname === "/v1.0/me")
       return { ok: true, json: async () => ({ mail: "a@outlook.com" }) };
@@ -463,7 +456,8 @@ test("request signals enforce timeouts and both adapters send a recent inbox que
   };
   await fetchGmailMessages("t", now - 86400000);
   await fetchOutlookMessages("t", now - 86400000);
-  assert.match(gmailQuery, /after:\d+ in:inbox/);
+  assert.equal(gmailHost, "mail.google.com");
+  assert.equal(gmailCreds, "include", "session cookie authenticates");
   assert.equal(graphQuery.pathname, "/v1.0/me/mailFolders/inbox/messages");
   assert.match(graphQuery.searchParams.get("$filter"), /^receivedDateTime ge /);
 });

@@ -1,11 +1,11 @@
-// Gmail read-only adapter. Normalizes Gmail API message resources into the
-// cache shape from src/store/cache.js:
+// Gmail session-cookie transport. Reads the per-account Atom unread feeds at
+// mail.google.com/mail/u/<n>/feed/atom using the browser's Gmail session
+// (fetch with credentials:include). No OAuth, no tokens, no Cloud project:
+// if you are logged into Gmail in the browser, the account is readable.
+// Normalizes into the cache shape from src/store/cache.js:
 // { key, provider, account, from, subject, snippet, date, unread, localRead }
-// Only issues GET requests; never requests write scopes. The OAuth token is
-// taken as a function parameter (auth wiring comes from Task 6 at runtime).
-
-const LIST_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
-const PROFILE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
+// Feed entries are unread inbox mail only; read mail vanishes from the feed
+// and the worker treats absence accordingly. Only issues GET requests.
 
 // Sanitized fetch error. Carries only safe identifiers (operation, HTTP
 // status, message id, account) plus a timestamp — never subject, snippet,
@@ -27,92 +27,136 @@ export class GmailFetchError extends Error {
   }
 }
 
-async function getJson(url, token, op, extra, deadline) {
-  let res;
-  try {
-    res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: deadline
-        ? AbortSignal.any([deadline, AbortSignal.timeout(15_000)])
-        : AbortSignal.timeout(15_000),
-    });
-  } catch {
-    throw new GmailFetchError(op, extra);
-  }
-  if (!res.ok) throw new GmailFetchError(op, { status: res.status, ...extra });
-  try {
-    return await res.json();
-  } catch {
-    throw new GmailFetchError(`${op} parse`, { status: res.status, ...extra });
-  }
+const FEED_HOST = "https://mail.google.com";
+const MAX_SLOTS = 10;
+
+function feedUrl(slot) {
+  return `${FEED_HOST}/mail/u/${slot}/feed/atom`;
 }
 
-function header(payload, name) {
-  const found = payload?.headers?.find(
-    (h) => h.name?.toLowerCase() === name.toLowerCase(),
+function decodeXml(s) {
+  return String(s ?? "")
+    .replace(/&(lt|gt|amp|quot|apos);/g, (_, e) =>
+      ({ lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" })[e],
+    )
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+function firstGroup(re, s) {
+  const m = re.exec(s);
+  return m ? decodeXml(m[1]).trim() : "";
+}
+
+// Workers have no DOMParser, so entries come out with flat regexps. The
+// feed is machine-generated XML with a stable shape.
+export function parseFeed(xml, slot) {
+  const text = String(xml ?? "").replace(/^\s*<\?xml[^?]*\?>\s*/, "");
+  if (!text.startsWith("<feed")) {
+    // A login page or anything else means this slot has no Gmail session.
+    throw new GmailFetchError("feed-auth", { status: 401 });
+  }
+  const account = firstGroup(
+    /<title>\s*Gmail - Inbox for ([^<]+)<\/title>/i,
+    text,
   );
-  return found?.value ?? "";
+  if (!account) throw new GmailFetchError("feed parse", { status: 200 });
+  const fullcount = Number(firstGroup(/<fullcount>(\d+)<\/fullcount>/i, text)) || 0;
+  const entries = [];
+  const blocks = text.match(/<entry>([\s\S]*?)<\/entry>/gi) ?? [];
+  for (const block of blocks) {
+    const link = firstGroup(/<link[^>]*href="([^"]+)"/i, block);
+    const id =
+      firstGroup(/#inbox\/([0-9a-f]+)/i, link) ||
+      firstGroup(/[?&]message_id=([^"&]+)/i, link);
+    if (!id) continue;
+    const issuedMatch = /<(?:issued|modified)>([^<]+)<\/(?:issued|modified)>/i.exec(block);
+    const issued = issuedMatch ? decodeXml(issuedMatch[1]).trim() : "";
+    entries.push({
+      id,
+      from: firstGroup(/<author>[\s\S]*?<name>([^<]*)<\/name>/i, block),
+      subject: firstGroup(/<title>([\s\S]*?)<\/title>/i, block),
+      snippet: firstGroup(/<summary>([\s\S]*?)<\/summary>/i, block),
+      date: issued ? Date.parse(issued) || 0 : 0,
+    });
+  }
+  return { account, fullcount, entries, slot };
 }
 
 export function normalizeGmailMessage(raw, account) {
-  const dateHeader = header(raw.payload, "Date");
-  const parsed = dateHeader ? Date.parse(dateHeader) : NaN;
-  const date = Number.isNaN(parsed) ? Number(raw.internalDate) || 0 : parsed;
   return {
     key: "gmail:" + encodeURIComponent(account) + ":" + raw.id,
     provider: "gmail",
     account,
-    from: header(raw.payload, "From"),
-    subject: header(raw.payload, "Subject"),
+    from: raw.from ?? "",
+    subject: raw.subject ?? "",
     snippet: raw.snippet ?? "",
-    date,
-    unread: raw.labelIds?.includes("UNREAD") ?? false,
+    date: Number(raw.date) || 0,
+    unread: true,
     localRead: false,
   };
 }
 
-export async function fetchGmailMessages(token, since) {
-  const deadline = AbortSignal.timeout(45_000);
-  const base = new URLSearchParams({ maxResults: "25" });
-  since ??= Date.now() - 7 * 86400000;
-  if (since) base.set("q", `after:${Math.floor(since / 1000)} in:inbox`);
-  const ids = [];
-  let pageToken;
-  let pages = 0;
-  do {
-    const params = new URLSearchParams(base);
-    if (pageToken) params.set("pageToken", pageToken);
-    const list = await getJson(
-      `${LIST_URL}?${params}`,
-      token,
-      "list",
-      undefined,
-      deadline,
-    );
-    if (list.messages?.length) {
-      for (const { id } of list.messages.slice(0, 25)) ids.push(id);
-    }
-    pageToken = list.nextPageToken;
-  } while (pageToken && ++pages < 4);
-  if (!ids.length) return Object.assign([], { complete: !pageToken });
-  const profile = await getJson(
-    PROFILE_URL,
-    token,
-    "profile",
-    undefined,
-    deadline,
-  );
-  const account = profile.emailAddress ?? "gmail";
-  const out = [];
-  for (const id of ids) {
-    const detail = await getJson(
-      `${LIST_URL}/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-      token,
-      "get",
-      { id, account },
-      deadline,
-    );
-    out.push(normalizeGmailMessage(detail, account));
+async function fetchSlot(slot) {
+  let res;
+  try {
+    res = await fetch(feedUrl(slot), {
+      credentials: "include",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new GmailFetchError("feed");
   }
-  return Object.assign(out, { complete: !pageToken });
+  if (res.type === "opaqueredirect" || res.status === 301 || res.status === 302) {
+    throw new GmailFetchError("feed-auth", { status: 401 });
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new GmailFetchError("feed-auth", { status: res.status });
+  }
+  if (res.status === 404) {
+    const err = new GmailFetchError("feed-slot", { status: 404 });
+    err.slotAbsent = true;
+    throw err;
+  }
+  if (!res.ok) throw new GmailFetchError("feed", { status: res.status });
+  let text;
+  try {
+    text = await res.text();
+  } catch {
+    throw new GmailFetchError("feed parse", { status: res.status });
+  }
+  return parseFeed(text, slot);
+}
+
+// token is accepted for interface symmetry with the Outlook adapter and
+// ignored: the session cookie authenticates. since filters by entry date.
+// onlyAccount scopes the result to one configured address; slots still
+// probe in order because slot numbers are unstable across sessions.
+// Probes slots 0..9 in order and stops at the first absent slot. Throws
+// feed-auth when slot 0 has no session (user is logged out of Gmail).
+// The returned array carries complete:true plus totalUnread (the feed's
+// exact unread count, which can exceed the ~20 returned entries).
+export async function fetchGmailMessages(token, since, onlyAccount) {
+  void token;
+  since ??= Date.now() - 7 * 86400000;
+  const out = [];
+  let totalUnread = 0;
+  for (let slot = 0; slot < MAX_SLOTS; slot++) {
+    let feed;
+    try {
+      feed = await fetchSlot(slot);
+    } catch (err) {
+      if (err?.slotAbsent) break;
+      if (slot > 0 && err?.op === "feed-auth") break;
+      throw err;
+    }
+    if (onlyAccount && feed.account.toLowerCase() !== String(onlyAccount).toLowerCase()) continue;
+    totalUnread += feed.fullcount;
+    for (const entry of feed.entries) {
+      if (entry.date && entry.date < since) continue;
+      out.push(normalizeGmailMessage(entry, feed.account));
+    }
+  }
+  out.sort((a, b) => b.date - a.date);
+  return Object.assign(out, { complete: true, totalUnread });
 }

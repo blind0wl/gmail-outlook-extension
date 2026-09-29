@@ -136,17 +136,10 @@ test("silent token failure marks needs sign in, never mail content", async () =>
   }
 });
 
-test("real token provider calls gmail or graph silently per account", async () => {
+test("real token provider resolves gmail null and graph silently per account", async () => {
   const prev = globalThis.chrome;
   const prevFetch = globalThis.fetch;
-  const seen = [];
   globalThis.chrome = {
-    identity: {
-      getAuthToken: ({ interactive }, cb) => {
-        seen.push(["gmail", interactive]);
-        cb("gmail-tok");
-      },
-    },
     storage: {
       session: {
         // Per-account slots: the graph record lives under its MS keys only.
@@ -160,11 +153,10 @@ test("real token provider calls gmail or graph silently per account", async () =
       },
     },
   };
-  // Account verification: the Chrome-cached credential profiles as w@g.c.
   globalThis.fetch = async (url) => ({
     ok: true,
     status: 200,
-    json: async () => ({ emailAddress: "w@g.c" }),
+    json: async () => ({ mail: "o@o.c" }),
   });
   try {
     const accounts = [
@@ -172,10 +164,9 @@ test("real token provider calls gmail or graph silently per account", async () =
       { provider: "outlook", account: "o@o.c", clientId: "entra-app-id" },
     ];
     const provider = buildTokenProvider(accounts);
-    assert.equal(await provider.getToken(accounts[0]), "gmail-tok");
+    assert.equal(await provider.getToken(accounts[0]), null, "gmail needs no credential");
     assert.equal(await provider.getToken(accounts[1]), "graph-tok");
-    assert.equal(await provider.refreshToken(accounts[0], "stale-tok"), "gmail-tok");
-    assert.deepEqual(seen, [["gmail", false], ["gmail", false]], "gmail fetched silently, renewal refetches after evict");
+    assert.equal(await provider.refreshToken(accounts[0], null), null, "gmail has nothing to renew");
   } finally {
     if (prev === undefined) delete globalThis.chrome;
     else globalThis.chrome = prev;
@@ -183,29 +174,21 @@ test("real token provider calls gmail or graph silently per account", async () =
   }
 });
 
-test("sign-in handler recovers one account without touching the others", async () => {
+test("gmail sign-in opens the login tab without touching other accounts", async () => {
   const backing = installChromeStub();
-  const prevFetch = globalThis.fetch;
-  globalThis.chrome.identity = {
-    getAuthToken: ({ interactive }, cb) => cb("fresh-tok"),
-  };
-  // Interactive silent-first path verifies the fresh credential's owner.
-  globalThis.fetch = async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ emailAddress: "err-signin@g.c" }),
-  });
+  const opened = [];
+  globalThis.chrome.tabs = { create: async (opts) => void opened.push(opts.url) };
   try {
     const target = { provider: "gmail", account: "err-signin@g.c" };
-    const fetchers = { gmail: async () => [item("gmail:errsin", "gmail", "err-signin@g.c")] };
-    const r = await handleSignIn([target], { provider: "gmail", account: "err-signin@g.c" }, {
-      fetchers,
+    const other = { provider: "outlook", account: "other@o.c" };
+    const r = await handleSignIn([target, other], { provider: "gmail", account: "err-signin@g.c" }, {
+      fetchers: { gmail: async () => { throw new Error("must not poll before login"); } },
     });
-    assert.ok(r.items?.length === 1, "recovered account polls after interactive sign in");
-    assert.equal(needsSignInFor(target), false);
-    assert.equal(backing.accountState?.["gmail:err-signin@g.c"]?.needsSignIn, false);
+    assert.equal(r.needsSignIn, true);
+    assert.ok(opened.includes("https://mail.google.com/"), "login tab opened");
+    assert.equal(needsSignInFor(target), true);
+    assert.equal(needsSignInFor(other), false);
   } finally {
-    globalThis.fetch = prevFetch;
     uninstallChromeStub();
   }
 });

@@ -51,13 +51,13 @@ Permissions are identity, alarms, notifications, storage, offscreen, and tabs. T
 
 ## Auth and accounts
 
-Gmail first tries a Chrome-managed credential with scope gmail.readonly and verifies its mailbox address. First sign in starts from Add Gmail or Sign in, never on launch. The final-review amendment keeps a custom account-switch flow because stable Chrome cannot enumerate secondary account IDs. A Google Web application client with the exact chromiumapp.org redirect uses `launchWebAuthFlow` and `response_type=token`; the Gmail profile verifies ownership before storage. There is no custom token exchange, refresh grant, or request to oauth2.googleapis.com. See `docs/manual-auth.md` for registration and the documented `TokenDetails.account` limitation. A Chrome extension client in the manifest is optional for Chrome-managed renewal. Web-flow credentials that Chrome cannot renew require explicit sign-in after expiry. No secret is bundled.
+Gmail uses no OAuth at all. The adapter reads the per-account Atom unread feeds with the browser session cookie, so adding an account needs only the address and a normal Gmail login, never a consent screen, client ID, or token. First sign in starts from Add Gmail or Sign in, never on launch. A lapsed session shows Sign in, which opens the Gmail login tab. No secret is bundled because none exists.
 
 Outlook.com personal uses chrome.identity.launchWebAuthFlow with PKCE against https://login.microsoftonline.com/consumers. Scopes are User.Read plus Mail.Read plus offline_access. Entra registration is Personal Microsoft accounts only. Redirect is https://extension-id.chromiumapp.org as a public client with no secret in the bundle. Refresh tokens stay in chrome.storage.session.
 
 Account model shares one shape: provider, account address, display name, poll toggle, notify toggle. Many mixed accounts allowed. Add, remove, sign in, and sign out per account from the popup. Sign-out writes a persistent explicit marker, invalidates pending operations, and removes only that account's session slot. Silent polling cannot reverse it. Per account errors never block other accounts.
 
-Gmail readonly is Restricted scope. Public listing later needs Google verification plus assessment. Personal use with few users runs under the unverified path with a user cap. Outlook personal needs no admin consent.
+Gmail needs no Google verification or assessment because it requests no OAuth scope. Outlook personal needs no admin consent; its delegated scopes may need Microsoft verification only if publicly listed later.
 
 ## Data flow, polling, and notifications
 
@@ -91,7 +91,7 @@ Workflow is private GitHub repo, still to create, with branches per change and P
 
 Checker Plus for Gmail polls from the browser on a configurable interval with real time best effort and 30 second fallback, background alarms, badge diffing, and toast plus sound or voice. It reads via session based feed or Gmail API, never via Gmail PubSub push to the extension. This design copies the polling shape and leaves compose and label monitoring out for v1.
 
-Gmail API scope gmail.readonly allows full message read including bodies and attachments. Narrower metadata scope was rejected because v1 needs snippets and preview. Outlook Graph uses delegated Mail.Read for personal accounts only. Mail.Read.Shared was rejected because it fits work accounts only.
+Gmail reads unread sender, subject, snippet, and timestamp from the session-cookie Atom feed, about 20 recent items per account; full bodies stay in the provider tab. Outlook Graph uses delegated Mail.Read for personal accounts only. Mail.Read.Shared was rejected because it fits work accounts only.
 
 ## Final-review contract amendments, 2026-09-29
 
