@@ -11,10 +11,37 @@ import {
 
 // NOTE: this file never calls configureMicrosoftAuth before the first
 // test, and node runs each test file in its own process, so the
-// unconfigured assertion below observes genuinely fresh module state.
+// assertion below observes genuinely fresh module state: no override,
+// only the baked-in developer default.
 
-test("one-arg getGraphToken rejects when no client id is configured", async () => {
-  await assert.rejects(() => getGraphToken(true), /clientId not configured/);
+test("one-arg getGraphToken falls back to the baked-in default app id", async () => {
+  const prev = globalThis.chrome;
+  globalThis.chrome = {
+    storage: {
+      session: {
+        data: {
+          "auth.microsoft.graph": {
+            accessToken: "default-app-token",
+            refreshToken: "rt",
+            expiresAt: Date.now() + 3600_000,
+          },
+        },
+        async get(k) {
+          return { [k]: this.data[k] ?? null };
+        },
+      },
+    },
+    identity: {
+      async getRedirectURL() {
+        return "https://example.chromiumapp.org/";
+      },
+    },
+  };
+  try {
+    assert.equal(await getGraphToken(true), "default-app-token");
+  } finally {
+    globalThis.chrome = prev;
+  }
 });
 
 test("configureMicrosoftAuth enables the promised one-arg form", async () => {

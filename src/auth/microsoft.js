@@ -66,7 +66,7 @@ export function sessionKeyFor(account) {
 // client id is a public identifier, never a secret. Replace the
 // placeholder with the real id once the app registration exists;
 // per-account clientId values still override it.
-export const ENTRA_APP_ID = "YOUR_ENTRA_APP_ID";
+export const ENTRA_APP_ID = "9e67dec6-14f7-4e74-999e-ac7c1f1da358";
 
 export function defaultAppId() {
   return /^YOUR_/i.test(ENTRA_APP_ID) ? undefined : ENTRA_APP_ID;
