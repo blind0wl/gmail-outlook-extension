@@ -82,7 +82,11 @@ export function getConfiguredClientId() {
 }
 
 function resolveClientId(override) {
-  const id = override ?? configuredClientId ?? defaultAppId();
+  // First non-blank wins: stored "" values must fall through to the
+  // baked-in default instead of shadowing it ("" is not nullish).
+  const id = [override, configuredClientId, defaultAppId()].find(
+    (v) => typeof v === "string" && v.trim() !== "",
+  );
   if (!id || /^YOUR_/i.test(id)) throw new Error("microsoft auth: clientId not configured");
   return id;
 }

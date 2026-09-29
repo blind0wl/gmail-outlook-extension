@@ -12,12 +12,16 @@
 export const ACCOUNTS_KEY = "accounts";
 
 export function normalizeAccount(raw = {}) {
+  // An empty clientId (the popup's hidden field submits "") must not
+  // survive: "" is not nullish, so it would shadow the baked-in
+  // developer default through every `??` in the auth path.
+  const clientId = String(raw.clientId ?? "").trim();
   return {
     provider: raw.provider,
     account: raw.account ?? raw.address ?? "",
     enabled: raw.enabled !== false,
     notify: raw.notify !== false,
-    ...(raw.clientId !== undefined ? { clientId: raw.clientId } : {}),
+    ...(clientId ? { clientId } : {}),
   };
 }
 

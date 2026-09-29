@@ -44,6 +44,37 @@ test("one-arg getGraphToken falls back to the baked-in default app id", async ()
   }
 });
 
+test("empty-string client id falls through to the baked-in default", async () => {
+  const prev = globalThis.chrome;
+  globalThis.chrome = {
+    storage: {
+      session: {
+        data: {
+          "auth.microsoft.graph": {
+            accessToken: "default-app-token",
+            refreshToken: "rt",
+            expiresAt: Date.now() + 3600_000,
+          },
+        },
+        async get(k) {
+          return { [k]: this.data[k] ?? null };
+        },
+      },
+    },
+    identity: {
+      async getRedirectURL() {
+        return "https://example.chromiumapp.org/";
+      },
+    },
+  };
+  try {
+    assert.equal(await getGraphToken(true, { clientId: "" }), "default-app-token");
+    assert.equal(await getGraphToken(true, { clientId: "   " }), "default-app-token");
+  } finally {
+    globalThis.chrome = prev;
+  }
+});
+
 test("configureMicrosoftAuth enables the promised one-arg form", async () => {
   assert.throws(() => configureMicrosoftAuth({}), /clientId required/);
   configureMicrosoftAuth({ clientId: "test-client-id" });

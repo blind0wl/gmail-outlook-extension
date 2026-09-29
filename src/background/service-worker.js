@@ -654,7 +654,8 @@ export async function handleSignIn(accounts, target, deps = {}) {
         return null;
       }
       return getGraphTokenForAccount(a?.account ?? "", true, {
-        clientId: a.clientId ?? clientId,
+        // ||, not ??: a stored "" must fall through to the default.
+        clientId: a.clientId || clientId,
       });
     });
   try {

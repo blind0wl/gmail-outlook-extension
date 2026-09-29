@@ -38,6 +38,21 @@ test("normalize accepts address alias and explicit toggles", () => {
   assert.equal(out.clientId, "entra-app-id");
 });
 
+test("normalizeAccount drops blank clientId so it cannot shadow the default", () => {
+  assert.equal(
+    normalizeAccount({ provider: "outlook", account: "b@o.c", clientId: "" }).clientId,
+    undefined,
+  );
+  assert.equal(
+    normalizeAccount({ provider: "outlook", account: "b@o.c", clientId: "  " }).clientId,
+    undefined,
+  );
+  assert.equal(
+    normalizeAccount({ provider: "outlook", account: "b@o.c", clientId: " entra-1 " }).clientId,
+    "entra-1",
+  );
+});
+
 test("accountKey and accountAddress expose key plus address only", () => {
   const acct = normalizeAccount({ provider: "gmail", account: "a@g.c" });
   assert.equal(accountKey(acct), "gmail:a@g.c");
