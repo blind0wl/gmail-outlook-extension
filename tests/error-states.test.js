@@ -74,7 +74,11 @@ test("offline note and sign-in label show the address only", () => {
   );
   assert.equal(
     accountStatusLabel({ provider: "gmail", account: "a@g.c" }, { needsSignIn: true }),
-    "a@g.c — needs sign in",
+    "a@g.c — log into Gmail in the opened tab, then press Refresh",
+  );
+  assert.equal(
+    accountStatusLabel({ provider: "outlook", account: "a@o.c" }, { needsSignIn: true }),
+    "a@o.c — needs sign in",
   );
 });
 
@@ -174,17 +178,22 @@ test("real token provider resolves gmail null and graph silently per account", a
   }
 });
 
-test("gmail sign-in opens the login tab without touching other accounts", async () => {
+test("gmail sign-in polls first and opens a tab only on auth failure", async () => {
   const backing = installChromeStub();
   const opened = [];
   globalThis.chrome.tabs = { create: async (opts) => void opened.push(opts.url) };
   try {
     const target = { provider: "gmail", account: "err-signin@g.c" };
     const other = { provider: "outlook", account: "other@o.c" };
-    const r = await handleSignIn([target, other], { provider: "gmail", account: "err-signin@g.c" }, {
-      fetchers: { gmail: async () => { throw new Error("must not poll before login"); } },
+    const healthy = await handleSignIn([target, other], { provider: "gmail", account: "err-signin@g.c" }, {
+      fetchers: { gmail: async () => [item("gmail:errsin", "gmail", "err-signin@g.c")] },
     });
-    assert.equal(r.needsSignIn, true);
+    assert.equal(healthy.items?.length, 1);
+    assert.equal(opened.length, 0, "no tab when the session is live");
+    const failing = await handleSignIn([target, other], { provider: "gmail", account: "err-signin@g.c" }, {
+      fetchers: { gmail: async () => { const e = new Error("unauthorized"); e.status = 401; throw e; } },
+    });
+    assert.equal(failing.needsSignIn, true);
     assert.ok(opened.includes("https://mail.google.com/"), "login tab opened");
     assert.equal(needsSignInFor(target), true);
     assert.equal(needsSignInFor(other), false);

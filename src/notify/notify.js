@@ -78,7 +78,12 @@ export function formatRetryAt(retryAt, now = Date.now()) {
 // Returns null when the account is healthy (no error UI).
 export function accountStatusLabel(acct, state = {}) {
   const address = acct?.account ?? acct?.address ?? "";
-  if (state.needsSignIn) return `${address} — needs sign in`;
+  if (state.needsSignIn) {
+    if (acct?.provider === "gmail") {
+      return `${address} — log into Gmail in the opened tab, then press Refresh`;
+    }
+    return `${address} — needs sign in`;
+  }
   if (state.offline) return `${address} — offline, showing saved mail`;
   if (state.backedOff) {
     const when = state.retryAt ? `retry ${formatRetryAt(state.retryAt)}` : "retry pending";

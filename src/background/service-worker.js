@@ -7,7 +7,7 @@
 // interactive:false). Interactive recovery passes the same account identity
 // through handleSignIn. Tests supply fakes via deps.
 
-import { fetchGmailMessages, GmailFetchError } from "../providers/gmail.js";
+import { fetchGmailMessages } from "../providers/gmail.js";
 import { fetchOutlookMessages } from "../providers/outlook.js";
 import {
   getGraphTokenForAccount,
@@ -638,17 +638,9 @@ export async function handleSignIn(accounts, target, deps = {}) {
     interactiveGet ??
     ((a) => {
       if (a?.provider === "gmail") {
-        // No OAuth for Gmail: open the inbox so the user logs in with
-        // their normal Google session, then the next poll picks it up.
-        try {
-          void globalThis.chrome?.tabs?.create?.({
-            url: "https://mail.google.com/",
-          });
-        } catch {}
-        throw new GmailFetchError("feed-auth", {
-          status: 401,
-          account: a?.account ?? "",
-        });
+        // No credential step for Gmail: the poll below proves the
+        // session. The login tab opens only if the poll fails auth.
+        return null;
       }
       return getGraphTokenForAccount(a?.account ?? "", true, {
         clientId: a.clientId ?? clientId,
@@ -705,6 +697,16 @@ export async function handleSignIn(accounts, target, deps = {}) {
     refreshToken: real.refreshToken,
     ...pollDeps,
   }).catch((error) => ({ key, error: sanitizeError(error, acct) }));
+  if (acct?.provider === "gmail" && result?.needsSignIn) {
+    // handleSignIn runs only on explicit Add/Sign in clicks, so opening
+    // the login tab here never spams: the user asked, the session is
+    // missing, show them where to log in.
+    try {
+      void globalThis.chrome?.tabs?.create?.({
+        url: "https://mail.google.com/",
+      });
+    } catch {}
+  }
   await write(async () => {
     if (generation !== (accountGeneration.get(key) ?? 0)) return;
     if (result.items !== undefined) {

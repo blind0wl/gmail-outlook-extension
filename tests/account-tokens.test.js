@@ -492,8 +492,9 @@ test("gmail feed 401 marks needs sign in end to end", async () => {
   }
 });
 
-// The Sign in handler opens the Gmail login tab instead of an OAuth flow.
-test("gmail sign-in opens the login tab and stays needs sign in", async () => {
+// The Sign in handler polls first: a live session recovers with no tab,
+// a dead session opens the Gmail login tab and stays needs sign in.
+test("gmail sign-in polls first and opens a tab only when auth is missing", async () => {
   const { chrome } = memoryStores();
   const opened = [];
   const prev = installChrome({
@@ -502,12 +503,25 @@ test("gmail sign-in opens the login tab and stays needs sign in", async () => {
   });
   try {
     const acct = { provider: "gmail", account: "r2h@gmail.com" };
-    const r = await handleSignIn([acct], { provider: "gmail", account: "r2h@gmail.com" }, {
+    const healthy = await handleSignIn([acct], { provider: "gmail", account: "r2h@gmail.com" }, {
       fetchers: {
         gmail: async () => [item("gmail:r2hmsg", "gmail", "r2h@gmail.com")],
       },
     });
-    assert.equal(r.needsSignIn, true);
+    assert.equal(healthy.items?.length, 1);
+    assert.equal(healthy.needsSignIn, undefined);
+    assert.equal(opened.length, 0, "no tab when the session is live");
+    assert.equal(needsSignInFor(acct), false);
+    const failing = await handleSignIn([acct], { provider: "gmail", account: "r2h@gmail.com" }, {
+      fetchers: {
+        gmail: async () => {
+          const e = new Error("unauthorized");
+          e.status = 401;
+          throw e;
+        },
+      },
+    });
+    assert.equal(failing.needsSignIn, true);
     assert.ok(opened.includes("https://mail.google.com/"), "login tab opened");
     assert.equal(needsSignInFor(acct), true);
   } finally {
