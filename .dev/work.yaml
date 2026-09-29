@@ -11,12 +11,20 @@ work:
   issue-2:
     kind: bug
     title: "Route sign-in polling through the serialized poll queue"
-    status: queued
+    status: active
     ref: "https://github.com/blind0wl/gmail-outlook-extension/issues/2"
     priority: high
+    phase: verification
+    checkpoint: ".dev/evidence/issue-2.md"
   issue-3:
     kind: bug
     title: "Case-insensitive account resolution in lifecycle controls"
     status: queued
     ref: "https://github.com/blind0wl/gmail-outlook-extension/issues/3"
     priority: high
+  outlook-deeplink:
+    kind: bug
+    title: "Outlook Open uses webLink so OWA selects the message"
+    status: queued
+    ref: "tests/popup-checklist.md"
+    priority: normal
