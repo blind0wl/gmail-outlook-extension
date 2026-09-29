@@ -1,5 +1,5 @@
 version: 1
-focus: issue-2
+focus: issue-3
 work:
   extension-v1:
     kind: feature
@@ -19,9 +19,11 @@ work:
   issue-3:
     kind: bug
     title: "Case-insensitive account resolution in lifecycle controls"
-    status: queued
+    status: active
     ref: "https://github.com/blind0wl/gmail-outlook-extension/issues/3"
     priority: high
+    phase: implementation
+    checkpoint: ".dev/evidence/issue-3.md"
   outlook-deeplink:
     kind: bug
     title: "Outlook Open uses webLink so OWA selects the message"

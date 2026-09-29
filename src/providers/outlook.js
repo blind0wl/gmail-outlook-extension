@@ -99,11 +99,12 @@ async function readJson(url, token, op, extra, deadline) {
 }
 
 export function normalizeGraphMessage(raw, account) {
+  const addr = String(account ?? "").toLowerCase();
   const parsed = raw.receivedDateTime ? Date.parse(raw.receivedDateTime) : NaN;
   return {
-    key: "outlook:" + encodeURIComponent(account) + ":" + raw.id,
+    key: "outlook:" + encodeURIComponent(addr) + ":" + raw.id,
     provider: "outlook",
-    account,
+    account: addr,
     from: raw.from?.emailAddress?.address ?? "",
     subject: raw.subject ?? "",
     snippet: raw.bodyPreview ?? "",
@@ -137,7 +138,7 @@ export async function fetchOutlookMessages(token, since) {
     undefined,
     deadline,
   );
-  const account = me.mail ?? me.userPrincipalName ?? "outlook";
+  const account = String(me.mail ?? me.userPrincipalName ?? "outlook").toLowerCase();
   const out = [];
   let next = listUrl(since);
   let pages = 0;

@@ -18,7 +18,7 @@ export function normalizeAccount(raw = {}) {
   const clientId = String(raw.clientId ?? "").trim();
   return {
     provider: raw.provider,
-    account: raw.account ?? raw.address ?? "",
+    account: String(raw.account ?? raw.address ?? "").trim().toLowerCase(),
     enabled: raw.enabled !== false,
     notify: raw.notify !== false,
     ...(clientId ? { clientId } : {}),
@@ -26,7 +26,7 @@ export function normalizeAccount(raw = {}) {
 }
 
 export function accountKey(acct) {
-  return `${acct.provider}:${acct.account}`;
+  return `${acct.provider}:${String(acct.account ?? acct.address ?? "").toLowerCase()}`;
 }
 
 // Address only, for error and status UI (never subject or body).

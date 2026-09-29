@@ -58,7 +58,7 @@ export function parseFeed(xml, slot) {
   const account = firstGroup(
     /<title>\s*Gmail - Inbox for ([^<]+)<\/title>/i,
     text,
-  );
+  ).toLowerCase();
   if (!account) throw new GmailFetchError("feed parse", { status: 200 });
   const fullcount = Number(firstGroup(/<fullcount>(\d+)<\/fullcount>/i, text)) || 0;
   const entries = [];
@@ -83,10 +83,11 @@ export function parseFeed(xml, slot) {
 }
 
 export function normalizeGmailMessage(raw, account) {
+  const addr = String(account ?? "").toLowerCase();
   return {
-    key: "gmail:" + encodeURIComponent(account) + ":" + raw.id,
+    key: "gmail:" + encodeURIComponent(addr) + ":" + raw.id,
     provider: "gmail",
-    account,
+    account: addr,
     from: raw.from ?? "",
     subject: raw.subject ?? "",
     snippet: raw.snippet ?? "",

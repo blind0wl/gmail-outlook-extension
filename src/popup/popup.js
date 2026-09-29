@@ -321,7 +321,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var seen = {};
     var out = [];
     function push(provider, account) {
-      var key = provider + ":" + (account || "");
+      var key = provider + ":" + String(account || "").toLowerCase();
       if (seen[key]) return;
       seen[key] = true;
       out.push({ provider: provider, account: account || "", key: key });
