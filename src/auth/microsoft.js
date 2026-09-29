@@ -120,7 +120,12 @@ function accountMismatchError(account) {
 // Verified owner of a credential, mirroring the Gmail profile check:
 // login_hint pins the chooser but the user can still pick another account,
 // so the address is confirmed before anything is stored under it.
-export async function getGraphAccountAddress(token) {
+// Every address Graph attributes to this token's mailbox: primary mail
+// plus userPrincipalName. Personal accounts routinely differ here (an
+// outlook.com alias over a hotmail.com account and vice versa), so
+// ownership accepts any of them — a wholly unrelated address still
+// rejects.
+export async function getGraphAccountIdentities(token) {
   let res;
   try {
     res = await fetch(GRAPH_ME_URL, {
@@ -142,9 +147,26 @@ export async function getGraphAccountAddress(token) {
   } catch {
     throw asTransient(new Error("microsoft profile parse failed"));
   }
-  const address = data?.mail ?? data?.userPrincipalName;
-  if (!address) throw new Error("microsoft profile missing address");
-  return address;
+  const out = [];
+  for (const candidate of [data?.mail, data?.userPrincipalName]) {
+    if (typeof candidate !== "string" || !candidate) continue;
+    if (!out.some((a) => a.toLowerCase() === candidate.toLowerCase())) {
+      out.push(candidate);
+    }
+  }
+  if (!out.length) throw new Error("microsoft profile missing address");
+  return out;
+}
+
+export async function getGraphAccountAddress(token) {
+  return (await getGraphAccountIdentities(token))[0];
+}
+
+function ownsAddress(identities, account) {
+  const want = String(account ?? "").toLowerCase();
+  return (identities ?? []).some(
+    (a) => String(a ?? "").toLowerCase() === want,
+  );
 }
 
 // Persists a token record only if no sign-out has intervened since the flow
@@ -383,9 +405,11 @@ export async function signInMicrosoft(
   if (account !== undefined) record.account = account;
   if (account) {
     // Ownership check before storing: login_hint is a hint, not a proof —
-    // the user may have completed the flow as another address.
-    const owner = await getGraphAccountAddress(record.accessToken);
-    if (owner.toLowerCase() !== String(account).toLowerCase()) {
+    // the user may have completed the flow as another address. Any of
+    // the mailbox's Graph identities satisfies it (aliases share one
+    // mailbox); anything else rejects.
+    const identities = await getGraphAccountIdentities(record.accessToken);
+    if (!ownsAddress(identities, account)) {
       throw accountMismatchError(account);
     }
   }
@@ -422,8 +446,8 @@ async function tryRefresh(
   if (record.account) {
     // Re-verify on rotation too: the stored credential must still belong
     // to the bound address before it replaces the slot contents.
-    const owner = await getGraphAccountAddress(record.accessToken);
-    if (owner.toLowerCase() !== String(record.account).toLowerCase()) {
+    const identities = await getGraphAccountIdentities(record.accessToken);
+    if (!ownsAddress(identities, record.account)) {
       throw accountMismatchError(record.account);
     }
   }

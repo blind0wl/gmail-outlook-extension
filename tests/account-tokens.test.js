@@ -447,6 +447,52 @@ test("microsoft sign-in rejects a foreign identity", async () => {
   }
 });
 
+// Alias case: the typed address matches userPrincipalName while primary
+// mail differs (same mailbox, e.g. outlook.com alias over hotmail.com).
+// Sign-in must succeed — only wholly unrelated identities reject.
+test("microsoft sign-in accepts a Graph alias identity", async () => {
+  const stores = memoryStores();
+  const prev = installChrome({
+    ...stores.chrome,
+    runtime: {},
+    identity: {
+      getRedirectURL: () => "https://testid.chromiumapp.org/",
+      launchWebAuthFlow: ({ url }, cb) => {
+        const state = new URL(url).searchParams.get("state");
+        cb(`https://testid.chromiumapp.org/?code=c&state=${state}`);
+      },
+    },
+  });
+  const prevFetch = stubFetch(async (url) => {
+    if (String(url).startsWith("https://graph.microsoft.com/v1.0/me")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          mail: "primary@hotmail.com",
+          userPrincipalName: "alias@outlook.com",
+        }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "ms-tok", refresh_token: "ms-rt", expires_in: 3600 }),
+    };
+  });
+  try {
+    const tok = await getGraphTokenForAccount("alias@outlook.com", true, {
+      clientId: "entra-alias-1",
+    });
+    assert.equal(tok, "ms-tok");
+    const stored = stores.session[sessionKeyFor("alias@outlook.com")];
+    assert.equal(stored?.accessToken, "ms-tok");
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
 // Fix round 2.1 (microsoft): distinct credentials through the real worker
 // wiring — no injected token callbacks.
 test("outlook records resolve distinct credentials via the real provider", async () => {
