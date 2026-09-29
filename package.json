@@ -1,0 +1,8 @@
+{
+  "name": "gmail-outlook-extension",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "linkedom": "^0.18.13"
+  }
+}

@@ -15,20 +15,20 @@
 - Manifest V3 only.
 - No custom backend or proxy in v1.
 - Allowed hosts only: gmail.googleapis.com, accounts.google.com, graph.microsoft.com, login.microsoftonline.com.
-- Gmail scope is https://www.googleapis.com/auth/gmail.readonly, Outlook scopes are User.Read plus Mail.Read plus offline_access, no send or write scopes.
+- Gmail uses no OAuth scope at all (session-cookie feed); Outlook scopes are User.Read plus Mail.Read plus offline_access, no send or write scopes.
 - Tokens live in chrome.storage.session, mail cache lives in chrome.storage.local with 200 item cap and 7 day expiry.
-- Logs and errors carry ids and timestamps only, never subject or body.
+- Logs and diagnostic errors may carry ids, timestamps, a fixed operation label `op`, and numeric HTTP `status`; mail content, tokens, request or response bodies, and exception text are forbidden.
 - Outlook covers Outlook.com, Hotmail, and Live personal only, authority https://login.microsoftonline.com/consumers, no M365 work accounts.
 - Mark read is local only display flag in v1, providers stay source of truth.
 - Private GitHub repo, branches per change, PR with load in Chrome checklist.
 
 ## Review focus
 
-- Same message id appears from Gmail and Outlook adapters at once, popup must show two separate cards keyed by provider plus id.
+- Same message id appears from Gmail and Outlook adapters at once, popup must show two separate cards keyed by provider plus account plus message id.
 - Poll returns zero items for an account with stale cache present, badge must not drop to zero until a successful fetch confirms it.
 - Token expires mid poll with 401 on the third account only, other accounts must still update and only the failed account shows needs sign in.
 - Two Gmail accounts share sender and subject at the same minute, All must still label work@gmail.com and personal@gmail.com distinctly.
-- OS do not disturb is on when new mail lands, toast may suppress but badge plus cache must still update and sound must stay silent.
+- OS do not disturb may suppress native toast presentation. Chrome exposes no OS DND signal for offscreen audio; the explicit amendment requires the manual Mute all sounds workaround. Badge and cache still update.
 
 ---
 
@@ -36,7 +36,7 @@
 
 - `manifest.json` owns MV3 identity, alarms, notifications, storage, popup, service worker, offscreen.
 - `src/background/service-worker.js` owns alarms, poll orchestration, badge, notify dispatch.
-- `src/auth/google.js` owns chrome.identity.getAuthToken plus cache clear, exposes `getGmailToken(interactive)`, `clearGmailToken(token)`.
+- `src/auth/google.js` owns Chrome-managed token lookup plus registered Web OAuth account switch and per-account cache clear, exposes `getGmailToken(interactive)`, `clearGmailToken(token)`.
 - `src/auth/microsoft.js` owns launchWebAuthFlow PKCE plus refresh, exposes `getGraphToken(interactive)`, `clearGraphToken()`.
 - `src/providers/gmail.js` owns Gmail list plus get plus normalize, exposes `fetchGmailMessages(token, since)`.
 - `src/providers/outlook.js` owns Graph list plus normalize, exposes `fetchOutlookMessages(token, since)`.
@@ -47,7 +47,7 @@
 - `tests/fixtures/gmail-list.json` plus `tests/fixtures/graph-list.json` own provider samples.
 - `tests/cache.test.js`, `tests/normalize-gmail.test.js`, `tests/normalize-outlook.test.js`, `tests/notify.test.js` own automated checks.
 
-Normalized mail shape every task uses: `{ key, provider, account, from, subject, snippet, date, unread, localRead }` where `key` is `provider + ':' + id`.
+Normalized mail shape every task uses: `{ key, provider, account, from, subject, snippet, date, unread, localRead }` where `key` is `provider + ':' + encodeURIComponent(account) + ':' + id`.
 
 ---
 
@@ -106,11 +106,11 @@ import assert from "node:assert";
 import { mergeMessages, setLocalRead, pruneCache } from "../src/store/cache.js";
 test("local read survives merge and expiry prunes old", () => {
   const now = Date.now();
-  mergeMessages([{ key: "gmail:1", provider: "gmail", account: "work@gmail.com", from: "a", subject: "s", snippet: "p", date: now, unread: true }]);
-  setLocalRead("gmail:1");
-  mergeMessages([{ key: "gmail:1", provider: "gmail", account: "work@gmail.com", from: "a", subject: "s", snippet: "p", date: now, unread: true }]);
+  mergeMessages([{ key: "gmail:work%40gmail.com:1", provider: "gmail", account: "work@gmail.com", from: "a", subject: "s", snippet: "p", date: now, unread: true }]);
+  setLocalRead("gmail:work%40gmail.com:1");
+  mergeMessages([{ key: "gmail:work%40gmail.com:1", provider: "gmail", account: "work@gmail.com", from: "a", subject: "s", snippet: "p", date: now, unread: true }]);
   const kept = pruneCache(now + 8 * 24 * 3600 * 1000);
-  assert.equal(kept.find(i => i.key === "gmail:1"), undefined);
+  assert.equal(kept.find(i => i.key === "gmail:work%40gmail.com:1"), undefined);
 });
 ```
 
@@ -121,7 +121,7 @@ Expected: FAIL with module or function not defined.
 
 - [ ] **Step 3: Implement `mergeMessages`, `setLocalRead`, `getInbox`, `pruneCache` in `src/store/cache.js`**
 
-Merge by `key`, never clear `localRead` on merge, enforce 200 item cap newest first, expire older than 7 days. Add test for zero item poll keeping stale cache.
+Merge by `key`, never clear `localRead` on merge, enforce 200 item cap newest first, expire older than 7 days. Test failed or partial polls preserving stale cache and successful complete empty snapshots removing it.
 Expected: cache helpers match normalized shape exactly.
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -156,7 +156,7 @@ import { normalizeGmailMessage } from "../src/providers/gmail.js";
 import raw from "../tests/fixtures/gmail-list.json" with { type: "json" };
 test("gmail normalize keeps account and key", () => {
   const out = normalizeGmailMessage(raw.messages[0], "work@gmail.com");
-  assert.equal(out.key, "gmail:" + raw.messages[0].id);
+  assert.equal(out.key, "gmail:work%40gmail.com:" + raw.messages[0].id);
   assert.equal(out.account, "work@gmail.com");
 });
 ```
@@ -204,7 +204,7 @@ import raw from "../tests/fixtures/graph-list.json" with { type: "json" };
 test("graph normalize keeps provider key", () => {
   const out = normalizeGraphMessage(raw.value[0], "you@outlook.com");
   assert.equal(out.provider, "outlook");
-  assert.equal(out.key, "outlook:" + raw.value[0].id);
+  assert.equal(out.key, "outlook:you%40outlook.com:" + raw.value[0].id);
 });
 ```
 
@@ -260,7 +260,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement alarms plus per account poll plus badge plus toast in worker and `src/notify/notify.js`**
 
-Alarm default 1 minute, per account toggle, manual message refresh, 401 refresh once then needs sign in flag, 429 backoff, zero item poll keeps stale cache, toast grouped per account, no toast on manual refresh.
+Alarm default 1 minute, per account toggle, manual message refresh, 401 refresh once then needs sign in flag, 429 backoff, failed or partial poll keeps stale cache; a complete successful empty snapshot removes that account's cached messages, toast grouped per account, no toast on manual refresh.
 Expected: failed third account does not block first two.
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -315,7 +315,7 @@ git commit -m "feat: wire gmail and outlook auth flows"
 
 **Interfaces:**
 - Consumes: `getInbox()` from Task 2
-- Produces: popup render with pills, cards, open provider links
+- Produces: popup render with pills, cards, expansion preview, lifecycle controls, and provider links
 
 - [ ] **Step 1: Write render checklist test**
 
@@ -324,7 +324,7 @@ Expected: file lists exact strings to eyeball in Chrome.
 
 - [ ] **Step 2: Implement A v5 layout from spec**
 
-Header Inbox plus count with search icon, pills All Gmail Outlook, cards with badge plus address top left and time top right, avatar plus subject plus snippet, click sets local read, action opens provider thread.
+Header Inbox plus count with search icon, pills All Gmail Outlook, cards with badge plus address top left and time top right, avatar plus subject plus snippet, click expands cached subject and snippet and sends mark-read to the worker, action opens provider thread.
 Expected: work@gmail.com and personal@gmail.com read as separate lines in All.
 
 - [ ] **Step 3: Manual verify with mixed accounts**
@@ -371,7 +371,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Implement offscreen chime plus settings**
 
-Offscreen document plays short chime, master mute plus per account toggle plus volume persisted in storage, silent on manual refresh and OS do not disturb where reported.
+Offscreen document plays short chime, master mute plus per account toggle plus volume persisted in storage, silent on manual refresh and manual mute during OS do not disturb, since Chrome does not report OS DND state.
 Expected: new poll with sound on plays once, muted stays silent.
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -417,3 +417,22 @@ Expected: PASS. Manual load ticks badge, toast, sound, mute, stale, sign in reco
 git add src/popup src/background tests docs/pr-checklist.md
 git commit -m "feat: add error states and PR gate"
 ```
+
+## Final-review fix-wave amendments, 2026-09-29
+
+These amendments supersede the earlier task examples where they differ.
+
+1. The popup provides Add Gmail, Add Outlook, Sign in, Sign out, Remove, and Refresh through worker messages. Outlook prompts for its public client ID. Gmail prompts for the registered Web client ID. No ordinary account operation uses DevTools.
+2. Both auth providers capture per-account generations before the first await. A shared session queue orders writes and removals. Persistent signed-out markers block silent reacquisition until explicit sign-in; per-account clear never enumerates or removes unrelated slots.
+3. Chrome documents `TokenDetails.account`, but it requires a stable account ID, not an email; `getAccounts` remains Dev-channel-only. Keep the verified-address custom flow for stable Chrome secondary accounts. Replace the unsupported custom code exchange with Web OAuth implicit response to the registered chromiumapp.org redirect. No oauth2.googleapis.com access and no host widening. Web credentials may need explicit renewal after expiry. Registration details and source links are in `docs/manual-auth.md`.
+4. The worker is the only mail-cache writer. Mark-read and each completed account's poll commit share a serialized writer, along with account-state persistence. Poll cycles serialize to prevent duplicate notification decisions.
+5. Query the last seven days of inbox mail, read and unread, with four pages of 25 maximum per account. Each HTTP request has a 15-second deadline and each mailbox scan a 45-second deadline. Gmail is bounded to 105 requests; Outlook to five without redirects, with at most five validated same-origin redirect hops per request. Commit each account as it completes.
+6. Persist retryAt and failure count for auth-stage and mailbox-stage 429/5xx. Restore them on wake before any poll.
+7. First successful population establishes a quiet baseline. Respect account notify, server unread, localRead, manual refresh, and focused-provider suppression for toast and chime. Persist up to 200 seen keys per account so cache eviction cannot recreate new-mail alerts.
+8. Add the tabs permission explicitly to read the active tab URL in the focused window. The popup suppression option defaults on. No tab URLs or history are persisted. Chrome has no OS DND signal; Mute all sounds is the documented workaround. Native notifications are silent and the offscreen chime follows mute settings.
+9. Reconcile absent records only after a fully successful complete query. Capped partial results and failures cannot remove absent records. Cache cap and expiry still apply.
+10. Use provider, encoded account, and message ID in keys. Hydrate legacy keys without losing localRead; links extract the message ID and notifications deduplicate by the same identity.
+11. Card selection shows the full cached subject and snippet and preserves keyboard focus. No bodies or additional scopes.
+12. Update the popup checklist for lifecycle and error-state controls. Add regression assertions for localRead survival, the 200-item cap, newest-first ordering, and the exact expiry boundary.
+
+Verification remains `node --test tests/` plus a real Chrome/account acceptance pass. DOM tests do not claim that live OAuth, OS notification delivery, audio, or provider deep links have been verified.

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="inbox-header">
+    <h1>Inbox <span id="unread-count" aria-live="polite"></span></h1>
+  </header>
+  <nav class="pills" aria-label="Provider filter">
+    <button type="button" data-filter="all" aria-pressed="true">All</button>
+    <button type="button" data-filter="gmail" aria-pressed="false">Gmail</button>
+    <button type="button" data-filter="outlook" aria-pressed="false">Outlook</button>
+  </nav>
+  <section aria-label="Accounts">
+    <p>Connect an account to read recent inbox mail and receive alerts. Mail stays in this browser.</p>
+    <button id="add-gmail" type="button">Add Gmail</button>
+    <button id="add-outlook" type="button">Add Outlook</button>
+    <button id="refresh-mail" type="button">Refresh</button>
+    <form id="add-account-form" hidden>
+      <h2 id="add-account-title">Add account</h2>
+      <label>Your email address
+        <input id="add-account-email" type="email" required autocomplete="email" placeholder="you@example.com">
+      </label>
+      <label id="add-account-client-row"><span id="add-account-client-label">Client ID</span>
+        <input id="add-account-client" spellcheck="false" autocomplete="off" placeholder="Paste the client ID here">
+      </label>
+      <p id="add-account-note" class="form-note" hidden></p>
+      <details id="add-account-help">
+        <summary>How does this work?</summary>
+        <div id="add-account-help-gmail" hidden>
+          <p>Gmail needs no setup and no IDs. Just log into Gmail in any browser tab and the account appears here automatically. The extension reads the same unread view you see, and nothing leaves this browser.</p>
+          <p><a href="https://mail.google.com/" target="_blank" rel="noreferrer">Open Gmail to log in</a></p>
+        </div>
+        <div id="add-account-help-outlook" hidden>
+          <p>Outlook signs in with your normal Microsoft account. Press Add account and accept the consent screen. There is nothing to register and no ID to paste.</p>
+        </div>
+      </details>
+      <p id="add-account-error" role="alert" hidden></p>
+      <button type="submit" id="add-account-submit">Add account</button>
+      <button type="button" id="add-account-cancel">Cancel</button>
+    </form>
+    <label><input id="skip-focused" type="checkbox"> Pause alerts while a provider tab is focused</label>
+    <p id="lifecycle-message" role="status"></p>
+    <ul id="account-controls"></ul>
+  </section>
+  <main>
+    <ul id="inbox-list"></ul>
+    <p id="inbox-empty" hidden>No mail cached yet.</p>
+  </main>
+  <section id="account-status" aria-label="Account status" hidden>
+    <h2>Status</h2>
+    <ul id="account-status-list"></ul>
+  </section>
+  <section id="sound-settings" aria-label="Sound settings">
+    <h2>Sound</h2>
+    <label><input type="checkbox" id="sound-muted"> Mute all sounds</label>
+    <label>Volume <input type="range" id="sound-volume" min="0" max="100" step="1" value="50"> <span id="sound-volume-value"></span></label>
+    <ul id="sound-accounts"></ul>
+  </section>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

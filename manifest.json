@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail plus Outlook",
+  "version": "0.1.0",
+  "description": "One popup for Gmail and Outlook.com mail, local only.",
+  "permissions": [
+    "identity",
+    "alarms",
+    "notifications",
+    "storage",
+    "offscreen",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://graph.microsoft.com/*",
+    "https://login.microsoftonline.com/*"
+  ],
+  "action": {
+    "default_popup": "src/popup/popup.html"
+  },
+  "icons": {
+    "16": "src/notify/icon.png",
+    "48": "src/notify/icon.png",
+    "128": "src/notify/icon.png"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  }
+}
