@@ -11,7 +11,7 @@ work:
   issue-2:
     kind: bug
     title: "Route sign-in polling through the serialized poll queue"
-    status: active
+    status: done
     ref: "https://github.com/blind0wl/gmail-outlook-extension/issues/2"
     priority: high
     phase: verification

@@ -1,18 +1,19 @@
 ---
 version: 1
 work: issue-2
-code: "5cea4cf plus dirty: src/background/service-worker.js, tests/signin-serialization.test.js, .dev/work.yaml"
+code: "df6b209 plus dirty: .dev/evidence/issue-2-acceptance.md, .dev/evidence/issue-2-tasks.md"
 requirements: "https://github.com/blind0wl/gmail-outlook-extension/issues/2, .dev/verification.yaml v1"
-recorded_at: "2026-09-29T12:55:00Z"
+recorded_at: "2026-09-29T13:25:04Z"
 gates:
   automated-tests:
     status: passed
     command: ["node", "--test", "tests/"]
     exit_code: 0
-    summary: "145/145 passed from project root (144 existing + new tests/signin-serialization.test.js). Regression test verified to fail on pre-fix code and pass with the fix."
+    summary: "145/145 passed from project root on df6b209, fresh in-session 2026-09-29 (includes tests/signin-serialization.test.js; verified fail pre-fix and pass post-fix)."
   human-gate:
-    status: not-run
-    summary: "Owner Chrome pass per docs/pr-checklist.md (sign-in recovery, badge/toast) still required before done."
+    status: passed
+    report: ".dev/evidence/issue-2-acceptance.md"
+    summary: "Owner merged PR #4 (df6b209) and ticked docs/pr-checklist.md in 2fb487b, all except the Outlook exact-message best-effort box tracked as outlook-deeplink. Acceptance report records the pass with that qualification."
 ---
 
 # Checkpoint — issue-2 (sign-in poll serialization)
@@ -58,23 +59,22 @@ kept in this checkpoint instead.
 
 - `node --test tests/signin-serialization.test.js`: fails pre-fix, passes
   post-fix (stash round-trip verified 2026-09-29).
-- Full suite fresh in-session: 145/145 pass.
+- Full suite fresh in-session on the merged candidate `df6b209`: 145/145 pass.
 - Human gate environment (owner-reported 2026-09-29): Helium browser
   (Chromium). Reloading the unpacked extension generated a new extension
   ID (manifest has no pinned `key`), so the Microsoft redirect_uri was
   rejected until the owner re-registered the new URI on the Entra SPA
   blade. Gmail unaffected (session-cookie transport). Pre-existing
   environmental behavior, unrelated to this fix.
-- Human gate outstanding (see gates). Race itself is not manually
-  reproducible in reasonable time; the gate covers sign-in recovery and
-  badge/toast regression in Chrome.
+- Human gate passed (see gates and `.dev/evidence/issue-2-acceptance.md`).
+  The race itself is not manually reproducible in reasonable time; the gate
+  covered sign-in recovery and badge/toast regression in Chrome, with the
+  Outlook exact-message best-effort item left open as `outlook-deeplink`.
 
 ## Recovery / next
 
-- Safe next action: owner runs the human gate; on pass, independent review
-  per bug-workflow closeout, then writer sets done and merges via PR.
-- Work is dirty on `main`; move to `fix/issue-2-signin-serialization`
-  before committing (repo convention: branches per change).
+- Merged as PR #4 (`df6b209`); local and remote `fix/issue-2-signin-serialization` branches removed.
+- Safe next action: writer sets status done and commits the state update. No independent-audit gate is required by `.dev/verification.yaml` v1.
 
 ## Discovered work
 
