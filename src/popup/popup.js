@@ -5,7 +5,7 @@
 // Per-account error rows (stale, offline, needs sign in) read the worker's
 // "accountState" flags and recover via a "sign-in" runtime message.
 
-import { threadUrl, searchUrl, isCardSelfKeydown } from "./links.js";
+import { threadUrl, isCardSelfKeydown } from "./links.js";
 import { accountStatusLabel } from "../notify/notify.js";
 import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
 
@@ -111,19 +111,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var sorted = items.slice().sort(function (a, b) { return b.date - a.date; });
     if (filter === "all") return sorted;
     return sorted.filter(function (item) { return item.provider === filter; });
-  }
-
-  // Newest cached address for a provider, or "" for the links.js
-  // fallback (default mailbox / slot 0). Scopes the search view to the
-  // account you are actually looking at under the active filter.
-  function newestAccountFor(provider) {
-    var best = null;
-    for (var i = 0; i < items.length; i++) {
-      if (items[i].provider === provider && items[i].account) {
-        if (!best || items[i].date > best.date) best = items[i];
-      }
-    }
-    return best ? best.account : "";
   }
 
   function renderHeader() {
@@ -443,8 +430,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   function init() {
     var focusedToggle = document.getElementById("skip-focused");
+    // Suppression is opt-in: unset means alerts always fire, even with
+    // a provider tab focused.
     storageLocal()?.get("skipFocusedProvider").then(function (value) {
-      focusedToggle.checked = value?.skipFocusedProvider !== false;
+      focusedToggle.checked = value?.skipFocusedProvider === true;
     });
     focusedToggle.addEventListener("change", function () {
       void storageLocal()?.set({skipFocusedProvider: focusedToggle.checked});
@@ -520,10 +509,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         render();
       });
     }
-    document.getElementById("provider-search").addEventListener("click", function () {
-      var provider = filter === "outlook" ? "outlook" : "gmail";
-      openUrl(searchUrl(filter, newestAccountFor(provider)));
-    });
     var master = document.getElementById("sound-muted");
     if (master) {
       master.addEventListener("change", function () {

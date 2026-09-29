@@ -26,20 +26,6 @@ body {
   color: #111111;
 }
 
-#provider-search {
-  background: #ffffff;
-  border: 1px solid #5f6368;
-  border-radius: 50%;
-  color: #111111;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
-
 .pills {
   display: flex;
   gap: 8px;

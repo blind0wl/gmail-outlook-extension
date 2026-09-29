@@ -6,16 +6,6 @@
 // fix-round-2 report for sources), so every format below is also covered
 // by a manual tick in tests/popup-checklist.md.
 
-// Gmail search needs a non-empty query (a bare #search errors as an
-// invalid search query), so the button lands on an in:inbox search with
-// the box focused and editable. Pinned to the account like thread links.
-export function gmailSearchUrl(account) {
-  const base = account
-    ? `${GMAIL_THREAD_BASE}?authuser=${encodeURIComponent(account)}`
-    : GMAIL_THREAD_BASE;
-  return `${base}#search/in%3Ainbox`;
-}
-
 const GMAIL_THREAD_BASE = "https://mail.google.com/mail/";
 const OUTLOOK_MAIL_BASE = "https://outlook.live.com/mail/";
 
@@ -52,22 +42,6 @@ export function threadUrl(item) {
   const id = messageIdOf(item.key);
   if (item.provider === "outlook") return outlookThreadUrl(item.account, id);
   return gmailThreadUrl(item.account, id);
-}
-
-// Outlook search view, addressed to the given account's mailbox the same
-// way thread links are (Outlook web /mail/<slot>/search path). Missing
-// account falls back to slot 0.
-export function outlookSearchUrl(account) {
-  const slot = account ? encodeURIComponent(account) : "0";
-  return `${OUTLOOK_MAIL_BASE}${slot}/search`;
-}
-
-// Search destination follows the active filter: account-aware Gmail
-// search for All and Gmail, the account-aware Outlook search view for
-// the Outlook filter.
-export function searchUrl(filter, account) {
-  if (filter === "outlook") return outlookSearchUrl(account);
-  return gmailSearchUrl(account);
 }
 
 // True when a card-level keydown should mark read: Enter/Space targeted at

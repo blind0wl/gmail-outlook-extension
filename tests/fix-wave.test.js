@@ -250,8 +250,9 @@ test("lifecycle messages add, sign out, refresh without revival and remove one a
   );
   assert.equal(local.data.accounts.length, 0);
 });
-test("focused provider suppresses toast and sound but commits cache and badge", async () => {
-  setup();
+test("focused provider suppresses toast and sound when enabled, but commits cache and badge", async () => {
+  const local = setup();
+  local.data.skipFocusedProvider = true;
   let toast = 0,
     sound = 0,
     badge = 0;
@@ -299,7 +300,8 @@ test("fast account commits before a slow account finishes", async () => {
   await pending;
 });
 test("focused-tab production lookup suppresses only an active window on the matching provider", async () => {
-  setup();
+  const local = setup();
+  local.data.skipFocusedProvider = true;
   await worker.pollAll([acct], deps([]));
   let toasts = 0;
   globalThis.chrome.windows = {
@@ -377,9 +379,8 @@ test("cache cap cannot make previously seen account mail notify on every poll", 
   await worker.pollAll([accounts[2]], d);
   assert.equal(toasts, 0);
 });
-test("focused-provider suppression can be disabled in settings", async () => {
-  const local = setup();
-  local.data.skipFocusedProvider = false;
+test("focused-provider suppression is opt-in: default alerts even when focused", async () => {
+  setup();
   let toasts = 0;
   await worker.pollAll([acct], deps([]));
   await worker.pollAll(
@@ -463,7 +464,8 @@ test("request signals enforce timeouts and both adapters scope to recent mail", 
 });
 
 test("focus suppression uses focus at notification time, after the network finishes", async () => {
-  setup();
+  const local = setup();
+  local.data.skipFocusedProvider = true;
   await worker.pollAll([acct], deps([]));
   let focused = null;
   let toasts = 0;

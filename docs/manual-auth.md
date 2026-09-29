@@ -38,7 +38,7 @@ The separate `tabs` permission amendment allows the worker to inspect the active
 
 ## Focus and OS DND
 
-Pause alerts while a provider tab is focused defaults on. It suppresses toast and chime for that provider while its tab is active in the focused Chrome window. Turning the option off permits alerts; cache and badge update either way.
+Pause alerts while a provider tab is focused defaults off: toasts and chimes fire even while looking at the mailbox. Ticking the option suppresses toast and chime for that provider while its tab is active in the focused Chrome window; cache and badge update either way.
 
 Chrome's [notifications API](https://developer.chrome.com/docs/extensions/reference/api/notifications) exposes `granted` or `denied` permission, not OS DND. Native toast visibility follows OS policy. The extension cannot infer DND for offscreen audio, so enable Mute all sounds when using OS DND. Toasts themselves are silent, and the offscreen chime follows master and per-account mute. Automatic OS DND sound suppression is explicitly withdrawn from the original requirement.
 

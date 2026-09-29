@@ -421,10 +421,13 @@ async function runPoll(accounts, deps) {
         const settings = await globalThis.chrome?.storage?.local?.get(
           "skipFocusedProvider",
         );
+        // Focused-provider suppression is opt-in: only an explicit true
+        // silences alerts for the focused provider. Default alerts even
+        // while looking at the mailbox.
         const focused =
-          settings?.skipFocusedProvider === false
-            ? null
-            : await (deps.focusedProvider ?? focusedProvider)();
+          settings?.skipFocusedProvider === true
+            ? await (deps.focusedProvider ?? focusedProvider)()
+            : null;
         if (
           !signedOutByKey.has(key) &&
           generation === (accountGeneration.get(key) ?? 0) &&

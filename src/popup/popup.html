@@ -7,12 +7,6 @@
 <body>
   <header class="inbox-header">
     <h1>Inbox <span id="unread-count" aria-live="polite"></span></h1>
-    <button id="provider-search" type="button" aria-label="Search mail in provider" title="Search mail in provider">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <circle cx="11" cy="11" r="7"></circle>
-        <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
-      </svg>
-    </button>
   </header>
   <nav class="pills" aria-label="Provider filter">
     <button type="button" data-filter="all" aria-pressed="true">All</button>
@@ -47,7 +41,7 @@
       <button type="submit" id="add-account-submit">Add account</button>
       <button type="button" id="add-account-cancel">Cancel</button>
     </form>
-    <label><input id="skip-focused" type="checkbox" checked> Pause alerts while a provider tab is focused</label>
+    <label><input id="skip-focused" type="checkbox"> Pause alerts while a provider tab is focused</label>
     <p id="lifecycle-message" role="status"></p>
     <ul id="account-controls"></ul>
   </section>

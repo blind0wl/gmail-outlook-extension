@@ -4,9 +4,6 @@ import {
   gmailThreadUrl,
   outlookThreadUrl,
   threadUrl,
-  searchUrl,
-  outlookSearchUrl,
-  gmailSearchUrl,
   isCardSelfKeydown,
   messageIdOf,
 } from "../src/popup/links.js";
@@ -48,32 +45,11 @@ test("every built link carries the account address", () => {
     threadUrl({ key: "gmail:abc", provider: "gmail", account: "work@gmail.com" }),
     threadUrl({ key: "gmail:abc", provider: "gmail", account: "personal@gmail.com" }),
     threadUrl({ key: "outlook:A1", provider: "outlook", account: "you@outlook.com" }),
-    outlookSearchUrl("you@outlook.com"),
-    searchUrl("outlook", "you@outlook.com"),
-    searchUrl("gmail", "work@gmail.com"),
   ];
   assert.equal(
     cases.filter((url) => /work%40gmail\.com|personal%40gmail\.com|you%40outlook\.com/.test(url)).length,
     cases.length,
   );
-});
-
-test("search follows the active filter with account-aware views", () => {
-  assert.equal(
-    gmailSearchUrl("work@gmail.com"),
-    "https://mail.google.com/mail/?authuser=work%40gmail.com#search/in%3Ainbox",
-  );
-  assert.equal(
-    gmailSearchUrl(""),
-    "https://mail.google.com/mail/#search/in%3Ainbox",
-  );
-  assert.equal(searchUrl("all", "work@gmail.com"), gmailSearchUrl("work@gmail.com"));
-  assert.equal(searchUrl("gmail", "work@gmail.com"), gmailSearchUrl("work@gmail.com"));
-  assert.equal(
-    searchUrl("outlook", "you@outlook.com"),
-    "https://outlook.live.com/mail/you%40outlook.com/search",
-  );
-  assert.equal(searchUrl("outlook", ""), "https://outlook.live.com/mail/0/search");
 });
 
 test("messageIdOf strips the provider prefix", () => {

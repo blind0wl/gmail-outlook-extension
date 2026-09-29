@@ -6,12 +6,7 @@ Manual Chrome verification was NOT performed in the headless environment;
 tick each box by hand in a real browser.
 
 - [ ] Header reads `Inbox` followed by an unread count, e.g. `Inbox (3)`.
-- [ ] A search icon button labelled `Search mail in provider` sits right of the header.
-- [ ] Clicking the search icon opens provider search in a new tab
-      (All/Gmail filter: `https://mail.google.com/mail/#search`;
-      Outlook filter: `https://outlook.live.com/mail/<account>/search`
-      for the newest cached Outlook address, slot 0 when none cached).
-      No inline search box exists in the popup.
+      No search control exists: provider search lives in the provider tabs.
 - [ ] Three high-contrast pills read exactly `All`, `Gmail`, `Outlook`.
 - [ ] Selected pill is dark background with white text; unselected pills are
       white background with dark text and a visible border at 13px or larger.
@@ -56,8 +51,8 @@ tick each box by hand in a real browser.
 - [ ] Selection expands the full cached subject and snippet without HTML execution;
       Enter/Space and storage updates preserve keyboard focus.
 - [ ] Mark-read updates the badge immediately and survives a later automatic poll.
-- [ ] Focused-provider suppression defaults on; toggling it off permits alerts.
-      An unfocused Chrome window does not suppress alerts.
+- [ ] Alerts fire even with a provider tab focused (suppression is opt-in
+      via the pause checkbox). An unfocused Chrome window never suppresses.
 - [ ] Use Mute all sounds during OS DND; automatic OS DND detection is unavailable.
 - [ ] No console errors while rendering, filtering, marking read, or opening threads.
 - [ ] DevTools Network shows zero requests from the popup itself
