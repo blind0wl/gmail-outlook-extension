@@ -48,7 +48,7 @@ tick each box by hand in a real browser.
 - [ ] No compose, reply, archive, or message-delete controls exist. Remove only removes the account from the extension.
 - [ ] Add Gmail and Add Outlook open a readable in-popup form (no oversized native dialogs)
       asking for the address only, with per-provider help and no IDs to paste,
-      a visible redirect URI to register, and working Cancel. Sign in, Sign out,
+      and working Cancel. Sign in, Sign out,
       and Remove appear for each configured account. Refresh fetches mail without
       alerts. No storage edits are needed.
 - [ ] Per-account stale, offline, retry, and needs-sign-in states render. Signing

@@ -43,9 +43,11 @@ Setup for the whole pass (human-only):
       visible, and the other accounts keep updating.
 - [ ] Go offline: rows read `<address> — offline, showing saved mail`
       with cached mail still visible.
-- [ ] Revoke one grant (Google Security page or Microsoft Privacy > Apps):
-      only that row reads `<address> — needs sign in` with a Sign in
-      button; the other accounts keep updating.
+- [ ] Break one session (Gmail: sign that address out of Gmail in a tab,
+      or Google Security > Your devices > Sign out; Outlook: revoke at
+      account.microsoft.com > Privacy > Apps and services): only that row
+      reads needs sign in with a Sign in button; the other accounts keep
+      updating.
 - [ ] Error rows show the account address plus the numeric code only —
       never a subject, snippet, or body.
 - [ ] Click Sign in on the failed row: the account recovers without

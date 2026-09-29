@@ -6,7 +6,15 @@
 // fix-round-2 report for sources), so every format below is also covered
 // by a manual tick in tests/popup-checklist.md.
 
-export const GMAIL_SEARCH_URL = "https://mail.google.com/mail/#search";
+// Gmail search needs a non-empty query (a bare #search errors as an
+// invalid search query), so the button lands on an in:inbox search with
+// the box focused and editable. Pinned to the account like thread links.
+export function gmailSearchUrl(account) {
+  const base = account
+    ? `${GMAIL_THREAD_BASE}?authuser=${encodeURIComponent(account)}`
+    : GMAIL_THREAD_BASE;
+  return `${base}#search/in%3Ainbox`;
+}
 
 const GMAIL_THREAD_BASE = "https://mail.google.com/mail/";
 const OUTLOOK_MAIL_BASE = "https://outlook.live.com/mail/";
@@ -54,11 +62,12 @@ export function outlookSearchUrl(account) {
   return `${OUTLOOK_MAIL_BASE}${slot}/search`;
 }
 
-// Search destination follows the active filter: Gmail search for All and
-// Gmail, the account-aware Outlook search view for the Outlook filter.
+// Search destination follows the active filter: account-aware Gmail
+// search for All and Gmail, the account-aware Outlook search view for
+// the Outlook filter.
 export function searchUrl(filter, account) {
   if (filter === "outlook") return outlookSearchUrl(account);
-  return GMAIL_SEARCH_URL;
+  return gmailSearchUrl(account);
 }
 
 // True when a card-level keydown should mark read: Enter/Space targeted at

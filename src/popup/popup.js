@@ -112,12 +112,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     return sorted.filter(function (item) { return item.provider === filter; });
   }
 
-  // Account for the Outlook-filter search view: newest cached Outlook
-  // address, or "" for the slot-0 fallback in links.js.
-  function newestOutlookAccount() {
+  // Newest cached address for a provider, or "" for the links.js
+  // fallback (default mailbox / slot 0). Scopes the search view to the
+  // account you are actually looking at under the active filter.
+  function newestAccountFor(provider) {
     var best = null;
     for (var i = 0; i < items.length; i++) {
-      if (items[i].provider === "outlook" && items[i].account) {
+      if (items[i].provider === provider && items[i].account) {
         if (!best || items[i].date > best.date) best = items[i];
       }
     }
@@ -503,7 +504,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         addClient.value = "";
         hideAddForm();
       } else {
-        addError.textContent = "Could not add the account. Check both values and try again, or open the client ID help above.";
+        addError.textContent = "Could not add the account. Check the address and try again.";
         addError.hidden = false;
       }
     });
@@ -518,7 +519,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       });
     }
     document.getElementById("provider-search").addEventListener("click", function () {
-      openUrl(searchUrl(filter, newestOutlookAccount()));
+      var provider = filter === "outlook" ? "outlook" : "gmail";
+      openUrl(searchUrl(filter, newestAccountFor(provider)));
     });
     var master = document.getElementById("sound-muted");
     if (master) {

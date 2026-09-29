@@ -6,9 +6,9 @@ import {
   threadUrl,
   searchUrl,
   outlookSearchUrl,
+  gmailSearchUrl,
   isCardSelfKeydown,
   messageIdOf,
-  GMAIL_SEARCH_URL,
 } from "../src/popup/links.js";
 
 test("gmail thread urls pin the mailbox with authuser email", () => {
@@ -50,6 +50,7 @@ test("every built link carries the account address", () => {
     threadUrl({ key: "outlook:A1", provider: "outlook", account: "you@outlook.com" }),
     outlookSearchUrl("you@outlook.com"),
     searchUrl("outlook", "you@outlook.com"),
+    searchUrl("gmail", "work@gmail.com"),
   ];
   assert.equal(
     cases.filter((url) => /work%40gmail\.com|personal%40gmail\.com|you%40outlook\.com/.test(url)).length,
@@ -57,9 +58,17 @@ test("every built link carries the account address", () => {
   );
 });
 
-test("search follows the active filter with account-aware outlook view", () => {
-  assert.equal(searchUrl("all"), GMAIL_SEARCH_URL);
-  assert.equal(searchUrl("gmail"), GMAIL_SEARCH_URL);
+test("search follows the active filter with account-aware views", () => {
+  assert.equal(
+    gmailSearchUrl("work@gmail.com"),
+    "https://mail.google.com/mail/?authuser=work%40gmail.com#search/in%3Ainbox",
+  );
+  assert.equal(
+    gmailSearchUrl(""),
+    "https://mail.google.com/mail/#search/in%3Ainbox",
+  );
+  assert.equal(searchUrl("all", "work@gmail.com"), gmailSearchUrl("work@gmail.com"));
+  assert.equal(searchUrl("gmail", "work@gmail.com"), gmailSearchUrl("work@gmail.com"));
   assert.equal(
     searchUrl("outlook", "you@outlook.com"),
     "https://outlook.live.com/mail/you%40outlook.com/search",
