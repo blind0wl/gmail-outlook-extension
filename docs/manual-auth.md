@@ -10,7 +10,13 @@ Gmail reads the browser session you already have. Log into Gmail in any tab, cli
 
 ### Outlook.com: one developer registration
 
-Create an Entra registration for **Personal Microsoft accounts only**: open [Entra admin center, App registrations](https://entra.microsoft.com/) and start a New registration. Add the exact `https://<extension-id>.chromiumapp.org/` redirect as a Mobile and desktop application public-client redirect. Enable public client flows as required by that registration. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Put the public application client ID into `ENTRA_APP_ID` in `src/auth/microsoft.js` (it is a public identifier, safe to commit). Users then click Add Outlook, enter their address, and accept the consent screen. The extension uses the consumers authority and PKCE.
+Create an Entra registration for **Personal Microsoft accounts only**: open [Entra admin center, App registrations](https://entra.microsoft.com/) and start a New registration. Then, in Authentication:
+
+- Set Supported account types to Personal Microsoft accounts only. If the portal refuses, edit the **Manifest** instead: set `"signInAudience": "PersonalMicrosoftAccount"` **together with** the token version in the same save — `"accessTokenAcceptedVersion": 2` (older manifests) or `"api": { "requestedAccessTokenVersion": 2 }` (Graph-format manifests, where a top-level `accessTokenAcceptedVersion` is rejected as unknown). Saving either property alone fails validation.
+- Register the exact `https://<extension-id>.chromiumapp.org/` redirect under the **Single-page application** platform — not Mobile/desktop, not Web. The token exchange is a `fetch()` from the extension worker (cross-origin), which Microsoft permits only for the SPA type (`AADSTS90023` otherwise), and the URI string may exist under only one platform type, so delete-then-re-add across two saves if it is already registered elsewhere. Allow a few minutes for propagation after every save.
+- Enable public client flows. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Put the public application client ID into `ENTRA_APP_ID` in `src/auth/microsoft.js` (it is a public identifier, safe to commit). Users then click Add Outlook, enter their address, and accept the consent screen. The extension uses the consumers authority and PKCE.
+
+Sign-in failures surface a short code in the popup (e.g. `token-exchange/invalid_client/AADSTS70011`): fixed identifiers from the endpoint, never mail content.
 
 ## Auth contract note (feed transport)
 
@@ -42,7 +48,7 @@ Chrome's [notifications API](https://developer.chrome.com/docs/extensions/refere
 - [ ] Mailbox ownership mismatch rejects without caching a foreign credential.
 - [ ] Per-account sign-out remains effective after worker restart and does not affect another account.
 - [ ] Explicit sign-in resumes that account; removal drops only its extension cache.
-- [ ] Google Web redirect registration and renewal behavior verified with actual accounts.
+- [ ] Gmail needs no registration at all (session-cookie transport); Outlook token lifecycle verified with actual accounts.
 - [ ] Refresh, baseline, focused-tab suppression, master mute, chime, and badge verified in Chrome.
 
 These boxes require live accounts. Automated fixtures and DOM tests do not mark them complete.
