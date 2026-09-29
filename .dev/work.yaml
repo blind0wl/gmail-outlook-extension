@@ -19,7 +19,7 @@ work:
   issue-3:
     kind: bug
     title: "Case-insensitive account resolution in lifecycle controls"
-    status: active
+    status: done
     ref: "https://github.com/blind0wl/gmail-outlook-extension/issues/3"
     priority: high
     phase: implementation

@@ -1,18 +1,19 @@
 ---
 version: 1
 work: issue-3
-code: "cb8669d plus dirty: src/store/accounts.js, src/providers/gmail.js, src/providers/outlook.js, src/popup/popup.js, tests/account-case.test.js, .dev/work.yaml"
+code: "c3627b8 plus dirty: .dev/evidence/issue-3-acceptance.md, .dev/evidence/issue-3-tasks.md"
 requirements: "https://github.com/blind0wl/gmail-outlook-extension/issues/3, .dev/verification.yaml v1"
-recorded_at: "2026-09-29T13:33:19Z"
+recorded_at: "2026-09-29T13:38:44Z"
 gates:
   automated-tests:
     status: passed
     command: ["node", "--test", "tests/"]
     exit_code: 0
-    summary: "152/152 passed from branch fix/issue-3-account-case (145 existing + 7 new tests/account-case.test.js). New tests verified to fail on pre-fix code and pass with the fix."
+    summary: "152/152 passed from project root on c3627b8, fresh in-session 2026-09-29 (includes tests/account-case.test.js; verified fail pre-fix and pass post-fix)."
   human-gate:
-    status: not-run
-    summary: "Owner Chrome pass per docs/pr-checklist.md (sign-in recovery, badge/toast) still required before done."
+    status: passed
+    report: ".dev/evidence/issue-3-acceptance.md"
+    summary: "Owner reports all checks passed except the Outlook card, tracked as outlook-deeplink. PR #5 merged as c3627b8. Acceptance report records the pass with that qualification."
 ---
 
 # Checkpoint — issue-3 (case-insensitive account resolution)
@@ -64,17 +65,15 @@ kept in this checkpoint instead.
 
 - `node --test tests/account-case.test.js`: 7 tests fail pre-fix on the
   lifecycle cases, pass post-fix.
-- Full suite fresh in-session: 152/152 pass.
-- Human gate outstanding (see gates). Case handling itself is covered
-  headless; the gate covers sign-in recovery and badge/toast regression in
-  Chrome.
+- Full suite fresh in-session on the merged candidate `c3627b8`: 152/152 pass.
+- Human gate passed (see gates and `.dev/evidence/issue-3-acceptance.md`).
+  Owner reports all checks pass except the Outlook card, tracked as
+  `outlook-deeplink`.
 
 ## Recovery / next
 
-- Safe next action: push branch, open PR, owner runs the human gate; on
-  pass, refresh evidence to the merged candidate and run closeout.
-- Work is on `fix/issue-3-account-case` (repo convention: branches per
-  change).
+- Merged as PR #5 (`c3627b8`); local `fix/issue-3-account-case` branch removed.
+- Safe next action: writer sets status done and commits the state update. No independent-audit gate is required by `.dev/verification.yaml` v1.
 
 ## Discovered work
 
