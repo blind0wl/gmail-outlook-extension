@@ -132,8 +132,10 @@ async function fetchSlot(slot) {
 // ignored: the session cookie authenticates. since filters by entry date.
 // onlyAccount scopes the result to one configured address; slots still
 // probe in order because slot numbers are unstable across sessions.
-// Probes slots 0..9 in order and stops at the first absent slot. Throws
-// feed-auth when slot 0 has no session (user is logged out of Gmail).
+// Probes slots 0..9 in order and stops at the first absent slot; a slot
+// past 0 that answers auth-failure is skipped, not terminal. Throws
+// feed-auth when slot 0 has no session (user is logged out of Gmail), and
+// when onlyAccount matches no probed slot (that address has no session).
 // The returned array carries complete:true plus totalUnread (the feed's
 // exact unread count, which can exceed the ~20 returned entries).
 export async function fetchGmailMessages(token, since, onlyAccount) {
@@ -141,21 +143,30 @@ export async function fetchGmailMessages(token, since, onlyAccount) {
   since ??= Date.now() - 7 * 86400000;
   const out = [];
   let totalUnread = 0;
+  let matched = !onlyAccount;
   for (let slot = 0; slot < MAX_SLOTS; slot++) {
     let feed;
     try {
       feed = await fetchSlot(slot);
     } catch (err) {
       if (err?.slotAbsent) break;
-      if (slot > 0 && err?.op === "feed-auth") break;
+      // A dead middle slot must not hide live accounts at higher slots.
+      if (slot > 0 && err?.op === "feed-auth") continue;
       throw err;
     }
     if (onlyAccount && feed.account.toLowerCase() !== String(onlyAccount).toLowerCase()) continue;
+    matched = true;
     totalUnread += feed.fullcount;
     for (const entry of feed.entries) {
       if (entry.date && entry.date < since) continue;
       out.push(normalizeGmailMessage(entry, feed.account));
     }
+  }
+  if (!matched) {
+    // The configured address has no session in this browser profile: no
+    // slot carried it, so an empty success would strand the account with
+    // no mail and no next step. Auth failure opens the login tab upstream.
+    throw new GmailFetchError("feed-auth", { status: 401, account: onlyAccount });
   }
   out.sort((a, b) => b.date - a.date);
   return Object.assign(out, { complete: true, totalUnread });

@@ -144,6 +144,54 @@ test("gmail since filters old entries", async () => {
   }
 });
 
+test("gmail onlyAccount with no matching slot throws feed-auth", async () => {
+  const restore = stubFetch(async (url) => {
+    if (url.includes("/u/0/")) return ok(feedXml("work@gmail.com", [WORK]));
+    return { ok: false, status: 404, text: async () => "" };
+  });
+  try {
+    const err = await fetchGmailMessages(null, 0, "missing@gmail.com").catch((e) => e);
+    assert.ok(err instanceof GmailFetchError);
+    assert.ok(err.message.includes("feed-auth"));
+    assert.equal(err.account, "missing@gmail.com");
+  } finally {
+    restore();
+  }
+});
+
+test("gmail dead middle slot does not hide a later live account", async () => {
+  const seen = [];
+  const restore = stubFetch(async (url) => {
+    seen.push(url);
+    if (url.includes("/u/0/")) return ok(feedXml("work@gmail.com", [WORK]));
+    if (url.includes("/u/1/")) return { ok: false, status: 401, text: async () => "" };
+    if (url.includes("/u/2/"))
+      return ok(feedXml("second@gmail.com", [{ ...WORK, id: "ddddeeeeffff" }]));
+    return { ok: false, status: 404, text: async () => "" };
+  });
+  try {
+    const out = await fetchGmailMessages(null, 0, "second@gmail.com");
+    assert.deepEqual(out.map((m) => m.key), ["gmail:second%40gmail.com:ddddeeeeffff"]);
+    assert.ok(seen.some((u) => u.includes("/u/2/")), "probed past the dead slot");
+  } finally {
+    restore();
+  }
+});
+
+test("gmail matched account with no unread returns empty success", async () => {
+  const restore = stubFetch(async (url) => {
+    if (url.includes("/u/0/")) return ok(feedXml("work@gmail.com", []));
+    return { ok: false, status: 404, text: async () => "" };
+  });
+  try {
+    const out = await fetchGmailMessages(null, 0, "work@gmail.com");
+    assert.equal(out.length, 0);
+    assert.equal(out.complete, true);
+  } finally {
+    restore();
+  }
+});
+
 test("parseFeed decodes entities and skips id-less entries", () => {
   const xml = feedXml("work@gmail.com", [
     { ...WORK, subject: "Fish &amp; Chips" },
