@@ -737,6 +737,19 @@ export async function handleSignIn(accounts, target, deps = {}) {
   clearNeedsSignIn(acct);
   clearOffline(acct);
   const real = buildTokenProvider(list);
+  // Serialize the recovery poll against alarm cycles on the shared poll
+  // chain. A sign-in fetch starts only after earlier cycles committed, so
+  // its complete reconcile can never wipe newer alarm mail (issue #2).
+  const run = pollTail.then(() =>
+    signInPoll(list, acct, key, generation, real, pollDeps),
+  );
+  pollTail = run.catch(() => {});
+  return run;
+}
+
+async function signInPoll(list, acct, key, generation, real, pollDeps) {
+  if (generation !== (accountGeneration.get(key) ?? 0))
+    return { key, needsSignIn: true };
   const result = await pollAccount(acct, {
     getToken: real.getToken,
     refreshToken: real.refreshToken,
