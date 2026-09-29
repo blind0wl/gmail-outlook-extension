@@ -103,6 +103,23 @@ function isOfflineNow() {
 // unreliable inside service workers (it can stay true with the cable
 // unplugged), so the adapters mark never-reached-a-server at the source
 // with an -offline op suffix; aborts keep the base op and stay generic.
+// Fixed diagnostic code for a sign-in failure: lets the popup show
+// *which step* failed when there is no HTTP status to display.
+function signInCode(err) {
+  if (err?.transient) return "transient";
+  const message = String(err?.message ?? "");
+  if (/clientId not configured/.test(message)) return "no-client-id";
+  if (/chrome.identity missing|auth unavailable/.test(message))
+    return "no-identity";
+  if (/cancelled or failed|sign in threw/.test(message))
+    return "flow-cancelled";
+  if (/token exchange/.test(message)) return "token-exchange";
+  if (/mismatch/.test(message)) return "account-mismatch";
+  if (/needs sign in|AUTH_REQUIRED|auth needs sign in/.test(message))
+    return "auth-required";
+  return "unknown";
+}
+
 function isOfflineError(err) {
   if (err?.status !== undefined) return false;
   if (isOfflineNow()) return true;
@@ -693,7 +710,15 @@ export async function handleSignIn(accounts, target, deps = {}) {
       return transientResult;
     }
     markNeedsSignIn(acct);
-    const failure = { key, needsSignIn: true, error: sanitizeError(err, acct) };
+    // Short diagnostic code for the popup: the sanitized error keeps
+    // status only, which leaves pre-popup failures (no status) mute.
+    // Codes are fixed identifiers — never addresses, mail, or text.
+    const failure = {
+      key,
+      needsSignIn: true,
+      code: signInCode(err),
+      error: sanitizeError(err, acct),
+    };
     await write(() => storeAccountEntries([acct], new Map([[key, failure]])));
     return failure;
   }
@@ -785,6 +810,7 @@ export async function handleMessage(msg, deps = {}) {
     return {
       ok: !result.error && !result.needsSignIn && !result.offline,
       needsSignIn: !!result.needsSignIn,
+      ...(result.code ? { code: result.code } : {}),
     };
   }
   accountGeneration.set(key, (accountGeneration.get(key) ?? 0) + 1);

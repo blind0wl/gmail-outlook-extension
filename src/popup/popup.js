@@ -70,7 +70,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var status = document.getElementById("lifecycle-message");
     try {
       var result = await chrome.runtime.sendMessage(message);
-      status.textContent = result?.ok ? "" : "Account action failed. Check the account details and try Sign in.";
+      var code = result?.code ? " (" + result.code + ")" : "";
+      status.textContent = result?.ok ? "" : "Account action failed" + code + ". Check the account details and try Sign in.";
       return result;
     } catch {
       status.textContent = "Account action failed. Try again.";
@@ -504,7 +505,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         addClient.value = "";
         hideAddForm();
       } else {
-        addError.textContent = "Could not add the account. Check the address and try again.";
+        var addCode = result?.code ? " (" + result.code + ")" : "";
+        addError.textContent = "Could not add the account" + addCode + ". Check the address and try again.";
         addError.hidden = false;
       }
     });

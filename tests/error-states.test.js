@@ -142,6 +142,31 @@ test("adapter offline op marks offline even when navigator stays online", async 
   }
 });
 
+test("sign-in failures carry a diagnostic code for the popup", async () => {
+  installChromeStub();
+  try {
+    const target = { provider: "outlook", account: "code@o.c" };
+    const cases = [
+      ["microsoft auth: clientId not configured", "no-client-id"],
+      ["microsoft sign in cancelled or failed", "flow-cancelled"],
+      ["account mismatch for code@o.c", "account-mismatch"],
+      ["microsoft auth needs sign in", "auth-required"],
+      ["boom", "unknown"],
+    ];
+    for (const [message, code] of cases) {
+      const r = await handleSignIn([target], { provider: "outlook", account: "code@o.c" }, {
+        interactiveGet: async () => {
+          throw new Error(message);
+        },
+      });
+      assert.equal(r.needsSignIn, true);
+      assert.equal(r.code, code, message);
+    }
+  } finally {
+    uninstallChromeStub();
+  }
+});
+
 test("silent token failure marks needs sign in, never mail content", async () => {
   installChromeStub();
   try {
