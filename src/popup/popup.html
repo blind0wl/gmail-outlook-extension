@@ -24,6 +24,40 @@
     <button id="add-gmail" type="button">Add Gmail</button>
     <button id="add-outlook" type="button">Add Outlook</button>
     <button id="refresh-mail" type="button">Refresh</button>
+    <form id="add-account-form" hidden>
+      <h2 id="add-account-title">Add account</h2>
+      <label>Your email address
+        <input id="add-account-email" type="email" required autocomplete="email" placeholder="you@example.com">
+      </label>
+      <label><span id="add-account-client-label">Client ID</span>
+        <input id="add-account-client" required spellcheck="false" autocomplete="off" placeholder="Paste the client ID here">
+      </label>
+      <details id="add-account-help">
+        <summary>Where do I find the client ID?</summary>
+        <div id="add-account-help-gmail" hidden>
+          <ol>
+            <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud Console, Credentials</a> (create a project first if you have none).</li>
+            <li>Click Create Credentials, then OAuth client ID, then application type Web application.</li>
+            <li>Under Authorized redirect URIs, add the redirect URI shown below, copied exactly.</li>
+            <li>If Google asks for a consent screen, choose External and add your Gmail address under Test users. Request only Gmail read-only access.</li>
+            <li>Copy the Client ID, not the client secret, into the field above.</li>
+          </ol>
+        </div>
+        <div id="add-account-help-outlook" hidden>
+          <ol>
+            <li>Open <a href="https://entra.microsoft.com/" target="_blank" rel="noreferrer">Entra admin center, App registrations</a> and start a New registration.</li>
+            <li>Under Supported account types choose Personal Microsoft accounts only.</li>
+            <li>Add a Mobile and desktop applications redirect URI with the value shown below.</li>
+            <li>Under API permissions add Microsoft Graph delegated User.Read and Mail.Read, plus offline_access. No admin consent is needed for a personal account.</li>
+            <li>Copy the Application (client) ID, not a secret, into the field above.</li>
+          </ol>
+        </div>
+      </details>
+      <p class="form-redirect">Redirect URI to register: <code id="add-account-redirect"></code></p>
+      <p id="add-account-error" role="alert" hidden></p>
+      <button type="submit" id="add-account-submit">Add account</button>
+      <button type="button" id="add-account-cancel">Cancel</button>
+    </form>
     <label><input id="skip-focused" type="checkbox" checked> Pause alerts while a provider tab is focused</label>
     <p id="lifecycle-message" role="status"></p>
     <ul id="account-controls"></ul>

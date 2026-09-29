@@ -447,17 +447,71 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     focusedToggle.addEventListener("change", function () {
       void storageLocal()?.set({skipFocusedProvider: focusedToggle.checked});
     });
+    var addForm = document.getElementById("add-account-form");
+    var addTitle = document.getElementById("add-account-title");
+    var addEmail = document.getElementById("add-account-email");
+    var addClientLabel = document.getElementById("add-account-client-label");
+    var addClient = document.getElementById("add-account-client");
+    var addHelpGmail = document.getElementById("add-account-help-gmail");
+    var addHelpOutlook = document.getElementById("add-account-help-outlook");
+    var addRedirect = document.getElementById("add-account-redirect");
+    var addError = document.getElementById("add-account-error");
+    var addProvider = null;
+    function redirectUri() {
+      try {
+        if (globalThis.chrome && chrome.identity && chrome.identity.getRedirectURL) {
+          return chrome.identity.getRedirectURL();
+        }
+      } catch {}
+      var id = (globalThis.chrome && chrome.runtime && chrome.runtime.id) || "<extension-id>";
+      return "https://" + id + ".chromiumapp.org/";
+    }
+    function showAddForm(provider) {
+      addProvider = provider;
+      var isGmail = provider === "gmail";
+      addTitle.textContent = isGmail ? "Add Gmail account" : "Add Outlook account";
+      addClientLabel.textContent = isGmail
+        ? "Google Web application client ID"
+        : "Microsoft application (client) ID";
+      addHelpGmail.hidden = !isGmail;
+      addHelpOutlook.hidden = isGmail;
+      addRedirect.textContent = redirectUri();
+      addError.hidden = true;
+      addError.textContent = "";
+      addForm.hidden = false;
+      addEmail.focus();
+    }
+    function hideAddForm() {
+      addProvider = null;
+      addForm.hidden = true;
+    }
     ["gmail", "outlook"].forEach(function (provider) {
-      var button = document.getElementById("add-" + provider);
-      button.addEventListener("click", async function () {
-        var account = globalThis.prompt("Email address for " + provider);
-        if (!account) return;
-        var clientId = globalThis.prompt(provider === "outlook"
-          ? "Microsoft application client ID from your personal-account registration"
-          : "Google Web application client ID with this extension redirect registered");
-        if (!clientId) return;
-        await sendAction({type: "add-account", provider, account, clientId}, button);
+      document.getElementById("add-" + provider).addEventListener("click", function () {
+        showAddForm(provider);
       });
+    });
+    document.getElementById("add-account-cancel").addEventListener("click", function () {
+      hideAddForm();
+    });
+    addForm.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      var account = addEmail.value.trim();
+      var clientId = addClient.value.trim();
+      if (!account || !clientId) {
+        addError.textContent = "Enter both your email address and the client ID.";
+        addError.hidden = false;
+        return;
+      }
+      var submit = document.getElementById("add-account-submit");
+      var result = await sendAction({type: "add-account", provider: addProvider, account, clientId}, submit);
+      if (result && result.ok) {
+        addEmail.value = "";
+        addClient.value = "";
+        hideAddForm();
+      } else {
+        addError.textContent = "Could not add the account. Check both values and try again, or open the client ID help above.";
+        addError.hidden = false;
+      }
     });
     document.getElementById("refresh-mail").addEventListener("click", function (event) {
       void sendAction({type: "refresh"}, event.currentTarget);

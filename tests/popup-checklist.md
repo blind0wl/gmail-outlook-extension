@@ -46,9 +46,11 @@ tick each box by hand in a real browser.
       behavior: Enter/Space on the button opens the thread (the card
       handler ignores keydowns bubbled from nested controls).
 - [ ] No compose, reply, archive, or message-delete controls exist. Remove only removes the account from the extension.
-- [ ] Add Gmail and Add Outlook prompt for an address and registration client ID.
-      Sign in, Sign out, and Remove appear for each configured account. Refresh
-      fetches mail without alerts. No storage edits are needed.
+- [ ] Add Gmail and Add Outlook open a readable in-popup form (no oversized native dialogs)
+      asking for address plus registration client ID, with per-provider help steps,
+      a visible redirect URI to register, and working Cancel. Sign in, Sign out,
+      and Remove appear for each configured account. Refresh fetches mail without
+      alerts. No storage edits are needed.
 - [ ] Per-account stale, offline, retry, and needs-sign-in states render. Signing
       out one account leaves other accounts usable and stays signed out after reload.
 - [ ] Selection expands the full cached subject and snippet without HTML execution;

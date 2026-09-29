@@ -6,7 +6,7 @@ Ordinary use requires no DevTools or storage edits. Register the public OAuth cl
 
 ### Gmail
 
-Enable Gmail API in a Google Cloud project. Configure the OAuth consent screen for personal testing and add your accounts as test users. Request only `https://www.googleapis.com/auth/gmail.readonly`.
+Enable Gmail API in a Google Cloud project: open [Google Cloud Console, Credentials](https://console.cloud.google.com/apis/credentials), creating a project first if you have none. Configure the OAuth consent screen for personal testing and add your accounts as test users. Request only `https://www.googleapis.com/auth/gmail.readonly`.
 
 Create an OAuth client of type **Web application** for the account chooser. Register the exact authorized redirect URI `https://<extension-id>.chromiumapp.org/`, including the trailing slash. Find the extension ID on chrome://extensions. Paste this client's public ID when Add Gmail asks for it. Do not paste the client secret. This flow requests `response_type=token`, validates state and redirect, verifies the returned token through the Gmail profile endpoint, and stores it only in session storage. There is no code exchange or refresh grant.
 
@@ -14,7 +14,7 @@ Optionally configure a separate **Chrome extension** client, pinned to the exten
 
 ### Outlook.com
 
-Create an Entra registration for **Personal Microsoft accounts only**. Add the exact `https://<extension-id>.chromiumapp.org/` redirect as a Mobile and desktop application public-client redirect. Enable public client flows as required by that registration. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Paste the public application client ID when Add Outlook asks for it. The extension uses the consumers authority and PKCE.
+Create an Entra registration for **Personal Microsoft accounts only**: open [Entra admin center, App registrations](https://entra.microsoft.com/) and start a New registration. Add the exact `https://<extension-id>.chromiumapp.org/` redirect as a Mobile and desktop application public-client redirect. Enable public client flows as required by that registration. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Paste the public application client ID when Add Outlook asks for it. The extension uses the consumers authority and PKCE.
 
 ## Chrome identity verification and contract note
 
