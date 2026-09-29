@@ -60,8 +60,13 @@ async function readJson(url, token, op, extra, deadline) {
           : AbortSignal.timeout(15_000),
         redirect: "manual",
       });
-    } catch {
-      throw new OutlookFetchError(op, extra);
+    } catch (fetchErr) {
+      // Aborted fetches (our own timeouts) stay transient under the
+      // base op; anything else never reached a server, so the -offline
+      // suffix tells the worker to show saved mail.
+      const offline =
+        fetchErr?.name !== "TimeoutError" && fetchErr?.name !== "AbortError";
+      throw new OutlookFetchError(offline ? `${op}-offline` : op, extra);
     }
     const location =
       res.status >= 300 && res.status < 400

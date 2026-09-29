@@ -96,6 +96,13 @@ export function normalizeGmailMessage(raw, account) {
   };
 }
 
+// Aborted fetches (our own timeouts) are transient blips; any other
+// throw means the request never reached a server, which the worker
+// reads as offline via the -offline op suffix.
+function aborted(err) {
+  return err?.name === "TimeoutError" || err?.name === "AbortError";
+}
+
 async function fetchSlot(slot) {
   let res;
   try {
@@ -104,8 +111,8 @@ async function fetchSlot(slot) {
       redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     });
-  } catch {
-    throw new GmailFetchError("feed");
+  } catch (fetchErr) {
+    throw new GmailFetchError(aborted(fetchErr) ? "feed" : "feed-offline");
   }
   if (res.type === "opaqueredirect" || res.status === 301 || res.status === 302) {
     throw new GmailFetchError("feed-auth", { status: 401 });

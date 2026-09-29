@@ -116,6 +116,30 @@ test("gmail login page body throws feed-auth without content", async () => {
   }
 });
 
+test("gmail network-down splits from abort: offline op versus transient", async () => {
+  let mode = "down";
+  const restore = stubFetch(async () => {
+    if (mode === "abort") {
+      const e = new Error("aborted");
+      e.name = "AbortError";
+      throw e;
+    }
+    throw new TypeError("fetch failed");
+  });
+  try {
+    const down = await fetchGmailMessages(null).catch((e) => e);
+    assert.ok(down instanceof GmailFetchError);
+    assert.equal(down.op, "feed-offline");
+    assert.equal(down.status, undefined);
+    mode = "abort";
+    const slow = await fetchGmailMessages(null).catch((e) => e);
+    assert.ok(slow instanceof GmailFetchError);
+    assert.equal(slow.op, "feed");
+  } finally {
+    restore();
+  }
+});
+
 test("gmail transport failure is sanitized", async () => {
   const restore = stubFetch(async () => {
     throw new TypeError("fetch failed");

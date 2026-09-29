@@ -140,6 +140,30 @@ test("outlook fetch http failure is sanitized", async () => {
   }
 });
 
+test("outlook network-down splits from abort: offline op versus transient", async () => {
+  let mode = "down";
+  const restore = stubFetch(async (url) => {
+    if (url.includes("/v1.0/me?$select=")) return ok({ mail: "you@outlook.com" });
+    if (mode === "abort") {
+      const e = new Error("aborted");
+      e.name = "TimeoutError";
+      throw e;
+    }
+    throw new TypeError("fetch failed");
+  });
+  try {
+    const down = await fetchOutlookMessages("tok").catch((e) => e);
+    assert.ok(down instanceof OutlookFetchError);
+    assert.equal(down.op, "list-offline");
+    mode = "abort";
+    const slow = await fetchOutlookMessages("tok").catch((e) => e);
+    assert.ok(slow instanceof OutlookFetchError);
+    assert.equal(slow.op, "list");
+  } finally {
+    restore();
+  }
+});
+
 test("outlook fetch transport failure is sanitized", async () => {
   const secret = "TRANSPORT-SENSITIVE-7734 subject Quarterly report draft";
   const restore = stubFetch(async (url) => {

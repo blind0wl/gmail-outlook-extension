@@ -123,6 +123,25 @@ test("status-less fetch failure flags offline and keeps the stale cache", async 
   }
 });
 
+test("adapter offline op marks offline even when navigator stays online", async () => {
+  installChromeStub();
+  try {
+    const acct = { provider: "gmail", account: "err-adapter-offline@g.c" };
+    const fetchers = {
+      gmail: async () => {
+        const e = new Error("gmail feed-offline failed");
+        e.op = "feed-offline";
+        throw e;
+      },
+    };
+    const r = await pollAccount(acct, { fetchers, getToken: async () => "t" });
+    assert.equal(r.offline, true);
+    assert.equal(r.needsSignIn, undefined);
+  } finally {
+    uninstallChromeStub();
+  }
+});
+
 test("silent token failure marks needs sign in, never mail content", async () => {
   installChromeStub();
   try {

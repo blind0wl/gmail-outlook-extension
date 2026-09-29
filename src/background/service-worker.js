@@ -99,6 +99,16 @@ function isOfflineNow() {
   }
 }
 
+// Status-less failures with no HTTP exchange. navigator.onLine is
+// unreliable inside service workers (it can stay true with the cable
+// unplugged), so the adapters mark never-reached-a-server at the source
+// with an -offline op suffix; aborts keep the base op and stay generic.
+function isOfflineError(err) {
+  if (err?.status !== undefined) return false;
+  if (isOfflineNow()) return true;
+  return typeof err?.op === "string" && err.op.endsWith("-offline");
+}
+
 function markNeedsSignIn(acct) {
   // Proven authentication failure. Offline state is preserved: only call
   // sites with an HTTP response in hand clear it via clearOffline.
@@ -282,9 +292,10 @@ export async function pollAccount(acct, deps) {
       const { retryAt } = recordBackoff(acct, now);
       return { key, backedOff: true, retryAt, error: sanitizeError(err, acct) };
     }
-    if (err?.status === undefined && isOfflineNow()) {
-      // No HTTP status and the browser reports offline: keep the stale
-      // cache visible and let the popup show its offline note.
+    if (isOfflineError(err)) {
+      // No HTTP status and either the browser reports offline or the
+      // adapter never reached a server: keep the stale cache visible
+      // and let the popup show its offline note.
       markOffline(acct);
       return { key, offline: true, error: sanitizeError(err, acct) };
     }
