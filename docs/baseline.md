@@ -47,9 +47,10 @@ These shared state files have not been changed by this observer session.
 - Existing popup design is documented in DESIGN.md; five synthetic browser
   captures and a reusable fixture are in `docs/ui-baseline/` and `tests/visual/`.
   These references do not establish real-account or accessibility acceptance.
-- Run a new real-account Chrome acceptance pass using
-  `docs/acceptance/2026-09-30-baseline.md` and record its candidate commit,
-  browser/version, date, and results. The record remains pending.
+- Owner reported commit `604b03a` tested and passed on Helium 0.18.1.1,
+  Chromium 154.0.8037.57, Arch Linux x86_64. The dated report is in
+  `docs/acceptance/2026-09-30-baseline.md`. Specific previously known Outlook
+  link and stable-identity limitations remain pending investigation.
 - Repair Outlook's exact-message Open link with a validated provider webLink.
 - Pin a stable extension public key and register its derived Microsoft
   redirect URI. Verify sign-in after reload/restart; an identity change can
