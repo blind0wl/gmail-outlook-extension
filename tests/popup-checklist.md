@@ -27,7 +27,8 @@ tick each box by hand in a real browser.
 - [ ] `Open` on a Gmail card lands on that account's mailbox via
       `?authuser=<account-email>` (`work@gmail.com` and `personal@gmail.com`
       each open their own mailbox regardless of browser login order); an
-      Outlook card uses the Graph-provided message `webLink` after refresh.
+      Outlook card uses the Graph-provided message `webLink` after refresh,
+      with its own account's `login_hint` for Outlook.com.
       Covered headless by `node --test tests/popup-links.test.js tests/outlook-deeplink.test.js`.
 - [ ] Outlook exact-message acceptance: refresh a real Outlook.com account,
       click `Open`
@@ -36,7 +37,10 @@ tick each box by hand in a real browser.
       account's mailbox, not an error page. If it lands anywhere else, note
       the behavior without recording real message URLs or mail content.
       Repeat after extension restart and with another Microsoft mailbox
-      signed into the browser. Old caches without webLink retain the legacy
+      signed into the browser. With two Outlook accounts in the extension,
+      Open from each must select its exact message while the browser is on
+      the other account. Recover extension sign-in after reload first.
+      Old caches without webLink retain the legacy
       fallback until a successful refresh.
 - [ ] Keyboard: Tab reaches each card (visible focus ring), Enter or Space
       marks it read — same local-only flag as mouse click — without opening

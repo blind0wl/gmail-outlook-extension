@@ -110,7 +110,10 @@ mail content, or sensitive diagnostics in the repository.
 ## Known limitations and development rules
 
 - Outlook **Open** uses Microsoft's message `webLink` after a successful
-  refresh. Older cached entries use a fallback that may reach the mailbox
+  refresh, adding the owning account's `login_hint` for Outlook.com so the
+  browser can select its mailbox. The owner verified this routing in a
+  controlled two-account test; final popup acceptance remains pending.
+  Older cached entries use a fallback that may reach the mailbox
   without selecting the exact message. The owner confirmed exact-message Open
   after sign-in and refresh; see [the acceptance record](docs/acceptance/2026-09-30-outlook-links.md).
 - The unpacked extension has no pinned public `key` yet. A changed extension ID

@@ -15,12 +15,16 @@ const OUTLOOK_WEB_ORIGINS = new Set([
 
 // Cached/provider data is untrusted at the navigation boundary. Preserve
 // Microsoft's encoded message URL only on exact HTTPS Outlook origins.
-function safeOutlookWebLink(value) {
+function safeOutlookWebLink(value, account) {
   if (typeof value !== "string") return null;
   try {
     const url = new URL(value);
     if (!OUTLOOK_WEB_ORIGINS.has(url.origin) || url.username || url.password)
       return null;
+    // Outlook.com otherwise uses the browser's active mailbox, which can
+    // differ from the account whose Graph session fetched this message.
+    if (url.origin === "https://outlook.live.com" && typeof account === "string" && account)
+      url.searchParams.set("login_hint", account);
     return url.href;
   } catch {
     return null;
@@ -59,7 +63,7 @@ export function outlookThreadUrl(account, id) {
 export function threadUrl(item) {
   const id = messageIdOf(item.key);
   if (item.provider === "outlook")
-    return safeOutlookWebLink(item.webLink) ?? outlookThreadUrl(item.account, id);
+    return safeOutlookWebLink(item.webLink, item.account) ?? outlookThreadUrl(item.account, id);
   return gmailThreadUrl(item.account, id);
 }
 

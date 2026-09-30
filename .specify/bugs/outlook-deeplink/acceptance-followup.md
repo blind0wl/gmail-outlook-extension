@@ -100,3 +100,8 @@ for that initial account. The console experiment reads extension storage and
 opens one trusted Outlook tab; it prints no addresses, mail, IDs or URLs. This
 hint's automatic switching behavior is not promised by Graph's webLink contract,
 so owner-observed behavior is required before implementation.
+
+The owner ran the hint experiment and reported it opened the initial account's
+message while Outlook web was on the second account. The minimal repair now
+adds that account hint to validated outlook.live.com provider links. Real
+popup acceptance in both directions is still pending the final candidate.

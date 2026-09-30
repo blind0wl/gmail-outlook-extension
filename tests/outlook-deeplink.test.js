@@ -39,13 +39,31 @@ test("Outlook Open retains Graph's encoded message URL through refresh and cache
   await persistCache();
   pruneCache(Infinity);
   const restored = await hydrateCache();
-  assert.equal(threadUrl(restored[0]), webLink);
+  assert.equal(threadUrl(restored[0]), "https://outlook.live.com/owa/?ItemID=AAMk%2B%2F%3D&exvsurl=1&viewmodel=ReadMessageItem&login_hint=you%40outlook.com");
   assert.equal(getInbox()[0].localRead, true);
 });
 
 test("Outlook Open prefers exact HTTPS Outlook web origins", () => {
-  for (const url of [webLink, "https://outlook.office.com/owa/?ItemID=A%2B", "https://outlook.office365.com/owa/?ItemID=A%2F"])
-    assert.equal(threadUrl({ ...item, webLink: url }), url);
+  for (const [url, expected] of [
+    [webLink, "https://outlook.live.com/owa/?ItemID=AAMk%2B%2F%3D&exvsurl=1&viewmodel=ReadMessageItem&login_hint=you%40outlook.com"],
+    ["https://outlook.office.com/owa/?ItemID=A%2B", "https://outlook.office.com/owa/?ItemID=A%2B"],
+    ["https://outlook.office365.com/owa/?ItemID=A%2F", "https://outlook.office365.com/owa/?ItemID=A%2F"],
+  ]) assert.equal(threadUrl({ ...item, webLink: url }), expected);
+});
+
+test("Outlook Open directs each provider link to its owning browser mailbox", () => {
+  assert.equal(threadUrl({ ...item, webLink, account: "first@outlook.com" }),
+    "https://outlook.live.com/owa/?ItemID=AAMk%2B%2F%3D&exvsurl=1&viewmodel=ReadMessageItem&login_hint=first%40outlook.com");
+  assert.equal(threadUrl({ ...item, webLink, account: "second@outlook.com" }),
+    "https://outlook.live.com/owa/?ItemID=AAMk%2B%2F%3D&exvsurl=1&viewmodel=ReadMessageItem&login_hint=second%40outlook.com");
+});
+
+test("Outlook Open replaces a provider hint while preserving encoded message identity", () => {
+  assert.equal(threadUrl({ ...item, webLink: webLink + "&login_hint=other%40outlook.com" }),
+    "https://outlook.live.com/owa/?ItemID=AAMk%2B%2F%3D&exvsurl=1&viewmodel=ReadMessageItem&login_hint=you%40outlook.com");
+  assert.equal(threadUrl({ ...item, webLink, account: "" }), webLink);
+  assert.equal(threadUrl({ ...item, webLink: "https://outlook.live.com/mail/0/deeplink/read/A%2B%2F%3D?ItemID=A%2B%2F%3D" }),
+    "https://outlook.live.com/mail/0/deeplink/read/A%2B%2F%3D?ItemID=A%2B%2F%3D&login_hint=you%40outlook.com");
 });
 
 test("Outlook Open rejects unsafe or malformed provider links and supports old caches", () => {
