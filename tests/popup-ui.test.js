@@ -59,10 +59,11 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   assert.equal(document.activeElement, summary);
   assert.equal(summary.getAttribute("aria-expanded"), "true");
   assert.equal(summary.getAttribute("aria-controls"), card.querySelector(".card-preview").id);
-  assert.equal(
-    card.querySelector(".card-preview").textContent,
-    cached.subject + cached.snippet,
-  );
+  assert.ok(card.querySelector(".card-head .card-subject"), "subject is a static heading");
+  assert.equal(summary.querySelector(".card-subject"), null, "headings stay out of the toggle");
+  assert.equal(summary.querySelector(".card-sender"), null, "sender stays out of the toggle");
+  const previewText = card.querySelector(".card-preview").textContent;
+  assert.equal(previewText, cached.snippet, "preview opens the body text only");
   assert.equal(writes, 0);
   assert.equal(messages.length, 0, "preview does not mark read");
   storageListener({ mailCache: { newValue: [cached] } }, "local");
@@ -376,4 +377,90 @@ for (const outcome of [{ ok: true }, { ok: false, code: "SIGNED_OUT" }]) test(`a
   assert.ok(document.activeElement === email);
   assert.match(document.getElementById("add-account-title").textContent, /Outlook/);
   assert.equal(document.getElementById("add-account-error").hidden, true);
+});
+
+test("opened mail keeps provider counts with an opened-here marker", async () => {
+  const now = Date.now();
+  const mail = (id, extra = {}) => ({ key: `gmail:work%40example.com:${id}`, provider: "gmail",
+    account: "work@example.com", from: "Sender", subject: id, snippet: "text",
+    date: now, unread: true, ...extra });
+  const { document, change } = await workspaceFixture({
+    mailCache: [mail("one"), mail("two")],
+  });
+  assert.equal(document.querySelector(".account-count").textContent, "2 unread");
+  assert.equal(document.getElementById("unread-count").textContent, "(2)");
+  document.querySelector(".card-open").click();
+  await tick();
+  assert.equal(document.getElementById("unread-count").textContent, "(2) \u00B7 1 opened");
+  change({ mailCache: { newValue: [mail("one", { localRead: true }), mail("two")] } });
+  assert.equal(document.querySelector(".account-count").textContent, "2 unread \u00B7 1 opened here");
+  assert.equal(document.querySelector(".opened-tag")?.textContent, "Opened here");
+  assert.match(document.querySelector(".card-summary").getAttribute("aria-label"), /opened here/);
+});
+
+test("preview cue names its collapse state", async () => {
+  const { document } = await workspaceFixture();
+  const summary = document.querySelector(".card-summary");
+  const cue = () => summary.querySelector(".preview-cue").textContent;
+  assert.equal(cue(), "Preview \u25BE");
+  summary.click();
+  assert.equal(cue(), "Preview \u25B4");
+  assert.equal(summary.getAttribute("aria-expanded"), "true");
+});
+
+test("toggle and open share an explicit actions row with a real hit area", async () => {
+  // Guards the zero-area toggle regression: the snippet toggle once rode
+  // the heading's full flex line with zero width and no hit area while its
+  // text still painted, so clicks landed on the card and did nothing.
+  const { document } = await workspaceFixture();
+  const card = document.querySelector(".card");
+  const row = card.querySelector(".card-actions");
+  assert.ok(row, "actions row exists");
+  assert.equal(row.parentElement, card, "row is a direct card child");
+  assert.ok(row.querySelector("button.card-summary"), "toggle lives in the row");
+  assert.ok(row.querySelector("button.card-open"), "open lives in the same row");
+  assert.equal(card.querySelector(".card-head")?.nextElementSibling, row, "row follows headings");
+  assert.equal(row.nextElementSibling?.className, "card-preview", "preview follows the row");
+});
+
+test("settings leads with accounts before themes", async () => {
+  const { document } = await workspaceFixture();
+  const labels = [...document.querySelectorAll("#settings-view > section")]
+    .map((s) => s.getAttribute("aria-label") || s.querySelector("h2")?.textContent);
+  assert.ok(labels.includes("Accounts") && labels.includes("Themes"));
+  assert.ok(labels.indexOf("Accounts") < labels.indexOf("Themes"));
+});
+
+test("healthy accounts show a visible checked stamp; failed accounts do not", async () => {
+  const stamped = await workspaceFixture({
+    accountState: { "gmail:work@example.com": { checkedAt: Date.now() } },
+  });
+  assert.match(stamped.document.querySelector(".account-checked")?.textContent ?? "", /Checked /);
+  const failed = await workspaceFixture({
+    accountState: { "gmail:work@example.com": { backedOff: true, retryAt: Date.now() + 60_000, status: 429 } },
+  });
+  assert.equal(failed.document.querySelector(".account-checked"), null);
+  assert.match(failed.document.querySelector(".account-note")?.textContent ?? "", /retries automatically/);
+});
+
+test("successful refresh reports a checked state, not an error", async () => {
+  const { document } = await workspaceFixture();
+  document.getElementById("refresh-mail").click();
+  await tick(); await tick();
+  const status = document.getElementById("lifecycle-message");
+  assert.match(status.textContent, /Checked mail/);
+  assert.equal(status.dataset.state, "ok");
+});
+
+test("cancelled outlook add names the cancelled step instead of blaming the address", async () => {
+  const { document, window } = await workspaceFixture();
+  chrome.runtime.sendMessage = async () => ({ ok: false, code: "flow-cancelled" });
+  document.getElementById("open-settings").click();
+  document.getElementById("add-outlook").click();
+  document.getElementById("add-account-email").value = "someone@outlook.com";
+  document.getElementById("add-account-form").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  await tick(); await tick();
+  const err = document.getElementById("add-account-error");
+  assert.equal(err.hidden, false);
+  assert.match(err.textContent, /cancelled/);
 });

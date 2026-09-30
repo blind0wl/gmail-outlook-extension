@@ -20,6 +20,7 @@ import {
   pollAccount,
   pollAll,
   handleAlarm,
+  handleMessage,
   needsSignInFor,
   clearNeedsSignIn,
   hydrateAccountState,
@@ -444,6 +445,36 @@ test("fresh worker woken by alarm hydrates before polling", async () => {
     );
     assert.deepEqual(toasts, [], "stored mail is not toasted as new");
     assert.deepEqual(summary.newIds, []);
+  } finally {
+    uninstallChromeStub();
+  }
+});
+
+test("successful polls stamp per-account checkedAt; refresh reports per-account outcomes", async () => {
+  const backing = installChromeStub();
+  try {
+    const ok = { provider: "gmail", account: "fresh@g.c" };
+    const bad = { provider: "outlook", account: "stale@o.c" };
+    const boom = new Error("down");
+    boom.status = 500;
+    backing["accounts"] = [ok, bad];
+    const fetchers = {
+      gmail: async () => [item("gmail:fr", "gmail", "fresh@g.c")],
+      outlook: async () => { throw boom; },
+    };
+    const before = Date.now();
+    const res = await handleMessage({ type: "refresh" }, {
+      fetchers,
+      getToken: async () => "t",
+      notify: async () => {},
+      setBadge: async () => {},
+    });
+    assert.equal(res.ok, true);
+    assert.deepEqual(res.checked.succeeded, ["gmail:fresh@g.c"]);
+    assert.deepEqual(res.checked.backedOff, ["outlook:stale@o.c"]);
+    const state = backing[ACCOUNT_STATE_KEY];
+    assert.ok(state["gmail:fresh@g.c"].checkedAt >= before, "success stamps checkedAt");
+    assert.equal(state["outlook:stale@o.c"].checkedAt, undefined, "backoff never moves the stamp");
   } finally {
     uninstallChromeStub();
   }

@@ -415,7 +415,7 @@ async function runPoll(accounts, deps) {
         );
         newIds.push(...fresh.map((i) => i.key));
         await persistCache(getInbox());
-        await storeAccountEntries([acct], new Map([[key, result]]));
+        await storeAccountEntries([acct], new Map([[key, result]]), now);
         badge = await badgeFor(accounts, deps);
         const eligible = fresh.filter((i) => i.unread && !i.localRead);
         const settings = await globalThis.chrome?.storage?.local?.get(
@@ -477,7 +477,10 @@ async function runPoll(accounts, deps) {
 }
 
 // One persisted entry per account for the popup's error UI.
-function stateEntry(acct, result) {
+// Successful polls stamp checkedAt so the popup can show visible,
+// per-account freshness; failures never move the stamp, so failed and
+// paused accounts cannot look freshly checked.
+function stateEntry(acct, result, now) {
   const key = accountKey(acct);
   const needsSignIn = signedOutByKey.has(key) || needsSignInByKey.has(key);
   const offline = offlineByKey.has(key);
@@ -494,6 +497,7 @@ function stateEntry(acct, result) {
     offline,
     backedOff,
     ...(stale ? { stale: true } : {}),
+    ...(result?.items !== undefined && now ? { checkedAt: now } : {}),
     ...(result?.retryAt ? { retryAt: result.retryAt } : {}),
     ...(typeof result?.error?.status === "number"
       ? { status: result.error.status }
@@ -501,11 +505,11 @@ function stateEntry(acct, result) {
   };
 }
 
-async function storeAccountEntries(accounts, resultsByKey) {
+async function storeAccountEntries(accounts, resultsByKey, now) {
   const merged = await readAccountState();
   for (const a of accounts) {
     const key = accountKey(a);
-    merged[key] = stateEntry(a, resultsByKey.get(key));
+    merged[key] = stateEntry(a, resultsByKey.get(key), now);
   }
   await persistAccountState(merged);
 }
@@ -750,6 +754,7 @@ export async function handleSignIn(accounts, target, deps = {}) {
 async function signInPoll(list, acct, key, generation, real, pollDeps) {
   if (generation !== (accountGeneration.get(key) ?? 0))
     return { key, needsSignIn: true };
+  const now = pollDeps.now ?? Date.now();
   const result = await pollAccount(acct, {
     getToken: real.getToken,
     refreshToken: real.refreshToken,
@@ -773,7 +778,7 @@ async function signInPoll(list, acct, key, generation, real, pollDeps) {
       seenByKey.set(key, result.items.map((i) => i.key).slice(0, 200));
       await persistCache(getInbox());
     }
-    await storeAccountEntries([acct], new Map([[key, result]]));
+    await storeAccountEntries([acct], new Map([[key, result]]), now);
     await badgeFor(list, pollDeps);
   });
   return result;
@@ -795,7 +800,20 @@ export async function handleMessage(msg, deps = {}) {
   await ready;
   if (msg.type === "refresh") {
     const result = await handleManualRefresh(await loadAccounts(), deps);
-    return { ok: true, badge: result.badge };
+    // Per-account outcome lists let the popup report honest freshness:
+    // which accounts were actually checked versus backed off, signed
+    // out, offline, or failed. Never collapse this into a bare ok.
+    return {
+      ok: true,
+      badge: result.badge,
+      checked: {
+        succeeded: result.succeeded,
+        backedOff: result.backedOff,
+        needsSignIn: result.needsSignIn,
+        offline: result.offline,
+        failed: result.failed,
+      },
+    };
   }
   if (msg.type === "mark-read")
     return handleMarkRead(msg.key, await loadAccounts(), deps);

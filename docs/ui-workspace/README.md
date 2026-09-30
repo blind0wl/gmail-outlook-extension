@@ -75,3 +75,39 @@ The new intrinsic-mail-404 and autosize-regression captures show the correction.
 Prior capture hashes remain evidence of the prior candidate; this correction
 changes the popup.css hash and supersedes that sizing assumption. Real popup
 retest and constrained-height/browser-zoom acceptance remain owner checks.
+
+## Re-critique recapture (28/40 fixes, polish/popup-critique-fixes)
+
+All 14 captures plus the two autosize extras were retaken against the fixed
+source; capture.json binds the new hashes. Mail captures inject checkedAt
+stamps and one opened-here message via fixture.update() to show the new
+freshness and attention states; error captures show failed accounts with no
+stamps. Pending was held with a never-resolving sendMessage override because
+the 5s ?pending hang outlasts automation round trips. Zoom remains a CSS zoom
+2 emulation on the settings view, not browser chrome zoom. Autosize still
+PASSes with identical heights (requested 600px; Mail 534px; Settings 535px).
+Every inspected state had an empty console and no document horizontal overflow;
+178 Node tests pass. Real-account owner acceptance still pending.
+
+## Owner annotation round (jump removal, static card headings)
+
+Owner annotations on the recaptured mail view asked for two changes: remove
+the sticky account jump navigation, and make From/Subject static headings with
+a clear subject colour while only the snippet area opens the preview. All 14
+captures plus the two autosize extras were retaken against the restructured
+source; capture.json binds the new hashes. Subjects now use the theme accent
+token; the opened preview shows the cached body text only. Autosize still
+PASSes with identical heights (requested 600px; Mail 534px; Settings 535px).
+Every inspected state had an empty console and no document horizontal overflow;
+177 Node tests pass (one jump-nav test retired with the feature).
+
+## Zero-area toggle fix
+
+The card restructure initially left the snippet toggle sharing the heading's
+full flex line with a zero basis, collapsing it to zero width: its text still
+painted, but clicks landed on the card and did nothing, and the toggle vanished
+from the accessibility tree. Toggle and Open now share an explicit
+`.card-actions` flex row, verified live at 276px wide with real automation
+clicks driving both preview expansion and the Open path. A structural test
+guards the row invariant (linkedom cannot measure layout). All 16 captures were
+retaken; 178 Node tests pass.

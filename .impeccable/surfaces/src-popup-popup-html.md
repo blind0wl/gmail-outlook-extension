@@ -23,9 +23,10 @@ manage accounts/alerts/sound and choose a remembered theme in Settings. Real
 read/unread and Trash/Undo controls belong to the later mailbox-actions stage.
 
 FIRST VIEWPORT: Compact 404px maximum-width popup; toolbar title/count, Refresh
-and Settings, then provider filters and stacked full-address account headers.
+and Settings, then provider filters and stacked full-address account headers
+carrying visible checked times.
 First account's newest mail leads; later accounts remain in vertical order.
-Settings opens Themes, Accounts, Notifications and Sound; Back returns to Mail.
+Settings opens Accounts, Themes, Notifications and Sound; Back returns to Mail.
 
 FORM: Owner-approved account panels; original concept seed ee0c2e51, index7
 Midnight desk, alongside approved Slate workspace and Signal panel. Code-led;

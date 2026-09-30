@@ -17,21 +17,14 @@
     <button type="button" data-filter="gmail" aria-pressed="false">Gmail</button>
     <button type="button" data-filter="outlook" aria-pressed="false">Outlook</button>
   </nav>
+  <p id="open-note" class="mail-note">Counts show provider unread mail. Opening marks mail opened here; your provider mailbox is unchanged.</p>
   <main>
     <ul id="inbox-list"></ul>
     <p id="inbox-empty" hidden>No mail cached yet.</p>
+    <button id="empty-setup" type="button" hidden>Open Settings</button>
   </main>
   </div>
   <div id="settings-view" hidden>
-    <section class="theme-settings" aria-labelledby="themes-title">
-      <h2 id="themes-title">Themes</h2>
-      <div role="radiogroup" aria-label="Theme">
-        <label class="theme-choice"><input type="radio" name="popup-theme" value="midnight" checked><span class="theme-swatch midnight-swatch" aria-hidden="true"></span><span>Midnight desk</span><small>Default</small></label>
-        <label class="theme-choice"><input type="radio" name="popup-theme" value="slate"><span class="theme-swatch slate-swatch" aria-hidden="true"></span><span>Slate workspace</span></label>
-        <label class="theme-choice"><input type="radio" name="popup-theme" value="signal"><span class="theme-swatch signal-swatch" aria-hidden="true"></span><span>Signal panel</span></label>
-      </div>
-      <p id="theme-message" role="status"></p>
-    </section>
   <section class="account-settings" aria-label="Accounts">
     <h2>Accounts</h2>
     <p>Connect an account to read recent inbox mail and receive alerts. Mail stays in this browser.</p>
@@ -42,17 +35,17 @@
     <form id="add-account-form" hidden>
       <h2 id="add-account-title">Add account</h2>
       <label>Your email address
-        <input id="add-account-email" type="email" required autocomplete="email" placeholder="you@example.com">
+        <input id="add-account-email" type="email" required autocomplete="email" placeholder="you@example.com" aria-describedby="add-account-note add-account-error add-account-help">
       </label>
       <p id="add-account-note" class="form-note" hidden></p>
       <details id="add-account-help">
         <summary>How does this work?</summary>
         <div id="add-account-help-gmail" hidden>
-          <p>Gmail needs no setup and no IDs. Just log into Gmail in any browser tab and the account appears here automatically. The extension reads the same unread view you see, and nothing leaves this browser.</p>
+          <p>Log into Gmail in any tab, enter that same address above, then press Add account. The extension reads the unread view for that address; nothing leaves this browser.</p>
           <p><a href="https://mail.google.com/" target="_blank" rel="noreferrer">Open Gmail to log in</a></p>
         </div>
         <div id="add-account-help-outlook" hidden>
-          <p>Outlook signs in with your normal Microsoft account. Press Add account and accept the consent screen. There is nothing to register and no ID to paste.</p>
+          <p>Outlook signs in with your normal Microsoft account. Press Add account and accept the consent screen.</p>
         </div>
       </details>
       <p id="add-account-error" role="alert" hidden></p>
@@ -61,6 +54,15 @@
     </form>
     <ul id="account-controls"></ul>
   </section>
+    <section class="theme-settings" aria-labelledby="themes-title">
+      <h2 id="themes-title">Themes</h2>
+      <div role="radiogroup" aria-label="Theme">
+        <label class="theme-choice"><input type="radio" name="popup-theme" value="midnight" checked><span class="theme-swatch midnight-swatch" aria-hidden="true"></span><span>Midnight desk</span><small>Default</small></label>
+        <label class="theme-choice"><input type="radio" name="popup-theme" value="slate"><span class="theme-swatch slate-swatch" aria-hidden="true"></span><span>Slate workspace</span></label>
+        <label class="theme-choice"><input type="radio" name="popup-theme" value="signal"><span class="theme-swatch signal-swatch" aria-hidden="true"></span><span>Signal panel</span></label>
+      </div>
+      <p id="theme-message" role="status"></p>
+    </section>
   <section aria-labelledby="notifications-title">
     <h2 id="notifications-title">Notifications</h2>
     <label class="check-row"><input id="skip-focused" type="checkbox"> <span>Pause alerts while a provider tab is focused</span></label>

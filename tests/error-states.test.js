@@ -63,6 +63,7 @@ test("stale label shows address plus code plus retry, never mail content", () =>
   assert.match(label, /slow@o\.c/);
   assert.match(label, /stale/);
   assert.match(label, /429/);
+  assert.match(label, /retries automatically/);
   assert.ok(!label.includes("Quarterly"), "no subject in errors");
   assert.ok(!label.includes("salary"), "no body in errors");
 });

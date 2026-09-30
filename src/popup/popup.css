@@ -51,23 +51,31 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .account-section { background: var(--panel); border-radius: 12px; overflow: hidden; }
 .account-heading { padding: 12px 14px; background: var(--header); }
 .account-heading h2 { margin: 6px 0 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; font-weight: 600; }
-.account-heading-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.account-heading-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; }
+.account-checked { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .badge, .account-count { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--tag); color: var(--text); }
 .account-count { color: var(--accent); background: transparent; font-variant-numeric: tabular-nums; }
-.card { position: relative; padding: 12px 14px 10px 20px; }
+.card { position: relative; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0; padding: 10px 14px 10px 20px; }
 .card + .card { border-top: 1px solid var(--line); }
-.card-summary { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font-weight: 400; text-align: left; }
+.card-summary { display: block; flex: 1 1 0; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font-weight: 400; text-align: left; }
 .card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .card-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.card-main, .card-text, .card-subject, .card-snippet { display: block; min-width: 0; }
-.card-subject { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-head { display: block; flex-basis: 100%; min-width: 0; }
+.card-subject, .card-snippet { display: block; min-width: 0; }
+.card-subject { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
 .card.read .card-subject, .card.read .card-sender { font-weight: 400; }
 .card-snippet { color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opened-tag { font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; flex-shrink: 0; white-space: nowrap; }
 .unread-dot { position: absolute; left: 8px; top: 20px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .card.read .unread-dot { display: none; }
-.card-open { margin-top: 8px; background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; margin-left: -8px; }
-.card-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding-top: 8px; }
+.card-actions { display: flex; flex-basis: 100%; align-items: flex-start; gap: 8px; min-width: 0; }
+.card-open { flex-shrink: 0; align-self: flex-start; margin: 0; background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; }
+.card-preview { flex-basis: 100%; white-space: pre-wrap; overflow-wrap: anywhere; padding-top: 8px; }
+.preview-cue { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.mail-note { margin: 0; padding: 0 4px 8px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+#empty-setup { margin: 12px 4px 0; }
+.form-note { font-size: 13px; color: var(--muted); margin: 8px 0 0; overflow-wrap: anywhere; }
 .card-preview p { margin: 6px 0; }
 .account-note, .account-empty { margin: 0; padding: 12px 14px; overflow-wrap: anywhere; color: var(--muted); }
 .account-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -80,7 +88,11 @@ p { overflow-wrap: anywhere; }
 .account-actions, .account-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 #account-controls li { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
 .account-name { display: block; margin-bottom: 2px; overflow-wrap: anywhere; }
+.account-hint { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 #lifecycle-message, #theme-message, #add-account-error { color: var(--danger); }
+#lifecycle-message[data-state="progress"] { color: var(--muted); }
+#lifecycle-message[data-state="ok"] { color: var(--accent); }
+#lifecycle-message[data-state=""] { color: var(--text); }
 #lifecycle-message { flex-shrink: 0; padding: 10px 16px; margin: 0; background: var(--panel); }
 #lifecycle-message:empty, #theme-message:empty { display: none; }
 .check-row, #sound-accounts label { display: flex; align-items: flex-start; gap: 8px; min-height: 32px; padding: 6px 0; }
@@ -101,7 +113,7 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 .theme-choice small { margin-left: auto; font-size: 11px; color: var(--muted); }
 .theme-swatch { width: 24px; height: 24px; border: 1px solid var(--muted); border-radius: 4px; flex-shrink: 0; }
 .midnight-swatch { background: #293e50; }.slate-swatch { background: #b8cbe2; }.signal-swatch { background: #b4b8bc; }
-:root[data-theme="signal"] .inbox-header { background: linear-gradient(#dce0e3, #cbd0d4); margin-bottom: 12px; }
+:root[data-theme="signal"] .inbox-header { background: linear-gradient(#dce0e3, #cbd0d4); }
 @media (max-width: 340px) { .inbox-header { flex-wrap: wrap; } #mail-tools { margin-left: auto; } }
 @media (forced-colors: active) {
   button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline-color: Highlight; }
