@@ -59,10 +59,9 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   assert.equal(document.activeElement, summary);
   assert.equal(summary.getAttribute("aria-expanded"), "true");
   assert.equal(summary.getAttribute("aria-controls"), card.querySelector(".card-preview").id);
-  assert.equal(
-    card.querySelector(".card-preview").textContent,
-    cached.subject + cached.snippet,
-  );
+  const previewText = card.querySelector(".card-preview").textContent;
+  assert.ok(previewText.includes(cached.subject), "preview shows full subject");
+  assert.ok(previewText.includes(cached.snippet), "preview shows full snippet");
   assert.equal(writes, 0);
   assert.equal(messages.length, 0, "preview does not mark read");
   storageListener({ mailCache: { newValue: [cached] } }, "local");

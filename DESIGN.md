@@ -227,6 +227,11 @@ unread dot. Settings panels use a 14px inset.
 
 Account identity wraps; sender, subject and snippet collapse with a one-line
 ellipsis until preview text is expanded. Buttons and account actions wrap.
+Mail rows keep summary and Open on one flex line so later accounts stay reachable;
+with more than one visible account a jump nav lists each address. A muted
+mail note states opening marks opened here without changing the provider mailbox.
+A visible Preview cue labels the expandable summary; expanded text restores the
+full sender with timestamp before subject and snippet.
 The volume control is a label/range/value grid with an 8px gap and a 4ch value
 column. Toolbar tools wrap at 340px; at 240px the title occupies its own row.
 Back to mail remains a single-line label. Native thin scrollbars use theme colors.
@@ -276,11 +281,16 @@ accent/on-accent when selected, expressed with `aria-pressed`.
 
 Each full-address account header owns its messages, including same-provider
 accounts. Empty and paused accounts keep their panels and identity. Flat rows
-have sender/time, subject, snippet, unread state and a sibling Open button.
-Unread subjects and senders are semibold; read mail uses regular weight.
-Preview uses a native summary button with `aria-expanded` and `aria-controls`;
-expanded cached text wraps and preserves line breaks. Preview is display-only.
-Open retains the extension-local read flag and the exact provider message link.
+have sender/time, subject, snippet, unread state and a sibling Open button on the
+same flex line. Unread subjects and senders are semibold; read mail uses regular
+weight. Preview uses a native summary button with `aria-expanded` and `aria-controls`;
+its accessible name carries subject, sender, time and unread state, and a visible
+Preview cue labels the action for sighted users. Expanded cached text restores the
+full sender with timestamp, then subject and snippet, wrapping with preserved line
+breaks. Preview is display-only. Refresh announces Checking then a checked time
+and per-account last-checked titles; success and failure copy avoids raw codes,
+with add-account errors kept inline. Open retains the extension-local read flag
+and the exact provider message link, labelled as opened-here with provider unchanged.
 Stage 1 has no mailbox read/unread, Trash or Undo buttons.
 
 ### Inputs / Fields

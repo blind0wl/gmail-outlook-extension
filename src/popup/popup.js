@@ -17,6 +17,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   var CACHE_KEY = "mailCache";
 
   var filter = "all";
+  var lastRefresh = 0;
   var mailScroll = 0;
   var themeWrites = 0;
   var themeSelection = 0;
@@ -80,12 +81,24 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       else button.disabled = true;
     }
     var status = document.getElementById("lifecycle-message");
+    var isAdd = message.type === "add-account";
+    if (message.type === "refresh") status.textContent = "Checking mail\u2026";
     try {
       var result = await chrome.runtime.sendMessage(message);
-      var code = result?.code ? " (" + result.code + ")" : "";
-      status.textContent = result?.ok ? "" : message.type === "refresh" ? "Could not refresh mail. Try Refresh again." : "Account action failed" + code + ". Check the account details and try Sign in.";
+      if (isAdd) return result;
+      if (message.type === "refresh") {
+        if (result?.ok) {
+          lastRefresh = Date.now();
+          status.textContent = "Checked mail " + new Date(lastRefresh).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ".";
+        } else {
+          status.textContent = "Could not refresh mail. Try Refresh again.";
+        }
+      } else {
+        status.textContent = result?.ok ? "" : "Account action failed. Check the account details and try Sign in.";
+      }
       return result;
     } catch {
+      if (isAdd) return undefined;
       status.textContent = message.type === "refresh" ? "Could not refresh mail. Try Refresh again." : "Account action failed. Try again.";
     } finally {
       if (actionKey) {
@@ -185,7 +198,36 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var shown = visibleItems();
     var sections = configuredAccounts.filter(function (acct) { return filter === "all" || acct.provider === filter; });
     empty.hidden = sections.length !== 0;
-    empty.textContent = configuredAccounts.length ? "No accounts match this filter." : "Connect an account in Settings to see your mail.";
+    empty.textContent = configuredAccounts.length ? "No accounts match this filter." : "No accounts yet. Open Settings to connect Gmail or Outlook.";
+    var setupCta = document.getElementById("empty-setup");
+    if (setupCta) setupCta.hidden = configuredAccounts.length !== 0;
+    var jump = document.getElementById("account-jump");
+    if (jump) {
+      while (jump.firstChild) jump.removeChild(jump.firstChild);
+      if (sections.length > 1) {
+        jump.hidden = false;
+        jump.setAttribute("role", "navigation");
+        jump.setAttribute("aria-label", "Jump to account");
+        configuredAccounts.filter(function (a) { return filter === "all" || a.provider === filter; }).forEach(function (a) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "jump-link";
+          b.textContent = a.account;
+          b.setAttribute("aria-label", "Jump to " + a.account);
+          b.addEventListener("click", function () {
+            var section = list.querySelector('[data-account-key="' + accountKey(a) + '"]');
+            if (section) {
+              section.scrollIntoView({ block: "start" });
+              var h = section.querySelector("h2");
+              if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
+            }
+          });
+          jump.appendChild(b);
+        });
+      } else {
+        jump.hidden = true;
+      }
+    }
     var index = 0;
     sections.forEach(function (acct) {
       var group = document.createElement("li");
@@ -202,6 +244,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       var count = document.createElement("span");
       count.className = "account-count";
       count.textContent = mail.filter(isUnread).length + " unread";
+      if (lastRefresh) count.title = "Last checked " + new Date(lastRefresh).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
       top.append(badge, count);
       var address = document.createElement("h2");
       address.textContent = acct.account;
@@ -254,7 +297,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var summary = document.createElement("button");
         summary.type = "button";
         summary.className = "card-summary";
-        summary.setAttribute("aria-label", "Preview " + (item.subject || "(no subject)") + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
+        summary.setAttribute("aria-label", "Preview " + (item.subject || "(no subject)") + " from " + (item.from || "Unknown sender") + ", " + (formatTime(item.date) || "no date") + (read ? "" : ", unread") + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
         summary.setAttribute("aria-expanded", String(expanded.has(item.key)));
         summary.setAttribute("aria-controls", "mail-preview-" + index);
 
@@ -300,7 +343,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         open.type = "button";
         open.className = "card-open";
         open.textContent = "Open";
-        open.setAttribute("aria-label", "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account);
+        open.title = "Opens the provider message and marks opened here (provider unread unchanged)";
+        open.setAttribute("aria-label", "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account + " (marks opened here, provider unchanged)");
         open.addEventListener("click", function (event) {
           event.stopPropagation();
           markRead(item.key);
@@ -308,17 +352,25 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         });
         main.appendChild(text);
         summary.appendChild(main);
+        var cue = document.createElement("span");
+        cue.className = "preview-cue";
+        cue.setAttribute("aria-hidden", "true");
+        cue.textContent = "Preview \u25BE";
+        summary.appendChild(cue);
         card.append(summary, open);
 
         var preview = document.createElement("div");
         preview.className = "card-preview";
         preview.id = "mail-preview-" + index++;
         preview.hidden = !expanded.has(item.key);
+        var fullFrom = document.createElement("p");
+        fullFrom.className = "preview-from";
+        fullFrom.textContent = (item.from || "Unknown sender") + " \u00B7 " + (formatTime(item.date) || "");
         var fullSubject = document.createElement("p");
         fullSubject.textContent = item.subject || "(no subject)";
         var fullSnippet = document.createElement("p");
         fullSnippet.textContent = item.snippet || "";
-        preview.append(fullSubject, fullSnippet);
+        preview.append(fullFrom, fullSubject, fullSnippet);
         card.appendChild(preview);
         function selectCard() {
           if (expanded.has(item.key)) expanded.delete(item.key);
@@ -530,8 +582,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       // browser session, Outlook consent is handled by the extension.
       addNote.hidden = false;
       addNote.textContent = isGmail
-        ? "No setup needed. Log into Gmail in any tab and press Add account."
-        : "No setup needed. Press Add account and accept the Microsoft consent screen.";
+        ? "Enter the Gmail address you are signed into in any tab, then press Add account."
+        : "Enter your Outlook address, press Add account, then accept the Microsoft consent screen.";
       addHelpGmail.hidden = !isGmail;
       addHelpOutlook.hidden = isGmail;
       addError.hidden = true;
@@ -571,14 +623,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         addEmail.value = "";
         hideAddForm();
       } else {
-        var addCode = result?.code ? " (" + result.code + ")" : "";
-        addError.textContent = "Could not add the account" + addCode + ". Check the address and try again.";
+        addError.textContent = "Could not add the account. Check the address and try again.";
         addError.hidden = false;
       }
     });
     document.getElementById("refresh-mail").addEventListener("click", function (event) {
       void sendAction({type: "refresh"}, event.currentTarget);
     });
+    document.getElementById("empty-setup")?.addEventListener("click", function () { showView(true); });
     var buttons = document.querySelectorAll(".pills button");
     for (var i = 0; i < buttons.length; i++) {
       buttons[i].addEventListener("click", function (event) {

@@ -17,9 +17,12 @@
     <button type="button" data-filter="gmail" aria-pressed="false">Gmail</button>
     <button type="button" data-filter="outlook" aria-pressed="false">Outlook</button>
   </nav>
+  <p id="open-note" class="mail-note">Opening marks mail opened here; your provider mailbox is unchanged.</p>
+  <div id="account-jump" class="account-jump" hidden></div>
   <main>
     <ul id="inbox-list"></ul>
     <p id="inbox-empty" hidden>No mail cached yet.</p>
+    <button id="empty-setup" type="button" hidden>Open Settings</button>
   </main>
   </div>
   <div id="settings-view" hidden>
@@ -42,13 +45,13 @@
     <form id="add-account-form" hidden>
       <h2 id="add-account-title">Add account</h2>
       <label>Your email address
-        <input id="add-account-email" type="email" required autocomplete="email" placeholder="you@example.com">
+        <input id="add-account-email" type="email" required autocomplete="email" placeholder="you@example.com" aria-describedby="add-account-note add-account-error add-account-help">
       </label>
       <p id="add-account-note" class="form-note" hidden></p>
       <details id="add-account-help">
         <summary>How does this work?</summary>
         <div id="add-account-help-gmail" hidden>
-          <p>Gmail needs no setup and no IDs. Just log into Gmail in any browser tab and the account appears here automatically. The extension reads the same unread view you see, and nothing leaves this browser.</p>
+          <p>Gmail needs no IDs. Log into Gmail in any tab, enter that same address above, then press Add account. The extension reads the unread view for that address; nothing leaves this browser.</p>
           <p><a href="https://mail.google.com/" target="_blank" rel="noreferrer">Open Gmail to log in</a></p>
         </div>
         <div id="add-account-help-outlook" hidden>
@@ -60,6 +63,7 @@
       <button type="button" id="add-account-cancel">Cancel</button>
     </form>
     <ul id="account-controls"></ul>
+    <p class="form-note" id="account-remove-note">Sign in connects an account; Sign out pauses it. Remove deletes the local entry only — provider mail is unchanged.</p>
   </section>
   <section aria-labelledby="notifications-title">
     <h2 id="notifications-title">Notifications</h2>
