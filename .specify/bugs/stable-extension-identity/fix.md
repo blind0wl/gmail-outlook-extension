@@ -23,5 +23,6 @@ manifest key. After pinning the key all four focused tests pass.
 Full verification passes 161 tests, 34 syntax checks and the identity command
 on Node 26 and Node 24.21.0. No extension runtime JS, permissions, providers,
 scopes, dependencies, existing stores or external registrations were modified.
-The actual browser install and owner Entra registration/acceptance are pending.
+The owner subsequently reported all browser/Entra acceptance checks passed on
+fb18eb9; see docs/acceptance/2026-09-30-extension-identity.md.
 This is implementation, not project completion. No deviations from assessment.

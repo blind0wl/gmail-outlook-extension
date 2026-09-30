@@ -125,7 +125,8 @@ mail content, or sensitive diagnostics in the repository.
 - The unpacked extension now has a pinned public `key`. Keep it unchanged;
   a deliberate identity migration requires a new Microsoft redirect registration
   and separate Chrome storage. [Identity setup and acceptance](docs/extension-identity.md)
-  are documented; owner validation of this change remains pending.
+  are documented; [owner acceptance](docs/acceptance/2026-09-30-extension-identity.md)
+  passed on the PR #9 implementation.
 - OS Do Not Disturb controls native toast visibility, but cannot reliably be
   detected for the offscreen chime. Use **Mute all sounds** when needed.
 - Focused-provider alert suppression is opt-in and defaults off.

@@ -60,8 +60,9 @@ Record the tested commit, browser and results in docs/acceptance/.
       the first copy during this check. Chrome treats identical IDs as the
       same extension within a profile, so do not expect two independent copies.
 
-The ID/URI are derived and automated checks pass; actual Chrome installation,
-external registration, and real-account acceptance remain owner gates.
+The owner reported all acceptance checks passed on `fb18eb9` (PR #9).
+See [the dated acceptance record](acceptance/2026-09-30-extension-identity.md).
+The checklist above remains the procedure for future setup verification.
 
 ## Future publishing
 
