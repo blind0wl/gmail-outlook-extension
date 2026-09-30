@@ -8,7 +8,7 @@
 :root[data-theme="slate"] {
   color-scheme: light;
   --bg: #dce4ef; --panel: #f8faff; --header: #eaf0f8;
-  --text: #26384e; --muted: #596d85; --line: #dbe4ef;
+  --text: #26384e; --muted: #53677f; --line: #dbe4ef;
   --hover: #eaf0f8; --accent: #3a649b; --danger: #a43d48;
   --tag: #dee8f6; --control: #eef3fa; --on-accent: #ffffff;
 }
@@ -27,8 +27,8 @@ body {
   font: 13px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg);
 }
 body[data-theme-loading] { visibility: hidden; }
-.inbox-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px; flex-shrink: 0; }
-.inbox-header h1 { font-size: 20px; line-height: 1.3; margin: 0; font-weight: 650; }
+.inbox-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 16px; flex-shrink: 0; }
+.inbox-header h1 { font-size: 20px; line-height: 1.3; margin: 0; font-weight: 650; flex-shrink: 0; }
 #unread-count { font-size: 13px; color: var(--muted); font-weight: 400; }
 #mail-tools { display: flex; gap: 6px; }
 button { font: inherit; font-weight: 600; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); }
@@ -110,3 +110,16 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 }
 
 .account-detail { display: block; margin-bottom: 8px; color: var(--muted); overflow-wrap: anywhere; }
+
+.inbox-header button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.inbox-header svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.inbox-header .icon-button { width: 34px; height: 34px; padding: 6px; border-color: transparent; background: transparent; }
+.inbox-header .icon-button svg circle { fill: var(--bg); }
+/* Selected controls retain their contrasting foreground on hover. */
+.pills button[aria-pressed="true"]:hover, #add-account-submit:hover:not(:disabled) { background: var(--accent); }
+@media (max-width: 240px) {
+  .inbox-header h1 { flex-basis: 100%; }
+  #back-to-mail { white-space: nowrap; }
+}
+
+#back-to-mail { white-space: nowrap; }
