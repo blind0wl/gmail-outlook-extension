@@ -118,5 +118,7 @@ Diagnostics must exclude mail content, credentials, and raw provider errors.
 
 Read [AGENTS.md](AGENTS.md) for the repository workflow and
 [the v1 design](docs/superpowers/specs/2026-09-28-gmail-outlook-extension-design.md)
-for product scope. The original implementation plan is historical context;
+for product scope. [DESIGN.md](DESIGN.md) documents the existing visual system;
+[the UI baseline](docs/ui-baseline/README.md) provides synthetic captures and
+reproduction steps. The original implementation plan is historical context;
 current source and dated acceptance records describe the implemented behavior.

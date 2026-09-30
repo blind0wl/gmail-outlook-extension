@@ -44,9 +44,12 @@ These shared state files have not been changed by this observer session.
 
 ## Remaining work
 
-- Capture the existing popup design and representative fixture screenshots.
-- Run a new real-account Chrome acceptance pass and record its candidate
-  commit, browser/version, date, and results.
+- Existing popup design is documented in DESIGN.md; five synthetic browser
+  captures and a reusable fixture are in `docs/ui-baseline/` and `tests/visual/`.
+  These references do not establish real-account or accessibility acceptance.
+- Run a new real-account Chrome acceptance pass using
+  `docs/acceptance/2026-09-30-baseline.md` and record its candidate commit,
+  browser/version, date, and results. The record remains pending.
 - Repair Outlook's exact-message Open link with a validated provider webLink.
 - Pin a stable extension public key and register its derived Microsoft
   redirect URI. Verify sign-in after reload/restart; an identity change can
