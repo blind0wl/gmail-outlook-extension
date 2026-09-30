@@ -75,7 +75,7 @@ framework, bundler, or production npm dependencies.
 | `src/popup/` | Cache-only rendering, provider links, and actions sent to the worker. |
 | `src/notify/` | Notifications, mute/volume settings, and offscreen Web Audio chime. |
 | `tests/` | Automated regressions, fixtures, and the popup acceptance procedure. |
-| `.dev/`, `.specify/`, `.pi/` | Managed project evidence and development workflows. |
+| `.dev/`, `.specify/` | Historical workflow records and specification tooling; not an active ai-dev-system workflow. |
 
 The worker fetches provider data, normalizes it, and writes to
 `chrome.storage.local`. The popup reads that cache and sends account/refresh/
