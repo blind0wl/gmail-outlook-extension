@@ -14,6 +14,9 @@ Create an Entra registration for **Personal Microsoft accounts only**: open [Ent
 
 - Set Supported account types to Personal Microsoft accounts only. If the portal refuses, edit the **Manifest** instead: set `"signInAudience": "PersonalMicrosoftAccount"` **together with** the token version in the same save — `"accessTokenAcceptedVersion": 2` (older manifests) or `"api": { "requestedAccessTokenVersion": 2 }` (Graph-format manifests, where a top-level `accessTokenAcceptedVersion` is rejected as unknown). Saving either property alone fails validation.
 - Register the exact `https://<extension-id>.chromiumapp.org/` redirect under the **Single-page application** platform — not Mobile/desktop, not Web. The token exchange is a `fetch()` from the extension worker (cross-origin), which Microsoft permits only for the SPA type (`AADSTS90023` otherwise), and the URI string may exist under only one platform type, so delete-then-re-add across two saves if it is already registered elsewhere. Allow a few minutes for propagation after every save.
+- This checkout's pinned redirect is `https://jholbbifabgjdjiiebpghejakkejdpdf.chromiumapp.org/`.
+  Run `npm run identity` to verify it. Follow [stable identity setup](extension-identity.md)
+  when upgrading an earlier unpinned install; account/settings storage may change once.
 - Enable public client flows. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Put the public application client ID into `ENTRA_APP_ID` in `src/auth/microsoft.js` (it is a public identifier, safe to commit). Users then click Add Outlook, enter their address, and accept the consent screen. The extension uses the consumers authority and PKCE.
 
 Sign-in failures surface a short code in the popup (e.g. `token-exchange/invalid_client/AADSTS70011`): fixed identifiers from the endpoint, never mail content.

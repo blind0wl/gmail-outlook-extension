@@ -38,7 +38,8 @@ Only the canonical writer named in `.dev/project.md` applies these updates:
   and #3; both fixes are merged. The old feature branch is absent from the
   inspected local and remote-tracking refs. Link README.md for current setup.
 - `.dev/work.yaml`: clear the completed issue-3 focus or select the agreed
-  baseline work. Keep `outlook-deeplink` queued until its required gates pass.
+  baseline work. Reconcile `outlook-deeplink` against its merge and dated
+  acceptance, rather than retaining the obsolete queued status blindly.
 
 These shared state files have not been changed by this observer session.
 
@@ -52,14 +53,23 @@ The merged baseline passed 31 syntax checks and all 152 tests locally.
   These references do not establish real-account or accessibility acceptance.
 - Owner reported commit `604b03a` tested and passed on Helium 0.18.1.1,
   Chromium 154.0.8037.57, Arch Linux x86_64. The dated report is in
-  `docs/acceptance/2026-09-30-baseline.md`. Specific previously known Outlook
-  link and stable-identity limitations remain pending investigation.
-- Repair Outlook's exact-message Open link with a validated provider webLink.
+  `docs/acceptance/2026-09-30-baseline.md`. Later focused acceptance of the
+  Outlook link and stable identity repairs is recorded separately below.
+- Outlook's exact-message Open link now uses a validated provider webLink.
   Implementation and synthetic verification are recorded in
-  `.specify/bugs/outlook-deeplink/`; owner acceptance remains pending.
-- Pin a stable extension public key and register its derived Microsoft
-  redirect URI. Verify sign-in after reload/restart; an identity change can
-  require reconnecting accounts in the new extension storage namespace.
+  `.specify/bugs/outlook-deeplink/`; PR #8 merged and owner acceptance passed.
+- PR #9 pins a stable extension public key; all focused owner checks passed
+  on `fb18eb9`, including registration and reload/restart/path verification.
+  See `docs/acceptance/2026-09-30-extension-identity.md`. PR merge remains
+  pending. Setup for future installs is in `docs/extension-identity.md`.
+
+PR #8 squash-merged as `384cd1a`; the merged Outlook link fix passed 157 tests
+and 32 syntax checks. Owner acceptance of two-account Open is recorded in
+`docs/acceptance/2026-09-30-outlook-links.md`. Proposed writer update: reconcile
+the queued outlook-deeplink entry against that merge and evidence, and select
+stable-extension-identity at the merge/closeout phase with its owner acceptance.
+No `.dev` writes
+were made by this observer session.
 
 The spec also describes an unimplemented header search icon and popup controls
 for poll interval/enabled/notify settings. They remain scope decisions, not
