@@ -36,3 +36,17 @@ IDs, URL query values, auth data, or raw errors requested.
 
 Next: use those results to locate the failing boundary before changing code
 or another acceptance attempt. Do not rewrite the deep-link route speculatively.
+
+## Owner diagnostic result
+
+The read-only console check returned `updatedLinkCode: true` and five cached
+Outlook entries with `hasWebLink: false` (no parsable URL). This confirms the
+updated popup resolver is present, but the new provider navigation path is
+not being used for those entries. It does not prove whether Graph returned
+no link or an Outlook refresh failed before obtaining a new response.
+
+Next controlled check: use the extension's per-account Outlook Sign in action.
+That action performs interactive credential recovery and then a silent poll.
+Refresh and retry Open after it completes. Browser Outlook sign-in is separate
+from the extension's Graph session. If no usable webLink appears after that,
+inspect only sanitized poll/account-state results before changing the route.
