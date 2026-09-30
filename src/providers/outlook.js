@@ -1,13 +1,13 @@
 // Outlook read-only adapter. Normalizes Microsoft Graph message resources
 // into the cache shape from src/store/cache.js:
-// { key, provider, account, from, subject, snippet, date, unread, localRead }
+// { key, provider, account, from, subject, snippet, date, unread, localRead, webLink }
 // Only issues GET requests against Graph (delegated Mail.Read); the app
 // never requests Mail.Read.Shared. The OAuth token is taken as a function
 // parameter (auth wiring comes from Task 6 at runtime).
 
 const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
 const GRAPH_ORIGIN = "https://graph.microsoft.com";
-const SELECT = "subject,from,receivedDateTime,bodyPreview,isRead";
+const SELECT = "subject,from,receivedDateTime,bodyPreview,isRead,webLink";
 const MAX_REDIRECTS = 5;
 
 // Sanitized fetch error. Carries only safe identifiers (operation, HTTP
@@ -111,6 +111,7 @@ export function normalizeGraphMessage(raw, account) {
     date: Number.isNaN(parsed) ? 0 : parsed,
     unread: raw.isRead === false,
     localRead: false,
+    ...(typeof raw.webLink === "string" ? { webLink: raw.webLink } : {}),
   };
 }
 

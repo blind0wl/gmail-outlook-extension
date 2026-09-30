@@ -1,5 +1,5 @@
 // In-memory cache for normalized mail items.
-// Normalized shape: { key, provider, account, from, subject, snippet, date, unread, localRead }
+// Normalized shape: { key, provider, account, from, subject, snippet, date, unread, localRead, webLink? }
 // `key` is `provider + ':' + encodeURIComponent(account) + ':' + id`. `localRead` is never cleared by a merge.
 
 const MAX_ITEMS = 200;
@@ -24,6 +24,7 @@ export function mergeMessages(items) {
       date: item.date,
       unread: item.unread,
       localRead: keptRead || item.localRead === true,
+      ...(typeof item.webLink === "string" ? { webLink: item.webLink } : {}),
     });
   }
   for (const item of newestFirst(byKey.values()).slice(MAX_ITEMS)) {

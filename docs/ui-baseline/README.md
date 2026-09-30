@@ -26,6 +26,11 @@ source from commit `1b94326` (the subsequent baseline commit changes docs/tools
 only). The tall viewport records full content; it does not simulate Chrome's
 popup-height constraint. No horizontal overflow appeared in the full captures.
 
+The Outlook message-link repair changes `src/popup/links.js` after these
+captures. `capture.json` retains the original source fingerprints; these
+images remain visual references for that earlier revision, not acceptance
+evidence for the link repair. The fixture loads current code when served.
+
 | State | Query | Capture |
 | --- | --- | --- |
 | Empty | `?state=empty` | [empty.png](empty.png) |

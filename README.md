@@ -103,8 +103,10 @@ mail content, or sensitive diagnostics in the repository.
 
 ## Known limitations and development rules
 
-- Outlook's current fallback **Open** link may reach the mailbox without
-  selecting the exact message. This remains queued as `outlook-deeplink`.
+- Outlook **Open** uses Microsoft's message `webLink` after a successful
+  refresh. Older cached entries use a fallback that may reach the mailbox
+  without selecting the exact message. Real-account acceptance of the new
+  link path is pending; see [.specify/bugs/outlook-deeplink/test.md](.specify/bugs/outlook-deeplink/test.md).
 - The unpacked extension has no pinned public `key` yet. A changed extension ID
   requires updating the Microsoft redirect registration before sign-in works.
 - OS Do Not Disturb controls native toast visibility, but cannot reliably be

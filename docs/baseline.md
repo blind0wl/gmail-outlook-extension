@@ -44,6 +44,9 @@ These shared state files have not been changed by this observer session.
 
 ## Remaining work
 
+PR #6 merged as `1863fbc`; PR #7 squash-merged as `0a78989` on 2026-09-30.
+The merged baseline passed 31 syntax checks and all 152 tests locally.
+
 - Existing popup design is documented in DESIGN.md; five synthetic browser
   captures and a reusable fixture are in `docs/ui-baseline/` and `tests/visual/`.
   These references do not establish real-account or accessibility acceptance.
@@ -52,6 +55,8 @@ These shared state files have not been changed by this observer session.
   `docs/acceptance/2026-09-30-baseline.md`. Specific previously known Outlook
   link and stable-identity limitations remain pending investigation.
 - Repair Outlook's exact-message Open link with a validated provider webLink.
+  Implementation and synthetic verification are recorded in
+  `.specify/bugs/outlook-deeplink/`; owner acceptance remains pending.
 - Pin a stable extension public key and register its derived Microsoft
   redirect URI. Verify sign-in after reload/restart; an identity change can
   require reconnecting accounts in the new extension storage namespace.

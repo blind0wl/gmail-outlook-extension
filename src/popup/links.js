@@ -2,12 +2,30 @@
 // No chrome APIs, no DOM, no fetch — unit-testable under Node.
 // The popup itself only opens these URLs in tabs; it never fetches them.
 //
-// Neither vendor officially documents these deep-link formats (see the
-// fix-round-2 report for sources), so every format below is also covered
-// by a manual tick in tests/popup-checklist.md.
+// Microsoft documents Graph webLink for opening a message. Synthesized
+// links remain compatibility fallbacks requiring manual acceptance.
 
 const GMAIL_THREAD_BASE = "https://mail.google.com/mail/";
 const OUTLOOK_MAIL_BASE = "https://outlook.live.com/mail/";
+const OUTLOOK_WEB_ORIGINS = new Set([
+  "https://outlook.live.com",
+  "https://outlook.office.com",
+  "https://outlook.office365.com",
+]);
+
+// Cached/provider data is untrusted at the navigation boundary. Preserve
+// Microsoft's encoded message URL only on exact HTTPS Outlook origins.
+function safeOutlookWebLink(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (!OUTLOOK_WEB_ORIGINS.has(url.origin) || url.username || url.password)
+      return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
 
 // Extract the message ID from provider:encoded-account:id; accept legacy keys.
 export function messageIdOf(key) {
@@ -30,9 +48,9 @@ export function gmailThreadUrl(account, id) {
   return `${base}#inbox/${encodeURIComponent(id)}`;
 }
 
-// Account-aware Outlook thread link: the account address in the path
-// addresses that mailbox instead of hardcoded slot 0. Missing account
-// falls back to slot 0.
+// Legacy fallback for cache entries without a safe Graph webLink. This
+// synthesized format does not reliably select the message; refresh mail
+// to obtain the provider URL. Missing account falls back to slot 0.
 export function outlookThreadUrl(account, id) {
   const slot = account ? encodeURIComponent(account) : "0";
   return `${OUTLOOK_MAIL_BASE}${slot}/inbox/id/${encodeURIComponent(id)}`;
@@ -40,7 +58,8 @@ export function outlookThreadUrl(account, id) {
 
 export function threadUrl(item) {
   const id = messageIdOf(item.key);
-  if (item.provider === "outlook") return outlookThreadUrl(item.account, id);
+  if (item.provider === "outlook")
+    return safeOutlookWebLink(item.webLink) ?? outlookThreadUrl(item.account, id);
   return gmailThreadUrl(item.account, id);
 }
 
