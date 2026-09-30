@@ -24,6 +24,6 @@ Initial convergence missed the recovery Sign in path. Independent review R1
 invalidated that finding. Appended T012 repairs FR-004 there with a failing
 regression followed by passing DOM and targeted Chromium checks, including
 cross-control duplicate blocking and a deliberate focus fallback. The revised
-scan finds no remaining buildable gaps; refreshed independent review passed with R1 resolved. T010 independent review passed; T011 owner human
-acceptance/closeout/merge remains a pending lifecycle gate, not unbuilt features.
+scan finds no remaining buildable gaps; refreshed independent review passed with R1 resolved. T010 independent review passed; T011 owner acceptance/merge is recorded; final independent audit and
+canonical closeout remain lifecycle gates, not unbuilt features.
 The scan did not claim screen-reader certification or owner Chrome acceptance.

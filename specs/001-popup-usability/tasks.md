@@ -20,8 +20,16 @@ Source: spec.md, plan.md. Serial ownership; native Spec Kit artifacts.
 - [x] T008 Run npm run verify and bounded browser/state/keyboard/overflow checks; record evidence.
 - [x] T009 Run requirements/plan/task convergence; resolve material gaps.
 - [x] T010 Obtain fresh spec and quality review; resolve findings.
-- [ ] T011 Record owner extension acceptance, required closeout/audit and merge.
+- [x] T011 Record owner extension acceptance and merge; completion audit/closeout are enforced in the checkpoint below.
 
 ## Phase 4: Review convergence repair (appended)
 
 - [x] T012 [US2] Resolve review R1: recovery Sign in focus/pending restoration and shared single-request guard; observe failing DOM regression, then verify repaired DOM and Chromium paths.
+
+## Completion boundary
+
+Owner acceptance and PR #11 merge are recorded. The final closeout/audit portion
+of T011 is a lifecycle gate, not a checkbox that can certify its own audit.
+The writer must read the fresh audit and pass canonical closeout before marking
+work done; see `.dev/evidence/popup-usability.md`. No gate is waived by this
+clarification, and no product/spec requirement changes.

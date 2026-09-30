@@ -49,7 +49,7 @@ work:
   popup-usability:
     kind: feature
     title: "Focused popup controls, scrolling and keyboard usability"
-    status: active
+    status: done
     ref: "https://github.com/blind0wl/gmail-outlook-extension/pull/11"
     phase: closeout
     checkpoint: ".dev/evidence/popup-usability.md"

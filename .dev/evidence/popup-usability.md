@@ -1,15 +1,15 @@
 ---
 version: 1
 work: popup-usability
-code: "fix/popup-usability@95650aaddc38d0d79fcb707b29c8143e38636f50 plus dirty: .dev/evidence/popup-usability.md, .dev/project.md, .dev/work.yaml, docs/acceptance/2026-09-30-popup-usability.md"
+code: "chore/popup-closeout@253e7a965fb2785d69788d55df533809ff7d82ed plus dirty: .dev/evidence/popup-usability.md, .dev/evidence/popup-usability-audit-assignment.md, .dev/evidence/popup-usability-closeout-audit.md, .dev/project.md, specs/001-popup-usability/analysis.md, specs/001-popup-usability/tasks.md"
 requirements: "specs/001-popup-usability/spec.md; specs/001-popup-usability/plan.md; .dev/verification.yaml v2"
-recorded_at: "2026-09-30T08:42:16Z"
+recorded_at: "2026-09-30T08:47:24Z"
 gates:
   automated-tests:
     status: passed
-    command: ["npm", "run", "verify"]
+    command: ["npm", "test"]
     exit_code: 0
-    summary: "160 tests, 34 syntax checks and identity validation passed; Node 24.21.0 and Node 26 runs, fresh Node24/26 runs after review R1 recovery repair."
+    summary: "Fresh merged-candidate npm run verify (includes npm test) passed:160 tests,34 syntax checks,identity validation; Node26. Prior Node24 candidate runs and CI passed."
   human-gate:
     status: passed
     report: "docs/acceptance/2026-09-30-popup-usability.md"
@@ -66,18 +66,28 @@ No full screen-reader audit, real provider sign-in, extension sizing or owner
 browser pass is invented. Identity, provider URL builders, worker polling,
 notifications, credentials and storage schema are unchanged.
 
-## Recovery / next
+## Merged completion candidate
 
-Initial independent review R1 repaired in appended T012; refreshed review passed.
-Owner acceptance on 95650aa is now passed. PR #11 is open with passing CI;
-implementation matches the accepted/reviewed candidate. This record update
-changes only acceptance/state documentation and the future UI approval preference.
-T011 remains open because merge, canonical closeout and independent completion
-audit remain pending. Project policy includes merge to main in Definition of
-Done; keep this item active until those requirements are fulfilled.
-Gmail stale Open remains queued separately. Broader product context capture
-with Impeccable init can be considered before a later redesign/new surface.
+PR #11 is squash-merged as `253e7a965fb2785d69788d55df533809ff7d82ed`.
+`git diff --exit-code 0fa1b33 HEAD -- src tests DESIGN.md manifest.json
+package.json package-lock.json specs` returned 0 before documentation closeout
+edits. Production code exactly matches accepted `95650aa`; `0fa1b33` changed
+only acceptance/state documentation and the future UI approval preference.
+Fresh npm run verify passed on the merged implementation. Policy generation2
+and managed adapter are current. No real-browser acceptance is invented.
 
-Post-review changes only record passed T010/review, acceptance phase and selected
-project focus. Source/tests/captures match the reviewer-bound candidate; these
-metadata transitions do not claim acceptance or completion.
+T011 now records owner acceptance/merge. Its audit/closeout obligation remains
+here as a lifecycle gate, avoiding a self-certifying audit checkbox. This
+clarification changes no product requirement or required verification gate.
+The completion candidate changes only state/task/evidence documentation.
+
+Fresh audit assignment: `.dev/evidence/popup-usability-audit-assignment.md`.
+Audit report: `.dev/evidence/popup-usability-closeout-audit.md`. The writer
+must read its candidate-bound verdict and pass canonical pre-commit closeout
+before applying only popup-usability's active-to-done transition and committing.
+A missing/failed audit or closeout prevents done. This checkpoint is held
+unchanged during audit and subsequent binding-inert status transition.
+
+After completion, revisit design choices with owner-approved proposals and
+previews before UI edits. No new design implementation is authorized. Gmail
+stale Open remains queued separately; do not expand this closeout into it.
