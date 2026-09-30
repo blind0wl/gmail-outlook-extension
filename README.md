@@ -91,6 +91,12 @@ Before merging feature or bug changes, run the
 and, for auth changes, [manual auth checklist](docs/manual-auth.md) with real
 accounts. Use two Gmail accounts and one Outlook.com account to check isolation.
 
+After reloading the extension or restarting the browser, use **Sign in** beside
+the Outlook account in the popup, then **Refresh**. Outlook credentials live in
+session storage and are cleared on reload/restart; cached mail remains visible.
+Being signed into Outlook in a browser tab does not restore the extension's
+Graph credentials.
+
 Verify loading, filtering, keyboard navigation, local read/focus preservation,
 provider links, sign-in/out/removal, worker restart, badge, automatic alerts,
 silent refresh, master/per-account mute, and offline/error recovery. Inspect
@@ -103,8 +109,13 @@ mail content, or sensitive diagnostics in the repository.
 
 ## Known limitations and development rules
 
-- Outlook's current fallback **Open** link may reach the mailbox without
-  selecting the exact message. This remains queued as `outlook-deeplink`.
+- Outlook **Open** uses Microsoft's message `webLink` after a successful
+  refresh, adding the owning account's `login_hint` for Outlook.com so the
+  browser can select its mailbox. The owner passed the final two-account
+  popup test on `dfbdda5` without manually switching browser accounts.
+  Older cached entries use a fallback that may reach the mailbox
+  without selecting the exact message. The owner confirmed exact-message Open
+  after sign-in and refresh; see [the acceptance record](docs/acceptance/2026-09-30-outlook-links.md).
 - The unpacked extension has no pinned public `key` yet. A changed extension ID
   requires updating the Microsoft redirect registration before sign-in works.
 - OS Do Not Disturb controls native toast visibility, but cannot reliably be

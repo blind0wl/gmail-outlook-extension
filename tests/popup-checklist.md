@@ -22,19 +22,26 @@ tick each box by hand in a real browser.
       dot, drops the subject to normal weight, and persists `localRead`
       through to `chrome.storage.local` key `mailCache`.
 - [ ] Each card has a single `Open` action button that opens the provider
-      thread in a new tab (Gmail: `mail.google.com`, Outlook: `outlook.live.com`).
+      thread in a new tab (Gmail: `mail.google.com`; Outlook: validated HTTPS
+      `outlook.live.com`, `outlook.office.com`, or `outlook.office365.com`).
 - [ ] `Open` on a Gmail card lands on that account's mailbox via
       `?authuser=<account-email>` (`work@gmail.com` and `personal@gmail.com`
       each open their own mailbox regardless of browser login order); an
-      Outlook card lands on its own account mailbox
-      (`/mail/<account>/inbox/id/<id>`), never hardcoded slot 0.
-      Covered headless by `node --test tests/popup-links.test.js`.
-- [ ] BEST-EFFORT — Outlook thread link (no Microsoft documentation found
-      for this format): with a real Outlook.com account cached, click `Open`
+      Outlook card uses the Graph-provided message `webLink` after refresh,
+      with its own account's `login_hint` for Outlook.com.
+      Covered headless by `node --test tests/popup-links.test.js tests/outlook-deeplink.test.js`.
+- [ ] Outlook exact-message acceptance: refresh a real Outlook.com account,
+      click `Open`
       on one of its cards and confirm the new tab lands on that exact
       message in the right mailbox — not the inbox root, not another
       account's mailbox, not an error page. If it lands anywhere else, note
-      the actual URL behavior in the fix report so the format can be revised.
+      the behavior without recording real message URLs or mail content.
+      Repeat after extension restart and with another Microsoft mailbox
+      signed into the browser. With two Outlook accounts in the extension,
+      Open from each must select its exact message while the browser is on
+      the other account. Recover extension sign-in after reload first.
+      Old caches without webLink retain the legacy
+      fallback until a successful refresh.
 - [ ] Keyboard: Tab reaches each card (visible focus ring), Enter or Space
       marks it read — same local-only flag as mouse click — without opening
       the provider. Tabbing into a card's `Open` button keeps native
