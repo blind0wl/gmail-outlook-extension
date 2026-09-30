@@ -62,8 +62,12 @@ No living-spec split adopted.
 
 ## Open decisions
 
-- No new feature or design direction selected. Recommend popup usability and
-  accessibility work against DESIGN.md after the state-cleanup PR merges.
+- Owner selected the focused popup usability/accessibility refinement with
+  Impeccable after PR #10 merged (`e94de2e`). Scope is in
+  `specs/001-popup-usability/spec.md`; owner acceptance passed on `95650aa`.
+- After this refinement merges, revisit visual direction with the owner.
+  Present proposed design choices and previews for approval before further
+  UI changes. No redesign direction or later feature is selected.
 - Gmail stale Open briefly displays deleted mail in Inbox while it remains
   in Trash. Recorded separately in `.specify/bugs/gmail-stale-open/assessment.md`;
   low-priority link UX follow-up, not a persistent restoration.
@@ -86,5 +90,5 @@ The prior Pi claim is provenance, not a harness-specific ownership lock.
 - Verification v2 uses `npm test`, selecting the same full suite portably on
   Node 24. Required human acceptance is unchanged. Historical evidence v1 is
   retained as history rather than rewritten to claim a new run.
-- GitHub has no open issues at reconciliation. New work remains queued until
-  the owner chooses it; the local Gmail assessment preserves the new finding.
+- GitHub has no open issues at reconciliation. The selected popup usability
+  refinement is active; the local Gmail assessment remains queued separately.

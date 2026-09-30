@@ -15,7 +15,7 @@ colors:
 typography:
   body:
     fontFamily: "system-ui, sans-serif"
-    fontSize: "16px"
+    fontSize: "13px"
     fontWeight: 400
   inbox-title:
     fontFamily: "system-ui, sans-serif"
@@ -83,23 +83,25 @@ System fonts keep the popup native and compact. The explicitly styled mail
 hierarchy ranges from the inbox title through subject, snippet/control, account/
 time, and provider badge. Read subjects drop to normal weight.
 
-Account instructions and sound labels inherit the body size. The Sound heading
-retains the browser's default h2 sizing (24px in the captured Chromium browser),
-which is larger than the inbox title. Native buttons may use browser-specific
-fonts. These inconsistencies are observed design debt, not prescribed patterns.
+Account instructions, sound labels and buttons use the 13px system-font body.
+Sound and form headings use 14px semibold, subordinate to the 18px Inbox title.
+The focused usability refinement replaces the historical 24px Sound heading
+and browser-default account buttons with the existing compact control language.
 
 ## Layout
 
-The popup is a single vertical column. Body content has a 380px minimum and
-480px maximum width, with inset padding and a larger bottom inset. Cards stack
-with a group gap. Each has account/provider at top left, time at top right,
-then an avatar beside subject, snippet, and Open action.
+The popup is a single vertical column, normally 404px wide and capped to the
+available viewport. Border-box sizing includes the insets; it shrinks without
+horizontal overflow when a vertical scrollbar or narrow viewport is present.
+Cards stack with a group gap. Each has account/provider at top left, time at
+top right, then an avatar beside subject, snippet, and a separate Open action.
 
 Collapsed subjects and snippets use one-line ellipsis; expansion wraps cached
 text. Account addresses wrap rather than disappear. There are no media queries.
-The full-content reference captures use a 404 × 1200 viewport; actual extension
-popups scroll. At minimum width, a non-overlay vertical scrollbar can cause
-horizontal overflow because of the fixed minimum body width.
+Historical full-content captures use a 404 × 1200 viewport; actual extension
+popups scroll. Current controls and identities wrap within the available width.
+Account names sit above wrapping action groups. Sound controls use full-width
+rows, and volume uses a compact label/range/percentage grid.
 
 ## Elevation & Depth
 
@@ -118,14 +120,17 @@ badges tighter again, and filters/actions are pills. Avatars are circles with a
 - **Filters:** All, Gmail, Outlook; selected state uses ink on white inversion
   and `aria-pressed`. No authored hover transition.
 - **Mail cards:** provider/account, timestamp, avatar, subject, snippet, unread
-  dot, Open button, and cached preview. Keyboard activation is Enter/Space; card
-  focus uses a two-pixel blue outline with a one-pixel offset.
+  dot, Open button, and cached preview. A native summary button previews/marks locally read with
+  Enter/Space; Open is a sibling native action. All controls use a two-pixel
+  blue keyboard outline with a two-pixel offset. Surviving controls retain
+  focus across storage updates, and form dismissal returns to its launcher.
 - **Account status:** address and sanitized error/retry state; sign-in recovery
   uses the primary pill. Disabled recovery uses gray on white.
 - **Add-account form:** labelled email input, provider-specific help, alert
   error, and submit/cancel actions. No user client-ID input.
 - **Account actions and sound:** native buttons, checkboxes, and range control.
-  Their styling remains less consistent than the inbox components.
+  Their buttons share the existing pill shape and 32px minimum height. Labels
+  provide generous checkbox hit areas; native checkbox/range behavior remains.
 
 ## Do's and Don'ts
 
@@ -136,3 +141,12 @@ badges tighter again, and filters/actions are pills. Avatars are circles with a
 - Render external mail as text and retain visible keyboard focus.
 - Do not treat synthetic screenshot coverage as real-account acceptance or a
   completed accessibility audit.
+
+## Focused usability refinement
+
+Approved 2026-09-30. Preserve the flat palette, content, account identity,
+filter/read state and action order. Shared hover, active, disabled and keyboard
+focus treatments apply to existing controls. No animation or replacement visual
+world is introduced. Native scrollbars remain usable. See
+`specs/001-popup-usability/` for scope and current verification; historical
+baseline captures remain in `docs/ui-baseline/`.

@@ -1,6 +1,6 @@
 // Browser-only synthetic fixture. Never reads a real account or extension store.
 const state = new URLSearchParams(location.search).get("state") ?? "populated";
-if (!["empty", "populated", "expanded", "signed-out", "error"].includes(state)) {
+if (!["empty", "populated", "expanded", "signed-out", "error", "long"].includes(state)) {
   throw new Error("Unknown popup fixture state");
 }
 
@@ -9,6 +9,7 @@ const accounts = [
   { provider: "gmail", account: "personal@example.com" },
   { provider: "outlook", account: "outlook@example.com" },
 ];
+if (state === "long") accounts[0].account = "long-account-" + "a".repeat(65) + "@example.com";
 const date = Date.parse("2026-09-29T08:00:00Z");
 const mail = accounts.map((account, index) => ({
   ...account,
@@ -24,6 +25,10 @@ const mail = accounts.map((account, index) => ({
   unread: index !== 1,
   localRead: false,
 }));
+if (state === "long") {
+  mail[0].subject = "A long subject " + "unbrokentext".repeat(20);
+  mail[0].snippet = "A long cached preview " + "longtext".repeat(60);
+}
 const data = {
   accounts: state === "empty" ? [] : accounts,
   mailCache: state === "empty" ? [] : mail,
@@ -77,5 +82,5 @@ document.body.replaceChildren(...template.body.childNodes);
 document.title = `Popup baseline: ${state} (synthetic data)`;
 await import("../../src/popup/popup.js");
 await new Promise(requestAnimationFrame);
-if (state === "expanded") document.querySelector(".card").click();
+if (state === "expanded" || state === "long") document.querySelector(".card-summary").click();
 document.documentElement.dataset.fixtureReady = state;

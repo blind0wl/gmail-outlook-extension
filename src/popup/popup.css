@@ -1,8 +1,15 @@
+html {
+  width: 404px;
+  max-width: 100%;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
 body {
   font-family: system-ui, sans-serif;
   margin: 0;
-  min-width: 380px;
-  max-width: 480px;
+  font-size: 13px;
+  line-height: 1.5;
   padding: 12px 12px 16px;
   color: #111111;
   background: #ffffff;
@@ -32,16 +39,32 @@ body {
   margin-bottom: 12px;
 }
 
-.pills button {
-  font-size: 13px;
+button {
+  font: inherit;
   font-weight: 600;
-  padding: 6px 14px;
+  min-height: 32px;
+  padding: 6px 12px;
   border-radius: 999px;
   cursor: pointer;
   background: #ffffff;
   color: #111111;
   border: 1px solid #5f6368;
 }
+
+button:hover:not(:disabled):not([aria-disabled="true"]) { background: #f8f9fa; }
+button:active:not(:disabled):not([aria-disabled="true"]) { background: #e8eaed; }
+button:disabled, button[aria-disabled="true"] { color: #5f6368; cursor: default; }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+input { font: inherit; accent-color: #1a73e8; }
+a { color: #0f6cbd; text-underline-offset: 3px; }
+::selection { color: #ffffff; background: #0f6cbd; }
+input[type="email"] { caret-color: #1a73e8; }
+input::placeholder { color: #5f6368; opacity: 1; }
+.pills { flex-wrap: wrap; }
+.pills button { padding-inline: 14px; }
 
 .pills button[aria-pressed="true"] {
   background: #111111;
@@ -63,7 +86,6 @@ body {
   border: 1px solid #dadce0;
   border-radius: 8px;
   padding: 8px 10px;
-  cursor: pointer;
   background: #ffffff;
 }
 
@@ -174,21 +196,22 @@ body {
   display: none;
 }
 
-.card:focus-visible {
-  outline: 2px solid #1a73e8;
-  outline-offset: 1px;
+.card-summary {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-weight: 400;
+  text-align: left;
 }
 
-.card-open {
-  font-size: 13px;
-  font-weight: 600;
-  background: #ffffff;
-  color: #111111;
-  border: 1px solid #5f6368;
-  border-radius: 999px;
-  padding: 4px 12px;
-  cursor: pointer;
-}
+.card-subject, .card-snippet { display: block; }
+.card-open { margin-left: 42px; }
 
 #inbox-empty {
   font-size: 13px;
@@ -230,32 +253,49 @@ body {
   word-break: break-word;
 }
 
-.status-signin {
+.status-signin, #add-account-submit {
   flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 600;
   background: #111111;
   color: #ffffff;
-  border: 1px solid #111111;
-  border-radius: 999px;
-  padding: 4px 12px;
-  cursor: pointer;
+  border-color: #111111;
 }
-
-.status-signin:disabled {
-  background: #ffffff;
+.status-signin:hover:not(:disabled), #add-account-submit:hover:not(:disabled) {
+  background: #202124;
+}
+.status-signin:disabled, #add-account-submit:disabled {
+  background: #f8f9fa;
   color: #5f6368;
   border-color: #5f6368;
-  cursor: default;
 }
 
-/* Expansion uses only cached text. Keep long subjects and snippets readable. */
-.card-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 12px; }
+/* Expanded text and account identities must wrap, not widen the popup. */
+.card-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 0 0 42px; }
 .card-preview p { margin: 6px 0; }
-#account-controls { list-style: none; padding: 0; }
-#account-controls li { margin: 8px 0; overflow-wrap: anywhere; }
-#account-controls button { margin: 4px; }
-#lifecycle-message { color: #8b1b1b; }
+.account-settings { margin-bottom: 16px; }
+.account-settings > p { margin: 0 0 8px; color: #5f6368; }
+.account-actions, .account-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#account-controls, #sound-accounts { list-style: none; margin: 8px 0 0; padding: 0; }
+#account-controls li { padding: 8px 0; border-top: 1px solid #dadce0; }
+.account-name { display: block; margin-bottom: 6px; overflow-wrap: anywhere; color: #202124; }
+#lifecycle-message { color: #8b1b1b; overflow-wrap: anywhere; }
+#lifecycle-message:empty { display: none; }
+
+.check-row, #sound-accounts label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 0;
+}
+.check-row span, #sound-accounts label span { min-width: 0; overflow-wrap: anywhere; }
+input[type="checkbox"] { flex-shrink: 0; margin: 3px 0 0; }
+#skip-focused { margin-top: 3px; }
+.account-settings > .check-row { margin-top: 8px; }
+#sound-settings { margin-top: 16px; padding-top: 12px; border-top: 1px solid #dadce0; }
+#sound-settings h2 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+.volume-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 4ch; align-items: center; gap: 8px; min-height: 32px; }
+#sound-volume { width: 100%; min-width: 0; margin: 0; }
+#sound-volume-value { text-align: right; font-variant-numeric: tabular-nums; }
 
 #add-account-form {
   border: 1px solid #dadce0;
@@ -306,23 +346,11 @@ body {
   color: #8b1b1b;
 }
 
-#add-account-form button {
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 999px;
-  padding: 4px 12px;
-  margin-right: 8px;
-  cursor: pointer;
-}
-
-#add-account-submit {
-  background: #111111;
-  color: #ffffff;
-  border: 1px solid #111111;
-}
-
-#add-account-cancel {
-  background: #ffffff;
-  color: #111111;
-  border: 1px solid #5f6368;
+#add-account-form button { margin: 0 8px 0 0; }
+#add-account-form p { overflow-wrap: anywhere; }
+#add-account-form summary { cursor: pointer; min-height: 24px; }
+@media (forced-colors: active) {
+  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible {
+    outline-color: Highlight;
+  }
 }

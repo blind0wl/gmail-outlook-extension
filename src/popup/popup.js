@@ -5,7 +5,7 @@
 // Per-account error rows (stale, offline, needs sign in) read the worker's
 // "accountState" flags and recover via a "sign-in" runtime message.
 
-import { threadUrl, isCardSelfKeydown } from "./links.js";
+import { threadUrl } from "./links.js";
 import { accountStatusLabel } from "../notify/notify.js";
 import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
 
@@ -64,9 +64,21 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   var expanded = new Set();
+  var pendingAccountActions = new Set();
 
   async function sendAction(message, button) {
-    if (button) button.disabled = true;
+    var actionKey = button?.dataset.action
+      ? message.provider + ":" + message.account + ":" + message.type : null;
+    if (actionKey && pendingAccountActions.has(actionKey)) return;
+    if (actionKey) {
+      pendingAccountActions.add(actionKey);
+      renderAccounts();
+      renderStatus();
+    }
+    if (button) {
+      if (actionKey) button.setAttribute("aria-disabled", "true");
+      else button.disabled = true;
+    }
     var status = document.getElementById("lifecycle-message");
     try {
       var result = await chrome.runtime.sendMessage(message);
@@ -76,6 +88,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     } catch {
       status.textContent = "Account action failed. Try again.";
     } finally {
+      if (actionKey) {
+        pendingAccountActions.delete(actionKey);
+        renderAccounts();
+        renderStatus();
+      }
       if (button) button.disabled = false;
     }
   }
@@ -89,22 +106,43 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   function renderAccounts() {
     var list = document.getElementById("account-controls");
+    var focused = document.activeElement?.closest?.("#account-controls button");
+    var focusedAccount = focused?.closest("li")?.dataset.accountKey;
+    var focusedAction = focused?.dataset.action;
+    var nextFocus = null;
     list.replaceChildren();
     configuredAccounts.forEach(function (acct) {
       var row = document.createElement("li");
-      row.appendChild(document.createTextNode(acct.account + " "));
+      row.dataset.accountKey = acct.provider + ":" + acct.account;
+      var name = document.createElement("span");
+      name.className = "account-name";
+      name.textContent = acct.account;
+      var actions = document.createElement("div");
+      actions.className = "account-row-actions";
+      row.append(name, actions);
       [["Sign in", "sign-in"], ["Sign out", "sign-out"], ["Remove", "remove-account"]].forEach(function (entry) {
         var button = document.createElement("button");
         button.type = "button";
+        button.dataset.action = entry[1];
+        // Keep pending controls focusable through cache updates; sendAction
+        // blocks repeated activation while aria-disabled exposes busy state.
+        button.setAttribute("aria-disabled", String(pendingAccountActions.has(row.dataset.accountKey + ":" + entry[1])));
         button.textContent = entry[0];
         button.setAttribute("aria-label", entry[0] + " " + acct.account);
         button.addEventListener("click", function () {
           void sendAction({type: entry[1], provider: acct.provider, account: acct.account}, button);
         });
-        row.appendChild(button);
+        actions.appendChild(button);
+        if (row.dataset.accountKey === focusedAccount && entry[1] === focusedAction)
+          nextFocus = button;
       });
       list.appendChild(row);
     });
+    if (nextFocus) {
+      nextFocus.focus();
+    } else if (focused) {
+      document.getElementById("add-gmail").focus();
+    }
   }
 
   function visibleItems() {
@@ -137,27 +175,28 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var shown = visibleItems();
     empty.hidden = shown.length !== 0;
 
-    shown.forEach(function (item) {
+    shown.forEach(function (item, index) {
       var read = !isUnread(item);
 
       var card = document.createElement("li");
       card.className = "card" + (read ? " read" : "");
-      // Keyboard path to the same local-only read flag the mouse click
-      // sets: focus the card, press Enter or Space. Never opens provider.
-      card.setAttribute("tabindex", "0");
-      card.setAttribute("role", "button");
-      card.setAttribute("aria-label", "Read: " + (item.subject || "(no subject)"));
       card.setAttribute("data-key", item.key);
-      card.setAttribute("aria-expanded", String(expanded.has(item.key)));
+      var summary = document.createElement("button");
+      summary.type = "button";
+      summary.className = "card-summary";
+      summary.setAttribute("aria-label", "Read: " + (item.subject || "(no subject)") + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
+      summary.setAttribute("aria-expanded", String(expanded.has(item.key)));
+      summary.setAttribute("aria-controls", "mail-preview-" + index);
 
       if (!read) {
         var dot = document.createElement("span");
         dot.className = "unread-dot";
+        dot.setAttribute("role", "img");
         dot.setAttribute("aria-label", "Unread");
         card.appendChild(dot);
       }
 
-      var top = document.createElement("div");
+      var top = document.createElement("span");
       top.className = "card-top";
 
       var account = document.createElement("span");
@@ -173,9 +212,9 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       time.className = "card-time";
       time.textContent = formatTime(item.date);
       top.appendChild(time);
-      card.appendChild(top);
+      summary.appendChild(top);
 
-      var main = document.createElement("div");
+      var main = document.createElement("span");
       main.className = "card-main";
 
       var avatar = document.createElement("span");
@@ -184,15 +223,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       avatar.textContent = avatarLetter(item.from);
       main.appendChild(avatar);
 
-      var text = document.createElement("div");
+      var text = document.createElement("span");
       text.className = "card-text";
 
-      var subject = document.createElement("p");
+      var subject = document.createElement("span");
       subject.className = "card-subject";
       subject.textContent = item.subject || "(no subject)";
       text.appendChild(subject);
 
-      var snippet = document.createElement("p");
+      var snippet = document.createElement("span");
       snippet.className = "card-snippet";
       snippet.textContent = item.snippet || "";
       text.appendChild(snippet);
@@ -201,19 +240,19 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       open.type = "button";
       open.className = "card-open";
       open.textContent = "Open";
-      open.setAttribute("aria-label", "Open in provider");
+      open.setAttribute("aria-label", "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account);
       open.addEventListener("click", function (event) {
         event.stopPropagation();
         markRead(item.key);
         openUrl(threadUrl(item));
       });
-      text.appendChild(open);
-
       main.appendChild(text);
-      card.appendChild(main);
+      summary.appendChild(main);
+      card.append(summary, open);
 
       var preview = document.createElement("div");
       preview.className = "card-preview";
+      preview.id = "mail-preview-" + index;
       preview.hidden = !expanded.has(item.key);
       var fullSubject = document.createElement("p");
       fullSubject.textContent = item.subject || "(no subject)";
@@ -224,22 +263,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       function selectCard() {
         expanded.add(item.key);
         preview.hidden = false;
-        card.setAttribute("aria-expanded", "true");
+        summary.setAttribute("aria-expanded", "true");
         card.classList.add("read");
         card.querySelector(".unread-dot")?.remove();
         markRead(item.key);
       }
-      card.addEventListener("click", selectCard);
-      // Card-level keys only: keydowns bubbling up from the nested Open
-      // button are ignored so the button keeps native Enter/Space behavior.
-      card.addEventListener("keydown", function (event) {
-        if (!isCardSelfKeydown(event)) return;
-        event.preventDefault();
-        selectCard();
-      });
+      summary.addEventListener("click", selectCard);
 
       list.appendChild(card);
-      if (focusedKey === item.key) (focusedOpen ? open : card).focus();
+      if (focusedKey === item.key) (focusedOpen ? open : summary).focus();
     });
   }
 
@@ -261,12 +293,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     master.checked = sound.masterMuted === true;
     slider.value = String(Math.round((sound.volume ?? 0.5) * 100));
     if (value) value.textContent = slider.value + "%";
+    slider.setAttribute("aria-valuetext", slider.value + "%");
+    var focusedKey = document.activeElement?.closest?.("#sound-accounts input")?.dataset.soundKey;
     while (list.firstChild) list.removeChild(list.firstChild);
     soundAccountKeys().forEach(function (entry) {
       var li = document.createElement("li");
       var label = document.createElement("label");
       var box = document.createElement("input");
       box.type = "checkbox";
+      box.dataset.soundKey = entry.key;
       box.checked = !(sound.mutedAccounts && sound.mutedAccounts[entry.key] === true);
       box.setAttribute("aria-label", "Chime for " + entry.label);
       box.addEventListener("change", function () {
@@ -278,10 +313,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         });
       });
       label.appendChild(box);
-      label.appendChild(document.createTextNode(" Chime for " + entry.label));
+      var description = document.createElement("span");
+      description.textContent = "Chime for " + entry.label;
+      label.appendChild(description);
       li.appendChild(label);
       list.appendChild(li);
+      if (entry.key === focusedKey) box.focus();
     });
+    if (focusedKey && !list.contains(document.activeElement)) master.focus();
   }
 
   function loadSoundAccounts() {
@@ -340,6 +379,9 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var section = document.getElementById("account-status");
     var list = document.getElementById("account-status-list");
     if (!section || !list) return;
+    var focused = document.activeElement?.closest?.(".status-signin");
+    var focusedAccount = focused?.dataset.accountKey;
+    var nextFocus = null;
     while (list.firstChild) list.removeChild(list.firstChild);
     var offlineNow = typeof navigator !== "undefined" && navigator.onLine === false;
     var rows = 0;
@@ -359,43 +401,32 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           var btn = document.createElement("button");
           btn.type = "button";
           btn.className = "status-signin";
-          btn.textContent = "Sign in";
+          btn.dataset.accountKey = provider + ":" + account;
+          btn.dataset.action = "sign-in";
+          var pending = pendingAccountActions.has(btn.dataset.accountKey + ":sign-in");
+          btn.setAttribute("aria-disabled", String(pending));
+          btn.textContent = pending ? "Signing in\u2026" : "Sign in";
           btn.setAttribute("aria-label", "Sign in " + account);
           btn.addEventListener("click", function () {
-            btn.disabled = true;
-            btn.textContent = "Signing in\u2026";
-            signInAccount(provider, account, function () {
-              btn.disabled = false;
-              btn.textContent = "Sign in";
-            });
+            void signInAccount(provider, account, btn);
           });
           li.appendChild(btn);
+          if (btn.dataset.accountKey === focusedAccount) nextFocus = btn;
         })(entry.provider, entry.account);
       }
       list.appendChild(li);
     });
     section.hidden = rows === 0;
+    if (nextFocus) nextFocus.focus();
+    else if (focused) document.getElementById("add-gmail").focus();
   }
 
   // Interactive recovery for one account. The worker runs the visible auth
   // flow and repolls that account; storage-only here, no network calls.
-  function signInAccount(provider, account, done) {
-    function finish() {
-      loadStatus();
-      if (done) done();
-    }
-    try {
-      if (globalThis.chrome && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage(
-          { type: "sign-in", provider: provider, account: account },
-          function () { finish(); },
-        );
-      } else {
-        finish();
-      }
-    } catch {
-      finish();
-    }
+  async function signInAccount(provider, account, button) {
+    if (pendingAccountActions.has(provider + ":" + account + ":sign-in")) return;
+    await sendAction({ type: "sign-in", provider: provider, account: account }, button);
+    loadStatus();
   }
 
   function loadStatus() {
@@ -446,8 +477,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var addHelpOutlook = document.getElementById("add-account-help-outlook");
     var addError = document.getElementById("add-account-error");
     var addProvider = null;
+    var addOpener = null;
     function showAddForm(provider) {
       addProvider = provider;
+      addOpener = document.getElementById("add-" + provider);
       var isGmail = provider === "gmail";
       addTitle.textContent = isGmail ? "Add Gmail account" : "Add Outlook account";
       // Neither provider asks users for IDs anymore: Gmail reads the
@@ -466,6 +499,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     function hideAddForm() {
       addProvider = null;
       addForm.hidden = true;
+      addOpener?.focus();
     }
     ["gmail", "outlook"].forEach(function (provider) {
       document.getElementById("add-" + provider).addEventListener("click", function () {
@@ -515,6 +549,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
     var slider = document.getElementById("sound-volume");
     if (slider) {
+      slider.addEventListener("input", function () {
+        document.getElementById("sound-volume-value").textContent = slider.value + "%";
+        slider.setAttribute("aria-valuetext", slider.value + "%");
+      });
       slider.addEventListener("change", function () {
         Promise.resolve(setVolume(Number(slider.value) / 100)).then(function (next) {
           sound = next;

@@ -66,11 +66,3 @@ export function threadUrl(item) {
     return safeOutlookWebLink(item.webLink, item.account) ?? outlookThreadUrl(item.account, id);
   return gmailThreadUrl(item.account, id);
 }
-
-// True when a card-level keydown should mark read: Enter/Space targeted at
-// the card itself. Keydowns from nested controls (the Open button) return
-// false so the button keeps its native Enter/Space activation.
-export function isCardSelfKeydown(event) {
-  if (!event || (event.key !== "Enter" && event.key !== " ")) return false;
-  return event.target === event.currentTarget;
-}
