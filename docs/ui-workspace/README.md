@@ -60,3 +60,18 @@ all 14 captures; its sole material fix was documentary. The verdict pass scored
 that fix resolved and returned `ship` at the documentary-fix scope. DESIGN.md and
 its schema-v2 sidecar record all three production themes and current controls.
 Source/capture hashes in capture.json bind this evidence to the production files.
+
+## Automatic-size startup correction
+
+Owner reported the popup failing to render on the first real extension pass.
+The fixed-viewport fixture missed an automatic-sizing dependency: body height
+`min(600px, 100vh)` requests zero height when the host begins at zero height.
+The new autosize.html/js regression starts the production fixture in a 0px-high
+iframe, measures the requested body height, grants that height and checks both
+views. Before the correction: FAIL, requested 0px, Mail/Settings 16px. After
+using intrinsic 600px body height: PASS, requested 600px, Mail 534px, Settings
+535px. T3 Console was clean on the passing run; all 170 Node tests still pass.
+The new intrinsic-mail-404 and autosize-regression captures show the correction.
+Prior capture hashes remain evidence of the prior candidate; this correction
+changes the popup.css hash and supersedes that sizing assumption. Real popup
+retest and constrained-height/browser-zoom acceptance remain owner checks.

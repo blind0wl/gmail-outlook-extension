@@ -218,7 +218,8 @@ uses muted 13px regular text alongside the title.
 ## Layout
 
 The popup is one column (404px maximum width) with a fixed-height flex shell
-(`min(600px, 100vh)`). The toolbar stays outside the independently scrolling Mail
+(`600px`). The intrinsic height must not depend on the initial viewport;
+automatically sized extension hosts can start at zero height. The toolbar stays outside the independently scrolling Mail
 or Settings viewport. View insets are 12px horizontally and 16px at the bottom;
 the toolbar uses a 16px inset. Panels stack with 12px gaps. Account headers and
 mail rows use a 14px horizontal inset; rows reserve 20px on the left for the

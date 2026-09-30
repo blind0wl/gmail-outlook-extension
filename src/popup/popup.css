@@ -23,7 +23,8 @@ html { width: 404px; max-width: 100%; background: var(--bg); }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body {
-  margin: 0; height: min(600px, 100vh); display: flex; flex-direction: column;
+  /* Intrinsic height lets the extension host size itself before a viewport exists. */
+  margin: 0; height: 600px; display: flex; flex-direction: column;
   font: 13px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg);
 }
 body[data-theme-loading] { visibility: hidden; }
