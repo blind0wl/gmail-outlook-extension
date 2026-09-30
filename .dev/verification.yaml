@@ -1,9 +1,10 @@
+# Policy revision v2, 2026-09-30: portable full-suite command; gates unchanged.
 version: 1
 gates:
   automated-tests:
     kind: command
     required_for: [feature, bug, small-change, debt]
-    command: ["node", "--test", "tests/"]
+    command: ["npm", "test"]
     cwd: "."
     prerequisites: "npm ci (linkedom devDependency for popup-ui tests)"
     applicability: "Always required; headless CI covers adapters, cache, badge counts, retry, sanitization."

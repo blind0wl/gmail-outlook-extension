@@ -1,7 +1,8 @@
 # Project baseline — 2026-09-30
 
-This checkpoint separates verified development checks from pending Chrome
-acceptance. It does not mark the baseline or reliability work done.
+This checkpoint preserves the baseline work and its verification history.
+The current state reconciliation is recorded in `.dev/project.md` and the
+merged-fix checkpoints under `.dev/evidence/`.
 
 ## Development checks
 
@@ -27,21 +28,17 @@ Issue #2 was closed on GitHub after verifying its merged fix and regression
 test; its local status was already done. No new product commitments are
 inferred from the old plan.
 
-## Proposed canonical state updates
+## Canonical state reconciliation — 2026-09-30
 
-Only the canonical writer named in `.dev/project.md` applies these updates:
+The owner authorized this session to reconcile `.dev` on behalf of **dave**.
+The current test gate uses `npm test`, preserving full suite selection on
+Node 24. Obsolete branch decisions and issue-3 focus are cleared; completed
+issue phases are corrected. Outlook/identity checkpoints bind merge and
+acceptance evidence. Historical checkpoints remain unchanged.
 
-- `.dev/verification.yaml`: replace the automated gate command with
-  `["npm", "test"]` so its test selection works on the documented Node 24
-  baseline. This preserves the full suite and does not weaken acceptance.
-- `.dev/project.md`: correct the obsolete open-decision text for issues #2
-  and #3; both fixes are merged. The old feature branch is absent from the
-  inspected local and remote-tracking refs. Link README.md for current setup.
-- `.dev/work.yaml`: clear the completed issue-3 focus or select the agreed
-  baseline work. Reconcile `outlook-deeplink` against its merge and dated
-  acceptance, rather than retaining the obsolete queued status blindly.
-
-These shared state files have not been changed by this observer session.
+Independent closeout review is recorded in
+`.dev/evidence/baseline-closeout-audit.md`. The low-priority Gmail stale-link
+finding is queued separately; no persistent restoration was observed.
 
 ## Remaining work
 
@@ -60,16 +57,12 @@ The merged baseline passed 31 syntax checks and all 152 tests locally.
   `.specify/bugs/outlook-deeplink/`; PR #8 merged and owner acceptance passed.
 - PR #9 pins a stable extension public key; all focused owner checks passed
   on `fb18eb9`, including registration and reload/restart/path verification.
-  See `docs/acceptance/2026-09-30-extension-identity.md`. PR merge remains
-  pending. Setup for future installs is in `docs/extension-identity.md`.
+  See `docs/acceptance/2026-09-30-extension-identity.md`. PR #9 squash-merged as `de47eae`. Setup for future installs is in `docs/extension-identity.md`.
 
 PR #8 squash-merged as `384cd1a`; the merged Outlook link fix passed 157 tests
 and 32 syntax checks. Owner acceptance of two-account Open is recorded in
-`docs/acceptance/2026-09-30-outlook-links.md`. Proposed writer update: reconcile
-the queued outlook-deeplink entry against that merge and evidence, and select
-stable-extension-identity at the merge/closeout phase with its owner acceptance.
-No `.dev` writes
-were made by this observer session.
+`docs/acceptance/2026-09-30-outlook-links.md`. The index is reconciled against
+these merges and acceptance records; see the current closeout checkpoints.
 
 The spec also describes an unimplemented header search icon and popup controls
 for poll interval/enabled/notify settings. They remain scope decisions, not

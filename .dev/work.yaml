@@ -1,5 +1,5 @@
 version: 1
-focus: issue-3
+focus: null
 work:
   extension-v1:
     kind: feature
@@ -14,7 +14,7 @@ work:
     status: done
     ref: "https://github.com/blind0wl/gmail-outlook-extension/issues/2"
     priority: high
-    phase: verification
+    phase: closeout
     checkpoint: ".dev/evidence/issue-2.md"
   issue-3:
     kind: bug
@@ -22,11 +22,27 @@ work:
     status: done
     ref: "https://github.com/blind0wl/gmail-outlook-extension/issues/3"
     priority: high
-    phase: implementation
+    phase: closeout
     checkpoint: ".dev/evidence/issue-3.md"
   outlook-deeplink:
     kind: bug
     title: "Outlook Open uses webLink so OWA selects the message"
-    status: queued
-    ref: "tests/popup-checklist.md"
+    status: done
+    ref: "https://github.com/blind0wl/gmail-outlook-extension/pull/8"
     priority: normal
+    phase: closeout
+    checkpoint: ".dev/evidence/outlook-deeplink.md"
+  stable-extension-identity:
+    kind: bug
+    title: "Pin unpacked extension identity and Microsoft redirect"
+    status: done
+    ref: "https://github.com/blind0wl/gmail-outlook-extension/pull/9"
+    phase: closeout
+    checkpoint: ".dev/evidence/stable-extension-identity.md"
+  gmail-stale-open:
+    kind: bug
+    title: "Gmail briefly displays deleted mail through a stale cached link"
+    status: queued
+    ref: ".specify/bugs/gmail-stale-open/assessment.md"
+    priority: low
+    phase: discovery

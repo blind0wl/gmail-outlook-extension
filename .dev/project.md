@@ -43,7 +43,7 @@ this name. Ownership transfers require owner approval recorded here.
 ## Completion policy
 
 Approved 2026-09-29 during onboarding (owner chose "Tests + human gate").
-Policy revision: `.dev/verification.yaml` v1.
+Policy revision: `.dev/verification.yaml` v2 (portable test command; same gates).
 
 - Definition of Done: all applicable required gates in
   `.dev/verification.yaml` have current evidence; failed/blocked/not-run
@@ -62,8 +62,29 @@ No living-spec split adopted.
 
 ## Open decisions
 
-- `feat/extension-v1` branch is un-deleted but fully contained in `main`
-  (squash `028a001`; verified identical trees 2026-09-29). Delete it or keep
-  as history? Pending owner call.
-- Issues #2 (poll serialization) and #3 (account-case keys) queued; order
-  and scope decided at next-work selection.
+- No new feature or design direction selected. Recommend popup usability and
+  accessibility work against DESIGN.md after the state-cleanup PR merges.
+- Gmail stale Open briefly displays deleted mail in Inbox while it remains
+  in Trash. Recorded separately in `.specify/bugs/gmail-stale-open/assessment.md`;
+  low-priority link UX follow-up, not a persistent restoration.
+
+## Current reconciliation — 2026-09-30
+
+The owner explicitly instructed this T3 Code Codex session to clean stale
+`.dev` records. It acts on behalf of the existing durable writer **dave**;
+writer identity is unchanged. No other active canonical writer is indicated.
+The prior Pi claim is provenance, not a harness-specific ownership lock.
+
+- Issues #2 and #3 are closed and their fixes merged; their historical evidence
+  is preserved. Their index phases now match recorded closeout.
+- The old `feat/extension-v1` branch is absent from inspected local and
+  remote-tracking refs; the obsolete deletion decision is removed.
+- Cleanup PR #6, baseline/README PR #7, Outlook link PR #8 (`384cd1a`), and
+  stable identity PR #9 (`de47eae`) are merged with dated owner acceptance.
+- README.md owns current setup/commands. DESIGN.md and docs/ui-baseline/
+  describe the established popup, not a completed accessibility audit.
+- Verification v2 uses `npm test`, selecting the same full suite portably on
+  Node 24. Required human acceptance is unchanged. Historical evidence v1 is
+  retained as history rather than rewritten to claim a new run.
+- GitHub has no open issues at reconciliation. New work remains queued until
+  the owner chooses it; the local Gmail assessment preserves the new finding.
