@@ -60,6 +60,15 @@ The merged baseline passed 31 syntax checks and all 152 tests locally.
 - Pin a stable extension public key and register its derived Microsoft
   redirect URI. Verify sign-in after reload/restart; an identity change can
   require reconnecting accounts in the new extension storage namespace.
+  The prepared key/command and owner setup are in `docs/extension-identity.md`;
+  actual registration and browser acceptance remain pending.
+
+PR #8 squash-merged as `384cd1a`; the merged Outlook link fix passed 157 tests
+and 32 syntax checks. Owner acceptance of two-account Open is recorded in
+`docs/acceptance/2026-09-30-outlook-links.md`. Proposed writer update: reconcile
+the queued outlook-deeplink entry against that merge and evidence, and select
+stable-extension-identity as the next active baseline item. No `.dev` writes
+were made by this observer session.
 
 The spec also describes an unimplemented header search icon and popup controls
 for poll interval/enabled/notify settings. They remain scope decisions, not

@@ -36,6 +36,11 @@ npm run verify
    URI with the Microsoft application, as described in
    [manual auth](docs/manual-auth.md).
 
+The manifest pins a stable development ID. If upgrading from the earlier
+unpinned install, follow [the one-time identity setup](docs/extension-identity.md)
+before Outlook sign-in: register the new SPA redirect, disable any old duplicate
+install, and re-add accounts/settings in the new ID's storage namespace.
+
 After source changes, reload the extension from `chrome://extensions` and
 reopen the popup. There is no build step or development server.
 
@@ -45,8 +50,9 @@ reopen the popup. There is no build step or development server.
 | --- | --- |
 | `npm ci` | Install the locked development dependencies. |
 | `npm test` | Run all Node tests, including the popup DOM tests. |
-| `npm run check` | Parse every source, test, and tooling JavaScript file. |
-| `npm run verify` | Run syntax checks and the full test suite, as CI does. |
+| `npm run identity` | Validate the public key and print the pinned ID/Microsoft redirect URI. |
+| `npm run check` | Parse JavaScript files and validate the manifest's public key. |
+| `npm run verify` | Run syntax/identity checks and the full test suite, as CI does. |
 | `git diff --check` | Check the proposed diff for whitespace errors. |
 
 GitHub Actions runs verification on PRs and pushes to `main`. The suite uses
@@ -116,8 +122,10 @@ mail content, or sensitive diagnostics in the repository.
   Older cached entries use a fallback that may reach the mailbox
   without selecting the exact message. The owner confirmed exact-message Open
   after sign-in and refresh; see [the acceptance record](docs/acceptance/2026-09-30-outlook-links.md).
-- The unpacked extension has no pinned public `key` yet. A changed extension ID
-  requires updating the Microsoft redirect registration before sign-in works.
+- The unpacked extension now has a pinned public `key`. Keep it unchanged;
+  a deliberate identity migration requires a new Microsoft redirect registration
+  and separate Chrome storage. [Identity setup and acceptance](docs/extension-identity.md)
+  are documented; owner validation of this change remains pending.
 - OS Do Not Disturb controls native toast visibility, but cannot reliably be
   detected for the offscreen chime. Use **Mute all sounds** when needed.
 - Focused-provider alert suppression is opt-in and defaults off.
