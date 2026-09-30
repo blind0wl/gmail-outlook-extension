@@ -50,3 +50,13 @@ That action performs interactive credential recovery and then a silent poll.
 Refresh and retry Open after it completes. Browser Outlook sign-in is separate
 from the extension's Graph session. If no usable webLink appears after that,
 inspect only sanitized poll/account-state results before changing the route.
+
+## Recovery acceptance
+
+After the extension Outlook Sign in → Refresh → Open instructions, the owner
+reported "oh that worked". The recovered-account exact-message check passed;
+see `docs/acceptance/2026-09-30-outlook-links.md` for its scope and unreported
+checks. This supersedes the earlier failed attempt for that recovered account.
+The new link implementation required no further code change. README now
+explains credential recovery after reload/restart. Canonical closeout and the
+separate multiple-browser-mailbox check are not claimed from this report.
