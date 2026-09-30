@@ -408,6 +408,21 @@ test("preview cue names its collapse state", async () => {
   assert.equal(summary.getAttribute("aria-expanded"), "true");
 });
 
+test("toggle and open share an explicit actions row with a real hit area", async () => {
+  // Guards the zero-area toggle regression: the snippet toggle once rode
+  // the heading's full flex line with zero width and no hit area while its
+  // text still painted, so clicks landed on the card and did nothing.
+  const { document } = await workspaceFixture();
+  const card = document.querySelector(".card");
+  const row = card.querySelector(".card-actions");
+  assert.ok(row, "actions row exists");
+  assert.equal(row.parentElement, card, "row is a direct card child");
+  assert.ok(row.querySelector("button.card-summary"), "toggle lives in the row");
+  assert.ok(row.querySelector("button.card-open"), "open lives in the same row");
+  assert.equal(card.querySelector(".card-head")?.nextElementSibling, row, "row follows headings");
+  assert.equal(row.nextElementSibling?.className, "card-preview", "preview follows the row");
+});
+
 test("settings leads with accounts before themes", async () => {
   const { document } = await workspaceFixture();
   const labels = [...document.querySelectorAll("#settings-view > section")]

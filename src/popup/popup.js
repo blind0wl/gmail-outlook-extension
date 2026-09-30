@@ -387,7 +387,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         cue.setAttribute("aria-hidden", "true");
         cue.textContent = expanded.has(item.key) ? "Preview \u25B4" : "Preview \u25BE";
         summary.appendChild(cue);
-        card.append(summary, open);
+        // The toggle and Open share an explicit flex row. Implicit wrapping
+        // once stranded the zero-basis toggle on the heading's full line with
+        // zero width and no hit area, so the row is structural, not inferred.
+        var actionsRow = document.createElement("div");
+        actionsRow.className = "card-actions";
+        actionsRow.append(summary, open);
+        card.appendChild(actionsRow);
 
         var preview = document.createElement("div");
         preview.className = "card-preview";

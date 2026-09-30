@@ -1,12 +1,12 @@
 {
   "date": "2026-09-30",
-  "origin": "T3 collaborative browser; synthetic popup Chrome boundary at docs/ui-workspace/; production src/popup HTML/CSS/JS; no real mail; recaptured 2026-09-30 on polish/popup-critique-fixes after owner annotation round (jump nav removed; static headings with accent subjects; snippet-only toggle).",
+  "origin": "T3 collaborative browser; synthetic popup Chrome boundary at docs/ui-workspace/; production src/popup HTML/CSS/JS; no real mail; recaptured 2026-09-30 on polish/popup-critique-fixes after the zero-area toggle fix (explicit card-actions row).",
   "zoomLimitation": "zoom-equivalent-settings-404 applies CSS zoom 2 on the settings view in a 404x600 viewport, not browser chrome zoom",
   "sourceHashes": {
     "src/popup/links.js": "9706c9e4b1ee5ac0417c9c523557894d9b9491c1349126a2c9f9eb76f5277451",
-    "src/popup/popup.css": "606c9ef110bda82bb7f46387b3a1d0f2304a3018e1a41839ff1fa0fe7d2597a2",
+    "src/popup/popup.css": "3856eb99e647082b70fb626fa4586fc3942273b8d12b5a6812ffc6ff7c706666",
     "src/popup/popup.html": "677f45c1b6deaae7260393dda62646ef6c3824a5f00815d4c8e3bfee726a3a62",
-    "src/popup/popup.js": "78b9560ab83c165388e752bb93c29355cf2ccb70c8017b863081e80d68fa9589",
+    "src/popup/popup.js": "261491098a4aefe5d9d7197e220756e880b8ba547ca8557cd5ce6532db578e66",
     "src/popup/themes.js": "dd6f279971f01240a2c325049f3954d010bcc0b4355badbda6eaa6b93ff8d238"
   },
   "captures": [
@@ -16,7 +16,7 @@
     },
     {
       "path": ".impeccable/review/midnight-mail-404.png",
-      "sha256": "b3da6cf44106b8567fd52f8e173586c08a001a491b58078f3ffbb50858e0e11e"
+      "sha256": "44e6b5e401ddc70d66effe4ad15f400ddba36988d187c92b7e0eafa0f3677b36"
     },
     {
       "path": ".impeccable/review/midnight-notifications-sound-404.png",
@@ -24,7 +24,7 @@
     },
     {
       "path": ".impeccable/review/midnight-pending-404.png",
-      "sha256": "83138b467b4b89a02c5665814cd0db53ffe7df977205f8824af1eaf18e42bbf0"
+      "sha256": "45edf5c4727de58d175656f75420dec36582b0feec11b2a6726e14eb44c5b667"
     },
     {
       "path": ".impeccable/review/midnight-settings-404.png",
@@ -36,11 +36,11 @@
     },
     {
       "path": ".impeccable/review/signal-expanded-404.png",
-      "sha256": "f6a3990f6cf56f73201b87cb06735be6ec53b466066950cbee398cb594c8eebe"
+      "sha256": "e1f1fa54f2f795be788438190e9e52fde2ad1dcd9a6bd01fd6f64aeb3adc0b6a"
     },
     {
       "path": ".impeccable/review/signal-mail-320.png",
-      "sha256": "db68572a2691a9b48590fa86c999feb6203415007e0cc19cc49b8178f3237818"
+      "sha256": "9afdc8508bf2b4dd85ef16c48391e3e22c86b02bd50262429ebd5a9d2fed4721"
     },
     {
       "path": ".impeccable/review/signal-settings-320.png",
@@ -48,15 +48,15 @@
     },
     {
       "path": ".impeccable/review/signal-status-404.png",
-      "sha256": "22180ea4b19732179ecc0cc945f467b3345f8c4101eed468b762d1466dafc99c"
+      "sha256": "dbc21f9afc8999c1f2b04bfeeb522cb9659ea5e04c6ca98b9b3627c504d08f61"
     },
     {
       "path": ".impeccable/review/slate-failures-404.png",
-      "sha256": "ee377f5985f3089246f8b1e8c3cd8f35101d1cb9c268486399fe564cea4ce1b6"
+      "sha256": "4e346b6407e298d7e4f257b9b8597879ad897068558f0dd28d32124a94b22ce9"
     },
     {
       "path": ".impeccable/review/slate-mail-380.png",
-      "sha256": "5d64931ba6c4587f8cbc22b5cb3a4b84734c602193142ab494783b0db3f2d351"
+      "sha256": "0ac934475d3c728dd232679d7afc62b62600b9dde1dbd3b4369fd1750dd80be0"
     },
     {
       "path": ".impeccable/review/slate-settings-380.png",

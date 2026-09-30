@@ -227,7 +227,7 @@ unread dot. Settings panels use a 14px inset.
 
 Account identity wraps; sender, subject and snippet collapse with a one-line
 ellipsis until preview text is expanded. Buttons and account actions wrap.
-Mail rows keep static headings above a snippet toggle and Open on one flex line.
+Mail rows keep static headings above a snippet toggle and Open sharing one explicit actions row.
 Account headers show a visible per-account checked time from the worker-persisted
 stamp; failed or paused accounts show no stamp. Counts report provider unread mail
 with an opened-here suffix when mail was opened locally. A muted mail note states

@@ -100,3 +100,14 @@ token; the opened preview shows the cached body text only. Autosize still
 PASSes with identical heights (requested 600px; Mail 534px; Settings 535px).
 Every inspected state had an empty console and no document horizontal overflow;
 177 Node tests pass (one jump-nav test retired with the feature).
+
+## Zero-area toggle fix
+
+The card restructure initially left the snippet toggle sharing the heading's
+full flex line with a zero basis, collapsing it to zero width: its text still
+painted, but clicks landed on the card and did nothing, and the toggle vanished
+from the accessibility tree. Toggle and Open now share an explicit
+`.card-actions` flex row, verified live at 276px wide with real automation
+clicks driving both preview expansion and the Open path. A structural test
+guards the row invariant (linkedom cannot measure layout). All 16 captures were
+retaken; 178 Node tests pass.
