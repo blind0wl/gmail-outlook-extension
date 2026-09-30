@@ -1,7 +1,7 @@
 # Tasks: Popup workspace
 
 Input: approved spec.md and plan.md, research.md, data-model.md and contracts/.
-Status: owner-approved execution tasks, 2026-09-30. Checkboxes record accepted
+Status: implementation and independent reviews complete, 2026-09-30; PR preparation and owner acceptance are recorded under T017. Owner-approved execution tasks. Checkboxes record accepted
 increments; feature completion still requires the declared gates. Requirements checklist completion is not implementation progress.
 
 ## Phase 1 — Setup and foundation
@@ -48,10 +48,10 @@ failure and use every Settings section without a focus/draft reset.
 
 ## Phase 5 — Cross-cutting verification and delivery
 
-- [ ] T013 Build a synthetic browser fixture and reproduction note in docs/ui-workspace/; inspect each theme and empty/error/long states through native T3 at 320, 380, 404 and 480px plus 200% zoom, including keyboard navigation/radio arrows, overflow, contrast and focus. Save inspected captures and evidence; use no real mail. Covers FR-007/008, SC-004. Depends T012.
-- [ ] T014 Obtain fresh independent spec/code and Impeccable finish reviews bound to the integrated candidate and approved direction contract; record reports under .dev/evidence/. Repair material findings and rerun affected checks/reviews before acceptance. Covers FR-010, SC-005. Depends T013.
-- [ ] T015 Extract the implemented design through Impeccable's finish documentation workflow into DESIGN.md/sidecar; update README.md, tests/popup-checklist.md and docs/pr-checklist.md for the actual stage. Keep historical baseline/proposal provenance, describe preview-only plus existing Open behavior, and exclude future action buttons. Refresh affected review evidence if documentation reveals a mismatch. Depends T014.
-- [ ] T016 Run final `npm run verify` and curate explicit intended changes; preserve tests, stable extension ID and no provider/scope changes. Inspect complete diff, update candidate-bound .dev/evidence/popup-workspace.md with actual results and current hashes. No old test/preview pass substitutes. Depends T015.
+- [x] T013 Build a synthetic browser fixture and reproduction note in docs/ui-workspace/; inspect each theme and empty/error/long states through native T3 at 320, 380, 404 and 480px plus emulated 200% layout zoom (actual browser zoom remains T017 acceptance), including keyboard navigation/radio arrows, overflow, contrast and focus. Save inspected captures and evidence; use no real mail. Covers FR-007/008, SC-004. Depends T012.
+- [x] T014 Obtain fresh independent spec/code and Impeccable finish reviews bound to the integrated candidate and approved direction contract; record reports under docs/ui-workspace/. Repair material findings and rerun affected checks/reviews before acceptance. Covers FR-010, SC-005. Depends T013.
+- [x] T015 Extract the implemented design through Impeccable's finish documentation workflow into DESIGN.md/sidecar; update README.md, tests/popup-checklist.md and docs/pr-checklist.md for the actual stage. Keep historical baseline/proposal provenance, describe preview-only plus existing Open behavior, and exclude future action buttons. Refresh affected review evidence if documentation reveals a mismatch. Depends T014.
+- [x] T016 Run final `npm run verify` and curate explicit intended changes; preserve tests, stable extension ID and no provider/scope changes. Inspect complete diff, update docs/ui-workspace/ with actual results and current source hashes. No old test/preview pass substitutes. Depends T015.
 - [ ] T017 Prepare the focused implementation PR and register its URL with T3; ask owner for affected-path real-account Chromium acceptance on the exact verified revision, recording browser/revision in docs/acceptance/. No automatic merge. Covers SC-001–SC-005. Depends T016.
 Completion after T017: record owner acceptance against the tested revision and merge through the reviewed PR. Addy and Impeccable govern review and verification; the retired ai-dev-system closeout/index policy no longer applies.
 

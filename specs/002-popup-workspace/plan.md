@@ -91,7 +91,7 @@ Proposed implementation slices, in order:
    provider Open/filter behavior. Cover two same-provider accounts and orphan cache.
 3. Theme tokens/selection/persistence, all controls and error/empty/pending states.
 4. Narrow/zoom/keyboard review, design extraction, integrated tests, independent
-   spec/code/Impeccable finish review, owner real-account acceptance and closeout.
+   spec/code/Impeccable finish review, owner real-account acceptance and merge.
 
 Use test-first DOM behavior for navigation, grouping, preview and persistence;
 keep existing meaningful coverage and update only assertions whose approved

@@ -26,30 +26,28 @@ Owner acceptance uses real accounts in a Chromium browser.
 
 ## Capabilities and Constraints
 
-Existing implementation: Gmail is read through session-cookie Atom feeds;
-Outlook.com personal mail uses Microsoft Graph read permission. Preview currently
-marks read locally. Provider requests belong to the worker; mail and credentials
-stay in the browser profile. No custom backend or analytics.
+Implemented popup workspace (2026-09-30; owner production acceptance pending):
 
-Confirmed next-design requirements (2026-09-30; not implemented):
+- Stack one full-address account header and only its messages, then the next
+  account. Empty and paused accounts retain sections; filters preserve identity.
+- Mail and Settings are separate views. Settings contains Themes, Accounts,
+  Notifications and Sound. Back restores Mail position; drafts survive updates.
+- Expanding a preview displays cached text without marking it read. Open retains
+  the existing extension-local read flag and exact provider message link.
+- Midnight desk, Slate workspace and Signal panel are selectable and remembered.
+  Midnight is the default for missing or invalid saved preferences.
 
-- Stack separate account sections: one account header followed by only its messages, then the next account and its messages.
-- Separate adding accounts, sign in/out, removal, sound and notifications from
-  the main mail view. Settings must be a separate view, hidden from the message-card view.
-- Provide card icons for read/unread and Delete without requiring preview expansion.
-- Read/unread must update the actual Gmail/Outlook mailbox.
-- Delete must move mail to the provider's Trash/Deleted Items.
+Gmail remains session-cookie Atom feeds; Outlook.com personal mail uses Microsoft
+Graph read permission. Provider requests belong to the worker; the popup reads
+cache and sends worker messages. Mail/credentials stay in the browser profile.
+No backend or analytics; provider access remains read-only in this stage.
 
-These requested actions expand the previous read-only scope. Authentication,
-permissions, mailbox synchronization, error recovery and account migration must
-be specified before implementing them. Existing feeds/read scopes cannot supply
-the requested write operations. No authentication route or permission change has
-been approved as an implementation design yet.
-
-Open decisions: density, account section
-interaction, preview/read relationship, pending/error feedback and recovery from
-an unintended trash action. Individual-message actions, preview-only expansion
-and Trash Undo are approved; their pending/recovery contract still needs specification.
+Approved staged follow-ups: first Gmail API authorization/read migration, then
+individual-message read/unread and Trash actions for both providers. These actions
+update the actual mailbox; Trash moves to Trash/Deleted Items and offers Undo.
+They will appear directly on cards. Provider write scopes, synchronization and
+recovery need their own implementation specification; the current stage has no
+read/unread or Trash/Undo buttons. Preview remains display-only in that design.
 
 ## Brand Commitments
 
@@ -58,15 +56,17 @@ feels too white; colour and surface alternatives are welcome.
 Owner approved all three proposed visual themes: Midnight desk, Slate workspace
 and Signal panel. Settings must expose a Themes control. Midnight desk is the
 new-installation default; remember the user's choice. Normal-case system UI
-text is used in the previews; production tokens remain to be extracted from the
-approved build. The owner dislikes the uppercase, widely spaced description lettering on the
+text and the selected palettes are implemented; DESIGN.md records production
+tokens extracted from the build. The owner dislikes the uppercase, widely spaced description lettering on the
 comparison board. Use normal-case, readable UI typography. The interactive
-previews record the approved directions; production implementation is separate.
+previews record the approved directions; production acceptance is a separate owner check.
 
 ## Evidence on Hand
 
 Established design: DESIGN.md and src/popup/. Synthetic captures and verification:
-docs/ui-usability/. Owner acceptance: docs/acceptance/2026-09-30-popup-usability.md.
+docs/ui-workspace/ (current synthetic checks) and docs/ui-usability/ (historical).
+Prior owner acceptance: docs/acceptance/2026-09-30-popup-usability.md.
+Current popup-workspace owner acceptance remains pending.
 No real addresses or mail content should be used in design examples.
 
 ## Product Principles

@@ -1,4 +1,12 @@
-# PR checklist — Gmail plus Outlook v1 (human gate)
+# PR checklist — Gmail plus Outlook
+
+For the current popup workspace, use [the popup acceptance procedure](../tests/popup-checklist.md)
+and record fresh results under docs/acceptance/ for the exact candidate commit.
+Check the affected account grouping, Settings navigation, themes, preview-only
+expansion, existing Open, account operations and sound/notifications. Real
+Chromium extension acceptance remains required before merging.
+
+## Historical v1 acceptance (2026-09-29)
 
 Every step below needs a real browser, real accounts, or human eyes, so
 every step is **human-only**. Headless CI covers adapters, cache, badge
