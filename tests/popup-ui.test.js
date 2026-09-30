@@ -355,3 +355,25 @@ test("Mail refresh failures are announced outside the hidden Settings view", asy
   assert.match(status.textContent, /refresh/i);
   assert.equal(status.textContent.includes("private provider detail"), false);
 });
+
+for (const outcome of [{ ok: true }, { ok: false, code: "SIGNED_OUT" }]) test(`a completed account add (${outcome.ok ? "success" : "failure"}) cannot close a newer form or erase its draft`, async () => {
+  const { document, window } = await workspaceFixture();
+  let finish;
+  chrome.runtime.sendMessage = async () => new Promise(resolve => { finish = resolve; });
+  document.getElementById("open-settings").click();
+  document.getElementById("add-gmail").click();
+  const email = document.getElementById("add-account-email");
+  email.value = "first@example.com";
+  document.getElementById("add-account-form").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  await tick();
+  document.getElementById("add-account-cancel").click();
+  document.getElementById("add-outlook").click();
+  email.value = "new-draft@example.com";
+  finish(outcome);
+  await tick();
+  assert.equal(email.value, "new-draft@example.com");
+  assert.equal(document.getElementById("add-account-form").hidden, false);
+  assert.ok(document.activeElement === email);
+  assert.match(document.getElementById("add-account-title").textContent, /Outlook/);
+  assert.equal(document.getElementById("add-account-error").hidden, true);
+});

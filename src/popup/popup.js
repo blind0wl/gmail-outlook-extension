@@ -519,7 +519,9 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var addError = document.getElementById("add-account-error");
     var addProvider = null;
     var addOpener = null;
+    var addFormGeneration = 0;
     function showAddForm(provider) {
+      addFormGeneration++;
       addProvider = provider;
       addOpener = document.getElementById("add-" + provider);
       var isGmail = provider === "gmail";
@@ -538,6 +540,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       addEmail.focus();
     }
     function hideAddForm() {
+      addFormGeneration++;
       addProvider = null;
       addForm.hidden = true;
       addOpener?.focus();
@@ -552,14 +555,18 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     });
     addForm.addEventListener("submit", async function (event) {
       event.preventDefault();
-      var account = addEmail.value.trim();
+      var submit = document.getElementById("add-account-submit");
+      if (!addProvider || submit.disabled) return;
+      var generation = addFormGeneration;
+      var draft = addEmail.value;
+      var account = draft.trim();
       if (!account) {
         addError.textContent = "Enter your email address.";
         addError.hidden = false;
         return;
       }
-      var submit = document.getElementById("add-account-submit");
       var result = await sendAction({type: "add-account", provider: addProvider, account}, submit);
+      if (generation !== addFormGeneration || addEmail.value !== draft) return;
       if (result && result.ok) {
         addEmail.value = "";
         hideAddForm();
