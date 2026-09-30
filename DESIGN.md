@@ -227,17 +227,19 @@ unread dot. Settings panels use a 14px inset.
 
 Account identity wraps; sender, subject and snippet collapse with a one-line
 ellipsis until preview text is expanded. Buttons and account actions wrap.
-Mail rows keep summary and Open on one flex line so later accounts stay reachable;
-with more than one visible account a jump nav lists each address. A muted
-mail note states opening marks opened here without changing the provider mailbox.
-A visible Preview cue labels the expandable summary; expanded text restores the
-full sender with timestamp before subject and snippet.
+Mail rows keep static headings above a snippet toggle and Open on one flex line.
+Account headers show a visible per-account checked time from the worker-persisted
+stamp; failed or paused accounts show no stamp. Counts report provider unread mail
+with an opened-here suffix when mail was opened locally. A muted mail note states
+the same. A visible Preview cue labels the toggle and names its collapse state;
+the opened area shows the cached body text only, since sender and subject stay
+visible as headings.
 The volume control is a label/range/value grid with an 8px gap and a 4ch value
 column. Toolbar tools wrap at 340px; at 240px the title occupies its own row.
 Back to mail remains a single-line label. Native thin scrollbars use theme colors.
 
-The popup has Mail and Settings views. Settings has Themes, Accounts,
-Notifications and Sound sections. Back restores the Mail scroll position;
+The popup has Mail and Settings views. Settings leads with Accounts, then
+Themes, Notifications and Sound sections. Back restores the Mail scroll position;
 storage updates retain surviving focus and account drafts. Detailed surface
 composition remains in `.impeccable/surfaces/src-popup-popup-html.md`.
 
@@ -281,16 +283,20 @@ accent/on-accent when selected, expressed with `aria-pressed`.
 
 Each full-address account header owns its messages, including same-provider
 accounts. Empty and paused accounts keep their panels and identity. Flat rows
-have sender/time, subject, snippet, unread state and a sibling Open button on the
-same flex line. Unread subjects and senders are semibold; read mail uses regular
-weight. Preview uses a native summary button with `aria-expanded` and `aria-controls`;
-its accessible name carries subject, sender, time and unread state, and a visible
-Preview cue labels the action for sighted users. Expanded cached text restores the
-full sender with timestamp, then subject and snippet, wrapping with preserved line
-breaks. Preview is display-only. Refresh announces Checking then a checked time
-and per-account last-checked titles; success and failure copy avoids raw codes,
-with add-account errors kept inline. Open retains the extension-local read flag
-and the exact provider message link, labelled as opened-here with provider unchanged.
+have static sender/time and subject headings above a snippet toggle with a sibling
+Open button on one flex line. Subjects use the theme accent color so they stand
+apart from the muted preview text; unread subjects and senders are semibold while
+read mail uses regular weight. Only the snippet area is the preview toggle: a native
+summary button with `aria-expanded` and `aria-controls` whose accessible name carries
+subject, sender, time and unread state, with a visible Preview cue naming its
+collapse state for sighted users. The opened area shows the cached body text only,
+wrapping with preserved line breaks. Preview is display-only. Refresh announces Checking then a checked time, or names
+accounts needing attention on partial success; progress, success and error states
+use distinct lifecycle styling. Error notes keep numeric codes beside actionable
+guidance (automatic retry, Refresh, account-specific sign-in); add-account
+failures name the failing step. Each account row carries its own lifecycle hint.
+Open retains the extension-local read flag and the exact provider message link,
+labelled as opened-here with provider unchanged.
 Stage 1 has no mailbox read/unread, Trash or Undo buttons.
 
 ### Inputs / Fields

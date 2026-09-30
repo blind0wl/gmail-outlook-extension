@@ -88,14 +88,14 @@ export function accountStatusLabel(acct, state = {}) {
   if (state.backedOff) {
     const when = state.retryAt ? `retry ${formatRetryAt(state.retryAt)}` : "retry pending";
     const code = state.status !== undefined ? ` (${state.status})` : "";
-    return `${address} — stale, ${when}${code}`;
+    return `${address} — stale, ${when}${code}; retries automatically`;
   }
   // Sanitized stale indicator for status-less online failures: no retry
   // time, no code, and never raw error text.
   if (state.stale) return `${address} — stale, showing saved mail`;
   if (state.status !== undefined || state.error) {
     const code = state.status !== undefined ? ` (${state.status})` : "";
-    return `${address} — last poll failed${code}`;
+    return `${address} — last poll failed${code}; try Refresh`;
   }
   return null;
 }

@@ -17,7 +17,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   var CACHE_KEY = "mailCache";
 
   var filter = "all";
-  var lastRefresh = 0;
   var mailScroll = 0;
   var themeWrites = 0;
   var themeSelection = 0;
@@ -82,24 +81,37 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
     var status = document.getElementById("lifecycle-message");
     var isAdd = message.type === "add-account";
-    if (message.type === "refresh") status.textContent = "Checking mail\u2026";
+    function setStatus(text, state) {
+      status.textContent = text;
+      if (state) status.dataset.state = state;
+      else status.removeAttribute("data-state");
+    }
+    if (message.type === "refresh") setStatus("Checking mail\u2026", "progress");
     try {
       var result = await chrome.runtime.sendMessage(message);
       if (isAdd) return result;
       if (message.type === "refresh") {
         if (result?.ok) {
-          lastRefresh = Date.now();
-          status.textContent = "Checked mail " + new Date(lastRefresh).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + ".";
+          // Per-account outcomes from the worker: only accounts the poll
+          // actually reached count as checked. Anything else keeps its
+          // error note and never earns a fresh stamp.
+          var lists = result.checked || {};
+          var attention = new Set([].concat(lists.backedOff || [], lists.needsSignIn || [], lists.offline || [], lists.failed || []));
+          var bad = configuredAccounts.filter(function (a) { return a.enabled !== false && attention.has(accountKey(a)); });
+          var when = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+          if (bad.length) setStatus("Checked mail " + when + " \u2014 " + bad.length + " account(s) need attention.", "error");
+          else setStatus("Checked mail " + when + ".", "ok");
         } else {
-          status.textContent = "Could not refresh mail. Try Refresh again.";
+          setStatus("Could not refresh mail. Try Refresh again.", "error");
         }
       } else {
-        status.textContent = result?.ok ? "" : "Account action failed. Check the account details and try Sign in.";
+        if (result?.ok) setStatus("", "");
+        else setStatus("Account action failed. Check the account details and try Sign in.", "error");
       }
       return result;
     } catch {
       if (isAdd) return undefined;
-      status.textContent = message.type === "refresh" ? "Could not refresh mail. Try Refresh again." : "Account action failed. Try again.";
+      setStatus(message.type === "refresh" ? "Could not refresh mail. Try Refresh again." : "Account action failed. Try again.", "error");
     } finally {
       if (actionKey) {
         pendingAccountActions.delete(actionKey);
@@ -137,7 +149,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       var stateLabel = accountStatusLabel(acct, accountState[accountKey(acct)] || {});
       identity.textContent = (acct.provider === "outlook" ? "Outlook" : "Gmail") +
         (acct.enabled === false ? " · Paused" : stateLabel ? " · " + stateLabel.slice(acct.account.length + 3) : "");
-      row.append(name, identity, actions);
+      // Lifecycle consequences live on the row they act on, not in a
+      // single note below the whole list.
+      var hint = document.createElement("small");
+      hint.className = "account-hint";
+      hint.textContent = (accountState[row.dataset.accountKey] || {}).needsSignIn && acct.enabled !== false
+        ? "Sign in reconnects this account."
+        : "Remove deletes the local entry only \u2014 provider mail is unchanged.";
+      row.append(name, identity, actions, hint);
       [["Sign in", "sign-in"], ["Sign out", "sign-out"], ["Remove", "remove-account"]].forEach(function (entry) {
         var button = document.createElement("button");
         button.type = "button";
@@ -147,6 +166,9 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         button.setAttribute("aria-disabled", String(pendingAccountActions.has(row.dataset.accountKey + ":" + entry[1])));
         button.textContent = pendingAccountActions.has(row.dataset.accountKey + ":" + entry[1])
           ? entry[1] === "sign-in" ? "Signing in…" : "Working…" : entry[0];
+        button.title = entry[1] === "sign-in" ? "Connects " + acct.account
+          : entry[1] === "sign-out" ? "Pauses polling for " + acct.account
+          : "Deletes the local entry only; provider mail is unchanged";
         button.setAttribute("aria-label", entry[0] + " " + acct.account);
         button.addEventListener("click", function () {
           void sendAction({type: entry[1], provider: acct.provider, account: acct.account}, button);
@@ -170,11 +192,29 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     return sorted.filter(function (item) { return item.provider === filter; });
   }
 
+  // Counts report provider unread mail; locally opened mail is named
+  // separately so the numbers reconcile with the actual mailbox instead
+  // of silently dropping when opened here.
+  function providerUnread(list) {
+    return list.filter(function (item) { return item.unread === true; }).length;
+  }
+  function openedHereCount(list) {
+    return list.filter(function (item) { return item.unread === true && item.localRead === true; }).length;
+  }
+  function countText(list) {
+    var unread = providerUnread(list);
+    var opened = openedHereCount(list);
+    if (unread === 0 && opened === 0) return "0 unread";
+    return unread + " unread" + (opened > 0 ? " \u00B7 " + opened + " opened here" : "");
+  }
+
   function renderHeader() {
     var keys = new Set(configuredAccounts.map(accountKey));
-    var count = items.filter(function (item) { return keys.has(accountKey(item)) && isUnread(item); }).length;
+    var scoped = items.filter(function (item) { return keys.has(accountKey(item)); });
     var el = document.getElementById("unread-count");
-    el.textContent = count > 0 ? "(" + count + ")" : "";
+    el.textContent = providerUnread(scoped) > 0
+      ? "(" + providerUnread(scoped) + ")" + (openedHereCount(scoped) > 0 ? " \u00B7 " + openedHereCount(scoped) + " opened" : "")
+      : "";
   }
 
   function renderPills() {
@@ -201,33 +241,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     empty.textContent = configuredAccounts.length ? "No accounts match this filter." : "No accounts yet. Open Settings to connect Gmail or Outlook.";
     var setupCta = document.getElementById("empty-setup");
     if (setupCta) setupCta.hidden = configuredAccounts.length !== 0;
-    var jump = document.getElementById("account-jump");
-    if (jump) {
-      while (jump.firstChild) jump.removeChild(jump.firstChild);
-      if (sections.length > 1) {
-        jump.hidden = false;
-        jump.setAttribute("role", "navigation");
-        jump.setAttribute("aria-label", "Jump to account");
-        configuredAccounts.filter(function (a) { return filter === "all" || a.provider === filter; }).forEach(function (a) {
-          var b = document.createElement("button");
-          b.type = "button";
-          b.className = "jump-link";
-          b.textContent = a.account;
-          b.setAttribute("aria-label", "Jump to " + a.account);
-          b.addEventListener("click", function () {
-            var section = list.querySelector('[data-account-key="' + accountKey(a) + '"]');
-            if (section) {
-              section.scrollIntoView({ block: "start" });
-              var h = section.querySelector("h2");
-              if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
-            }
-          });
-          jump.appendChild(b);
-        });
-      } else {
-        jump.hidden = true;
-      }
-    }
     var index = 0;
     sections.forEach(function (acct) {
       var group = document.createElement("li");
@@ -241,19 +254,28 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       badge.className = "badge";
       badge.textContent = acct.provider === "outlook" ? "Outlook" : "Gmail";
       var mail = shown.filter(function (item) { return accountKey(item) === accountKey(acct); });
+      // Freshness comes from the worker-persisted per-account stamp, so a
+      // failed or paused account can never display a fresh check time.
+      var acctState = { ...(accountState[accountKey(acct)] || {}) };
+      if (typeof navigator !== "undefined" && navigator.onLine === false && !acctState.needsSignIn) acctState.offline = true;
       var count = document.createElement("span");
       count.className = "account-count";
-      count.textContent = mail.filter(isUnread).length + " unread";
-      if (lastRefresh) count.title = "Last checked " + new Date(lastRefresh).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-      top.append(badge, count);
+      count.textContent = countText(mail);
+      top.append(badge);
+      if (acct.enabled !== false && acctState.checkedAt && !acctState.needsSignIn && !acctState.offline && !acctState.backedOff && !acctState.stale && acctState.status === undefined) {
+        var checked = document.createElement("span");
+        checked.className = "account-checked";
+        checked.textContent = "Checked " + new Date(acctState.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        top.append(checked);
+      }
+      top.append(count);
       var address = document.createElement("h2");
       address.textContent = acct.account;
       address.id = "account-heading-" + index++;
       group.setAttribute("aria-labelledby", address.id);
       heading.append(top, address);
       group.appendChild(heading);
-      var state = { ...(accountState[accountKey(acct)] || {}) };
-      if (typeof navigator !== "undefined" && navigator.onLine === false && !state.needsSignIn) state.offline = true;
+      var state = acctState;
       var status = acct.enabled === false ? "Paused" : accountStatusLabel(acct, state);
       if (status) {
         var note = document.createElement("div");
@@ -285,7 +307,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (!mail.length) {
         var noMail = document.createElement("p");
         noMail.className = "account-empty";
-        noMail.textContent = "No messages to show.";
+        // A checked empty mailbox reads differently from missing data.
+        noMail.textContent = (!status && state.checkedAt)
+          ? "No messages to show \u2014 checked " + new Date(state.checkedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "."
+          : "No messages to show.";
         group.appendChild(noMail);
       }
       mail.forEach(function (item) {
@@ -294,13 +319,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var card = document.createElement("li");
         card.className = "card" + (read ? " read" : "");
         card.setAttribute("data-key", item.key);
-        var summary = document.createElement("button");
-        summary.type = "button";
-        summary.className = "card-summary";
-        summary.setAttribute("aria-label", "Preview " + (item.subject || "(no subject)") + " from " + (item.from || "Unknown sender") + ", " + (formatTime(item.date) || "no date") + (read ? "" : ", unread") + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
-        summary.setAttribute("aria-expanded", String(expanded.has(item.key)));
-        summary.setAttribute("aria-controls", "mail-preview-" + index);
-
         if (!read) {
           var dot = document.createElement("span");
           dot.className = "unread-dot";
@@ -309,7 +327,12 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           card.appendChild(dot);
         }
 
-        var top = document.createElement("span");
+        // From and subject are static headings. Only the snippet area is
+        // the preview toggle that opens the cached body text.
+        var head = document.createElement("div");
+        head.className = "card-head";
+
+        var top = document.createElement("div");
         top.className = "card-top";
 
         var sender = document.createElement("span");
@@ -321,23 +344,32 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         time.className = "card-time";
         time.textContent = formatTime(item.date);
         top.appendChild(time);
-        summary.appendChild(top);
+        if (item.unread === true && item.localRead === true) {
+          var openedTag = document.createElement("span");
+          openedTag.className = "opened-tag";
+          openedTag.textContent = "Opened here";
+          top.appendChild(openedTag);
+        }
+        head.appendChild(top);
 
-        var main = document.createElement("span");
-        main.className = "card-main";
-
-        var text = document.createElement("span");
-        text.className = "card-text";
-
-        var subject = document.createElement("span");
+        var subject = document.createElement("div");
         subject.className = "card-subject";
         subject.textContent = item.subject || "(no subject)";
-        text.appendChild(subject);
+        head.appendChild(subject);
+        card.appendChild(head);
+
+        var summary = document.createElement("button");
+        summary.type = "button";
+        summary.className = "card-summary";
+        var attentionSuffix = item.localRead === true ? ", opened here" : read ? "" : ", unread";
+        summary.setAttribute("aria-label", "Preview " + (item.subject || "(no subject)") + " from " + (item.from || "Unknown sender") + ", " + (formatTime(item.date) || "no date") + attentionSuffix + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
+        summary.setAttribute("aria-expanded", String(expanded.has(item.key)));
+        summary.setAttribute("aria-controls", "mail-preview-" + index);
 
         var snippet = document.createElement("span");
         snippet.className = "card-snippet";
         snippet.textContent = item.snippet || "";
-        text.appendChild(snippet);
+        summary.appendChild(snippet);
 
         var open = document.createElement("button");
         open.type = "button";
@@ -350,12 +382,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           markRead(item.key);
           openUrl(threadUrl(item));
         });
-        main.appendChild(text);
-        summary.appendChild(main);
         var cue = document.createElement("span");
         cue.className = "preview-cue";
         cue.setAttribute("aria-hidden", "true");
-        cue.textContent = "Preview \u25BE";
+        cue.textContent = expanded.has(item.key) ? "Preview \u25B4" : "Preview \u25BE";
         summary.appendChild(cue);
         card.append(summary, open);
 
@@ -363,20 +393,18 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         preview.className = "card-preview";
         preview.id = "mail-preview-" + index++;
         preview.hidden = !expanded.has(item.key);
-        var fullFrom = document.createElement("p");
-        fullFrom.className = "preview-from";
-        fullFrom.textContent = (item.from || "Unknown sender") + " \u00B7 " + (formatTime(item.date) || "");
-        var fullSubject = document.createElement("p");
-        fullSubject.textContent = item.subject || "(no subject)";
+        // Headings stay visible above, so the opened area shows the
+        // cached body text only.
         var fullSnippet = document.createElement("p");
         fullSnippet.textContent = item.snippet || "";
-        preview.append(fullFrom, fullSubject, fullSnippet);
+        preview.appendChild(fullSnippet);
         card.appendChild(preview);
         function selectCard() {
           if (expanded.has(item.key)) expanded.delete(item.key);
           else expanded.add(item.key);
           preview.hidden = !expanded.has(item.key);
           summary.setAttribute("aria-expanded", String(!preview.hidden));
+          cue.textContent = preview.hidden ? "Preview \u25BE" : "Preview \u25B4";
         }
         summary.addEventListener("click", selectCard);
 
@@ -578,8 +606,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       addOpener = document.getElementById("add-" + provider);
       var isGmail = provider === "gmail";
       addTitle.textContent = isGmail ? "Add Gmail account" : "Add Outlook account";
-      // Neither provider asks users for IDs anymore: Gmail reads the
-      // browser session, Outlook consent is handled by the extension.
+      // Gmail reads the browser session; Outlook consent is handled by
+      // the extension. The address registers which mailbox to poll.
       addNote.hidden = false;
       addNote.textContent = isGmail
         ? "Enter the Gmail address you are signed into in any tab, then press Add account."
@@ -623,7 +651,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         addEmail.value = "";
         hideAddForm();
       } else {
-        addError.textContent = "Could not add the account. Check the address and try again.";
+        // Name the failing step instead of always blaming the address:
+        // sign-in codes travel on the worker result, Gmail has no code
+        // path and surfaces needsSignIn when its session is missing.
+        var reason = "Could not add the account. Check the address and try again.";
+        if (result && result.code === "flow-cancelled" && addProvider === "outlook") {
+          reason = "The Microsoft sign-in was cancelled. Press Add account to try again.";
+        } else if (result && result.code === "account-mismatch") {
+          reason = "The signed-in account did not match that address. Check the address and try again.";
+        } else if (result && result.needsSignIn && addProvider === "gmail") {
+          reason = "Sign in to Gmail in a browser tab, then press Add account again.";
+        } else if (result && result.needsSignIn) {
+          reason = "Complete sign-in, then press Add account again.";
+        }
+        addError.textContent = reason;
         addError.hidden = false;
       }
     });
