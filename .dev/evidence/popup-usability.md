@@ -1,9 +1,9 @@
 ---
 version: 1
 work: popup-usability
-code: "fix/popup-usability@e94de2ef7b120f173d7b12ed8b16642d94d70fad plus dirty: .dev/evidence/popup-usability-review.md, .dev/evidence/popup-usability.md, .dev/project.md, .dev/work.yaml, DESIGN.md, docs/acceptance/2026-09-30-popup-usability.md, docs/ui-usability/README.md, docs/ui-usability/add-gmail-380.png, docs/ui-usability/error-480.png, docs/ui-usability/long-320.png, docs/ui-usability/populated-380.png, docs/ui-usability/populated-full.png, specs/001-popup-usability/analysis.md, specs/001-popup-usability/checklists/requirements.md, specs/001-popup-usability/plan.md, specs/001-popup-usability/review-assignment.md, specs/001-popup-usability/spec.md, specs/001-popup-usability/tasks.md, src/popup/links.js, src/popup/popup.css, src/popup/popup.html, src/popup/popup.js, tests/popup-links.test.js, tests/popup-ui.test.js, tests/visual/popup-fixture.js"
+code: "fix/popup-usability@95650aaddc38d0d79fcb707b29c8143e38636f50 plus dirty: .dev/evidence/popup-usability.md, .dev/project.md, .dev/work.yaml, docs/acceptance/2026-09-30-popup-usability.md"
 requirements: "specs/001-popup-usability/spec.md; specs/001-popup-usability/plan.md; .dev/verification.yaml v2"
-recorded_at: "2026-09-30T08:34:25Z"
+recorded_at: "2026-09-30T08:42:16Z"
 gates:
   automated-tests:
     status: passed
@@ -11,9 +11,9 @@ gates:
     exit_code: 0
     summary: "160 tests, 34 syntax checks and identity validation passed; Node 24.21.0 and Node 26 runs, fresh Node24/26 runs after review R1 recovery repair."
   human-gate:
-    status: not-run
+    status: passed
     report: "docs/acceptance/2026-09-30-popup-usability.md"
-    summary: "Owner real-extension acceptance pending. T3 fixture checks are synthetic, not this human gate."
+    summary: "Owner reported all affected-path acceptance passed on 95650aa; checked report retained. Browser/version not restated."
   implementation-review:
     status: passed
     report: ".dev/evidence/popup-usability-review.md"
@@ -68,9 +68,13 @@ notifications, credentials and storage schema are unchanged.
 
 ## Recovery / next
 
-Initial independent review R1 repaired in appended T012; refreshed review passed. Open implementation PR for owner acceptance. Owner affected-path checks
-must pass before merge; T010 passed; T011 remains open. Do not mark done until
-required acceptance, canonical closeout and independent completion audit.
+Initial independent review R1 repaired in appended T012; refreshed review passed.
+Owner acceptance on 95650aa is now passed. PR #11 is open with passing CI;
+implementation matches the accepted/reviewed candidate. This record update
+changes only acceptance/state documentation and the future UI approval preference.
+T011 remains open because merge, canonical closeout and independent completion
+audit remain pending. Project policy includes merge to main in Definition of
+Done; keep this item active until those requirements are fulfilled.
 Gmail stale Open remains queued separately. Broader product context capture
 with Impeccable init can be considered before a later redesign/new surface.
 
