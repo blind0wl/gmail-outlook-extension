@@ -9,3 +9,16 @@ This repository is managed by ai-dev-system (Pi adapter, Phase 3).
 - Internal Spec Kit commands are the agent's responsibility. Do not ask the user to run them.
 - Do not load brainstorming, systematic-debugging, writing-plans, test-driven-development, requesting-code-review, subagent-driven-development, executing-plans, or using-superpowers in this repository. If you already loaded one, set it aside and follow the project skill instead.
 <!-- ai-dev-system:end -->
+
+## Engineering baseline
+
+- Development checks use Node 24 (`.nvmrc`) and `npm ci`.
+- Run `npm run verify` for JavaScript syntax checks plus all tests.
+- The unpacked extension loads directly from the repository root; no build
+  or development server is required. Setup and architecture are in README.md.
+- Keep the popup cache-only, provider access read-only, and diagnostics free
+  of mail content and credentials. Preserve per-account error isolation.
+- CI does not replace real-account Chrome acceptance. Record a new dated
+  acceptance result for each feature/bug candidate; do not reuse historical ticks.
+- The v1 product spec owns scope; the original plan contains historical steps.
+  Capture discrepancies explicitly rather than silently changing requirements.
