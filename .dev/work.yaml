@@ -1,5 +1,5 @@
 version: 1
-focus: popup-usability
+focus: popup-workspace
 work:
   extension-v1:
     kind: feature
@@ -53,3 +53,24 @@ work:
     ref: "https://github.com/blind0wl/gmail-outlook-extension/pull/11"
     phase: closeout
     checkpoint: ".dev/evidence/popup-usability.md"
+  popup-workspace:
+    kind: feature
+    title: "Per-account popup workspace, separate Settings and selectable themes"
+    status: active
+    ref: "specs/002-popup-workspace/spec.md"
+    phase: implementation
+    checkpoint: ".dev/evidence/popup-workspace.md"
+  gmail-api:
+    kind: feature
+    title: "Account-bound Gmail API authorization and read migration"
+    status: queued
+    ref: "docs/design/popup-directions/capabilities.md"
+    phase: discovery
+    depends_on: [popup-workspace]
+  mailbox-actions:
+    kind: feature
+    title: "Provider-backed message read/unread, Trash and Undo"
+    status: queued
+    ref: "docs/design/popup-directions/capabilities.md"
+    phase: discovery
+    depends_on: [gmail-api]
