@@ -5,6 +5,7 @@
 // Per-account error rows (stale, offline, needs sign in) read the worker's
 // "accountState" flags and recover via a "sign-in" runtime message.
 
+import { normalizeAccount, accountKey } from "../store/accounts.js";
 import { threadUrl } from "./links.js";
 import { accountStatusLabel } from "../notify/notify.js";
 import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
@@ -57,11 +58,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     }
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
-  }
-
-  function avatarLetter(from) {
-    var s = String(from || "").trim();
-    return s ? s.charAt(0).toUpperCase() : "?";
   }
 
   var expanded = new Set();
@@ -153,7 +149,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function renderHeader() {
-    var count = items.filter(isUnread).length;
+    var keys = new Set(configuredAccounts.map(accountKey));
+    var count = items.filter(function (item) { return keys.has(accountKey(item)) && isUnread(item); }).length;
     var el = document.getElementById("unread-count");
     el.textContent = count > 0 ? "(" + count + ")" : "";
   }
@@ -172,108 +169,162 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var active = document.activeElement;
     var focusedKey = active?.closest?.(".card")?.getAttribute("data-key");
     var focusedOpen = active?.classList?.contains("card-open");
+    var focusedRecovery = active?.closest?.(".status-signin")?.dataset.accountKey;
+    var hadListFocus = list.contains(active);
+    var recoveryFocus = null;
     while (list.firstChild) list.removeChild(list.firstChild);
     var shown = visibleItems();
-    empty.hidden = shown.length !== 0;
-
-    shown.forEach(function (item, index) {
-      var read = !isUnread(item);
-
-      var card = document.createElement("li");
-      card.className = "card" + (read ? " read" : "");
-      card.setAttribute("data-key", item.key);
-      var summary = document.createElement("button");
-      summary.type = "button";
-      summary.className = "card-summary";
-      summary.setAttribute("aria-label", "Read: " + (item.subject || "(no subject)") + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
-      summary.setAttribute("aria-expanded", String(expanded.has(item.key)));
-      summary.setAttribute("aria-controls", "mail-preview-" + index);
-
-      if (!read) {
-        var dot = document.createElement("span");
-        dot.className = "unread-dot";
-        dot.setAttribute("role", "img");
-        dot.setAttribute("aria-label", "Unread");
-        card.appendChild(dot);
-      }
-
-      var top = document.createElement("span");
-      top.className = "card-top";
-
-      var account = document.createElement("span");
-      account.className = "card-account";
+    var sections = configuredAccounts.filter(function (acct) { return filter === "all" || acct.provider === filter; });
+    empty.hidden = sections.length !== 0;
+    empty.textContent = configuredAccounts.length ? "No accounts match this filter." : "Connect an account in Settings to see your mail.";
+    var index = 0;
+    sections.forEach(function (acct) {
+      var group = document.createElement("li");
+      group.className = "account-section";
+      group.dataset.accountKey = accountKey(acct);
+      var heading = document.createElement("header");
+      heading.className = "account-heading";
+      var top = document.createElement("div");
+      top.className = "account-heading-top";
       var badge = document.createElement("span");
-      badge.className = "badge " + (item.provider === "outlook" ? "badge-outlook" : "badge-gmail");
-      badge.textContent = item.provider === "outlook" ? "Outlook" : "Gmail";
-      account.appendChild(badge);
-      account.appendChild(document.createTextNode(item.account || ""));
-      top.appendChild(account);
-
-      var time = document.createElement("span");
-      time.className = "card-time";
-      time.textContent = formatTime(item.date);
-      top.appendChild(time);
-      summary.appendChild(top);
-
-      var main = document.createElement("span");
-      main.className = "card-main";
-
-      var avatar = document.createElement("span");
-      avatar.className = "avatar";
-      avatar.setAttribute("aria-hidden", "true");
-      avatar.textContent = avatarLetter(item.from);
-      main.appendChild(avatar);
-
-      var text = document.createElement("span");
-      text.className = "card-text";
-
-      var subject = document.createElement("span");
-      subject.className = "card-subject";
-      subject.textContent = item.subject || "(no subject)";
-      text.appendChild(subject);
-
-      var snippet = document.createElement("span");
-      snippet.className = "card-snippet";
-      snippet.textContent = item.snippet || "";
-      text.appendChild(snippet);
-
-      var open = document.createElement("button");
-      open.type = "button";
-      open.className = "card-open";
-      open.textContent = "Open";
-      open.setAttribute("aria-label", "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account);
-      open.addEventListener("click", function (event) {
-        event.stopPropagation();
-        markRead(item.key);
-        openUrl(threadUrl(item));
-      });
-      main.appendChild(text);
-      summary.appendChild(main);
-      card.append(summary, open);
-
-      var preview = document.createElement("div");
-      preview.className = "card-preview";
-      preview.id = "mail-preview-" + index;
-      preview.hidden = !expanded.has(item.key);
-      var fullSubject = document.createElement("p");
-      fullSubject.textContent = item.subject || "(no subject)";
-      var fullSnippet = document.createElement("p");
-      fullSnippet.textContent = item.snippet || "";
-      preview.append(fullSubject, fullSnippet);
-      card.appendChild(preview);
-      function selectCard() {
-        expanded.add(item.key);
-        preview.hidden = false;
-        summary.setAttribute("aria-expanded", "true");
-        card.classList.add("read");
-        card.querySelector(".unread-dot")?.remove();
-        markRead(item.key);
+      badge.className = "badge";
+      badge.textContent = acct.provider === "outlook" ? "Outlook" : "Gmail";
+      var mail = shown.filter(function (item) { return accountKey(item) === accountKey(acct); });
+      var count = document.createElement("span");
+      count.className = "account-count";
+      count.textContent = mail.filter(isUnread).length + " unread";
+      top.append(badge, count);
+      var address = document.createElement("h2");
+      address.textContent = acct.account;
+      address.id = "account-heading-" + index++;
+      group.setAttribute("aria-labelledby", address.id);
+      heading.append(top, address);
+      group.appendChild(heading);
+      var state = { ...(accountState[accountKey(acct)] || {}) };
+      if (typeof navigator !== "undefined" && navigator.onLine === false && !state.needsSignIn) state.offline = true;
+      var status = acct.enabled === false ? "Paused" : accountStatusLabel(acct, state);
+      if (status) {
+        var note = document.createElement("div");
+        note.className = "account-note";
+        var label = document.createElement("span");
+        label.textContent = status;
+        note.appendChild(label);
+        if (state.needsSignIn && acct.enabled !== false) {
+          var recovery = document.createElement("button");
+          recovery.type = "button";
+          recovery.className = "status-signin";
+          recovery.dataset.accountKey = accountKey(acct);
+          recovery.textContent = "Manage sign-in";
+          recovery.setAttribute("aria-label", "Manage sign-in for " + acct.account);
+          recovery.addEventListener("click", function () {
+            showView(true);
+            var row = [...document.querySelectorAll("#account-controls li")].find(function (row) { return row.dataset.accountKey === accountKey(acct); });
+            row?.querySelector('[data-action="sign-in"]')?.focus();
+          });
+          note.appendChild(recovery);
+          if (focusedRecovery === accountKey(acct)) recoveryFocus = recovery;
+        }
+        group.appendChild(note);
       }
-      summary.addEventListener("click", selectCard);
+      var messageList = document.createElement("ul");
+      messageList.className = "account-mail";
+      group.appendChild(messageList);
+      list.appendChild(group);
+      if (!mail.length) {
+        var noMail = document.createElement("p");
+        noMail.className = "account-empty";
+        noMail.textContent = "No messages to show.";
+        group.appendChild(noMail);
+      }
+      mail.forEach(function (item) {
+        var read = !isUnread(item);
 
-      list.appendChild(card);
-      if (focusedKey === item.key) (focusedOpen ? open : summary).focus();
+        var card = document.createElement("li");
+        card.className = "card" + (read ? " read" : "");
+        card.setAttribute("data-key", item.key);
+        var summary = document.createElement("button");
+        summary.type = "button";
+        summary.className = "card-summary";
+        summary.setAttribute("aria-label", "Preview " + (item.subject || "(no subject)") + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
+        summary.setAttribute("aria-expanded", String(expanded.has(item.key)));
+        summary.setAttribute("aria-controls", "mail-preview-" + index);
+
+        if (!read) {
+          var dot = document.createElement("span");
+          dot.className = "unread-dot";
+          dot.setAttribute("role", "img");
+          dot.setAttribute("aria-label", "Unread");
+          card.appendChild(dot);
+        }
+
+        var top = document.createElement("span");
+        top.className = "card-top";
+
+        var sender = document.createElement("span");
+        sender.className = "card-sender";
+        sender.textContent = item.from || "Unknown sender";
+        top.appendChild(sender);
+
+        var time = document.createElement("span");
+        time.className = "card-time";
+        time.textContent = formatTime(item.date);
+        top.appendChild(time);
+        summary.appendChild(top);
+
+        var main = document.createElement("span");
+        main.className = "card-main";
+
+        var text = document.createElement("span");
+        text.className = "card-text";
+
+        var subject = document.createElement("span");
+        subject.className = "card-subject";
+        subject.textContent = item.subject || "(no subject)";
+        text.appendChild(subject);
+
+        var snippet = document.createElement("span");
+        snippet.className = "card-snippet";
+        snippet.textContent = item.snippet || "";
+        text.appendChild(snippet);
+
+        var open = document.createElement("button");
+        open.type = "button";
+        open.className = "card-open";
+        open.textContent = "Open";
+        open.setAttribute("aria-label", "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account);
+        open.addEventListener("click", function (event) {
+          event.stopPropagation();
+          markRead(item.key);
+          openUrl(threadUrl(item));
+        });
+        main.appendChild(text);
+        summary.appendChild(main);
+        card.append(summary, open);
+
+        var preview = document.createElement("div");
+        preview.className = "card-preview";
+        preview.id = "mail-preview-" + index++;
+        preview.hidden = !expanded.has(item.key);
+        var fullSubject = document.createElement("p");
+        fullSubject.textContent = item.subject || "(no subject)";
+        var fullSnippet = document.createElement("p");
+        fullSnippet.textContent = item.snippet || "";
+        preview.append(fullSubject, fullSnippet);
+        card.appendChild(preview);
+        function selectCard() {
+          if (expanded.has(item.key)) expanded.delete(item.key);
+          else expanded.add(item.key);
+          preview.hidden = !expanded.has(item.key);
+          summary.setAttribute("aria-expanded", String(!preview.hidden));
+        }
+        summary.addEventListener("click", selectCard);
+
+        messageList.appendChild(card);
+        if (focusedKey === item.key) (focusedOpen ? open : summary).focus();
+      });
     });
+    if (recoveryFocus) recoveryFocus.focus();
+    else if (hadListFocus && !list.contains(document.activeElement)) document.getElementById("refresh-mail").focus();
   }
 
   // Sound settings surface. Master mute plus per-account chime toggles
@@ -333,9 +384,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
     Promise.resolve(store.get(ACCOUNTS_KEY)).then(function (data) {
       var list = data ? data[ACCOUNTS_KEY] : null;
-      configuredAccounts = Array.isArray(list) ? list : [];
-      renderAccounts();
-      renderSound();
+      configuredAccounts = Array.isArray(list) ? list.map(normalizeAccount) : [];
+      render();
     });
   }
 
@@ -351,83 +401,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     renderHeader();
     renderPills();
     renderList();
-    renderStatus();
     renderSound();
   }
 
-  // Union of configured accounts and cached-mail accounts, so an account
-  // with an error but no cached messages still gets its status row.
-  function statusAccounts() {
-    var seen = {};
-    var out = [];
-    function push(provider, account) {
-      var key = provider + ":" + String(account || "").toLowerCase();
-      if (seen[key]) return;
-      seen[key] = true;
-      out.push({ provider: provider, account: account || "", key: key });
-    }
-    var i;
-    for (i = 0; i < configuredAccounts.length; i++) {
-      push(configuredAccounts[i].provider, configuredAccounts[i].account || configuredAccounts[i].address);
-    }
-    for (i = 0; i < items.length; i++) {
-      push(items[i].provider, items[i].account);
-    }
-    return out;
-  }
-
   function renderStatus() {
-    var section = document.getElementById("account-status");
-    var list = document.getElementById("account-status-list");
-    if (!section || !list) return;
-    var focused = document.activeElement?.closest?.(".status-signin");
-    var focusedAccount = focused?.dataset.accountKey;
-    var nextFocus = null;
-    while (list.firstChild) list.removeChild(list.firstChild);
-    var offlineNow = typeof navigator !== "undefined" && navigator.onLine === false;
-    var rows = 0;
-    statusAccounts().forEach(function (entry) {
-      var stored = accountState[entry.key] || {};
-      var state = {};
-      for (var k in stored) state[k] = stored[k];
-      if (offlineNow && !stored.needsSignIn) state.offline = true;
-      var label = accountStatusLabel(entry, state);
-      if (!label) return;
-      rows += 1;
-      var li = document.createElement("li");
-      li.className = "status-row";
-      li.appendChild(document.createTextNode(label));
-      if (state.needsSignIn) {
-        (function (provider, account) {
-          var btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "status-signin";
-          btn.dataset.accountKey = provider + ":" + account;
-          btn.dataset.action = "sign-in";
-          var pending = pendingAccountActions.has(btn.dataset.accountKey + ":sign-in");
-          btn.setAttribute("aria-disabled", String(pending));
-          btn.textContent = pending ? "Signing in\u2026" : "Sign in";
-          btn.setAttribute("aria-label", "Sign in " + account);
-          btn.addEventListener("click", function () {
-            void signInAccount(provider, account, btn);
-          });
-          li.appendChild(btn);
-          if (btn.dataset.accountKey === focusedAccount) nextFocus = btn;
-        })(entry.provider, entry.account);
-      }
-      list.appendChild(li);
-    });
-    section.hidden = rows === 0;
-    if (nextFocus) nextFocus.focus();
-    else if (focused) document.getElementById("add-gmail").focus();
-  }
-
-  // Interactive recovery for one account. The worker runs the visible auth
-  // flow and repolls that account; storage-only here, no network calls.
-  async function signInAccount(provider, account, button) {
-    if (pendingAccountActions.has(provider + ":" + account + ":sign-in")) return;
-    await sendAction({ type: "sign-in", provider: provider, account: account }, button);
-    loadStatus();
+    renderList();
   }
 
   function loadStatus() {
@@ -594,10 +572,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           }
           if (changes[ACCOUNTS_KEY]) {
             var anext = changes[ACCOUNTS_KEY].newValue;
-            configuredAccounts = Array.isArray(anext) ? anext : [];
-            renderAccounts();
-            renderSound();
-            renderStatus();
+            configuredAccounts = Array.isArray(anext) ? anext.map(normalizeAccount) : [];
+            render();
           }
           if (changes[ACCOUNT_STATE_KEY]) {
             var stnext = changes[ACCOUNT_STATE_KEY].newValue;

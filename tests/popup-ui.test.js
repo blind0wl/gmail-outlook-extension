@@ -64,7 +64,7 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
     cached.subject + cached.snippet,
   );
   assert.equal(writes, 0);
-  assert.equal(messages[0].type, "mark-read");
+  assert.equal(messages.length, 0, "preview does not mark read");
   storageListener({ mailCache: { newValue: [cached] } }, "local");
   assert.equal(document.activeElement, document.querySelector(".card-summary"));
   assert.equal(document.activeElement.getAttribute("aria-expanded"), "true");
@@ -152,22 +152,24 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   document.querySelector(".status-signin").focus();
   storageListener({ mailCache: { newValue: [cached] } }, "local");
   assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  const beforeRecovery = pendingRequests;
   document.activeElement.click();
-  storageListener({ accountState: { newValue: recoveryState } }, "local");
-  assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  assert.equal(document.getElementById("settings-view").hidden, false);
+  assert.equal(document.activeElement.dataset.action, "sign-in");
+  assert.equal(pendingRequests, beforeRecovery, "Mail recovery navigates without starting auth");
+  document.activeElement.click();
+  storageListener({ mailCache: { newValue: [cached] } }, "local");
+  assert.equal(document.activeElement.dataset.action, "sign-in");
   assert.equal(document.activeElement.getAttribute("aria-disabled"), "true");
-  assert.equal(document.activeElement.textContent, "Signing in…");
   document.activeElement.click();
-  document.querySelector('#account-controls [data-action="sign-in"]').click();
-  assert.equal(pendingRequests, 2, "recovery and account controls share one pending sign-in");
+  assert.equal(pendingRequests, beforeRecovery + 1, "Settings sign-in cannot be repeated while pending");
   data.accountState = recoveryState;
   finishAction({ ok: true });
-  await tick();
-  await tick();
-  assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  await tick(); await tick();
+  assert.equal(document.activeElement.dataset.action, "sign-in");
   assert.equal(document.activeElement.getAttribute("aria-disabled"), "false");
-  storageListener({ accountState: { newValue: {} } }, "local");
-  assert.equal(document.activeElement, document.getElementById("add-gmail"), "removed recovery has a surviving focus destination");
+  storageListener({ accounts: { newValue: [] } }, "local");
+  assert.equal(document.activeElement, document.getElementById("add-gmail"), "removed account has a surviving focus destination");
 });
 test("notification is silent so mute governs all extension sound", async () => {
   const { sendNotification } =
@@ -252,4 +254,55 @@ test("workspace Settings isolates configuration and preserves Mail position and 
   opener.click();
   assert.equal(input.value, "draft@example.com");
   assert.equal(document.getElementById("add-account-form").hidden, false);
+});
+
+test("workspace groups same-provider accounts independently and keeps empty/status sections", async () => {
+  const work = { provider: "gmail", account: "work@example.com" };
+  const personal = { provider: "gmail", account: "personal@example.com" };
+  const outlook = { provider: "outlook", account: "outlook@example.com" };
+  const empty = { provider: "gmail", account: "empty@example.com", enabled: false };
+  const mail = (acct, id, date) => ({ ...acct, key: `${acct.provider}:${encodeURIComponent(acct.account)}:${id}`,
+    from: "Sender", subject: id, snippet: "Cached text", date, unread: true });
+  const now = Date.now();
+  const { document, messages, tabs, change } = await workspaceFixture({
+    accounts: [work, personal, outlook, empty],
+    mailCache: [mail(outlook, "outlook", now), mail(work, "old", now - 1000),
+      mail(personal, "personal", now), mail(work, "new", now),
+      mail({ provider: "gmail", account: "orphan@example.com" }, "orphan", now)],
+    accountState: { "outlook:outlook@example.com": { needsSignIn: true } },
+  });
+  const sections = [...document.querySelectorAll(".account-section")];
+  assert.deepEqual(sections.map(s => s.dataset.accountKey),
+    ["gmail:work@example.com", "gmail:personal@example.com", "outlook:outlook@example.com", "gmail:empty@example.com"]);
+  assert.deepEqual([...sections[0].querySelectorAll(".card-subject")].map(x => x.textContent), ["new", "old"]);
+  assert.equal(sections[1].querySelectorAll(".card").length, 1);
+  assert.equal(sections[2].querySelectorAll(".card").length, 1);
+  assert.match(sections[3].textContent, /Paused/);
+  assert.match(sections[3].textContent, /No messages/);
+  assert.equal(document.querySelector('[data-key*="orphan"]'), null);
+  const preview = sections[0].querySelector(".card-summary");
+  preview.focus(); preview.click();
+  assert.equal(messages.length, 0, "expanding only displays cached text");
+  assert.equal(sections[0].querySelector(".account-count").textContent, "2 unread");
+  preview.click();
+  assert.equal(preview.getAttribute("aria-expanded"), "false");
+  sections[0].querySelector(".card-open").click();
+  await tick();
+  assert.equal(messages.at(-1).type, "mark-read", "Open keeps existing local behavior");
+  assert.match(tabs[0].url, /authuser=work%40example.com/);
+  document.querySelector('[data-filter="outlook"]').click();
+  assert.equal(document.querySelectorAll(".account-section").length, 1);
+  const recovery = document.querySelector(".status-signin");
+  const before = messages.length;
+  recovery.click();
+  assert.equal(document.getElementById("settings-view").hidden, false);
+  assert.equal(document.activeElement.closest("li").dataset.accountKey, "outlook:outlook@example.com");
+  assert.equal(document.activeElement.dataset.action, "sign-in");
+  assert.equal(messages.length, before, "Mail recovery navigates; Settings starts sign-in explicitly");
+  document.getElementById("back-to-mail").click();
+  document.querySelector('[data-filter="all"]').click();
+  const remaining = document.querySelector('.card-summary');
+  remaining.focus();
+  change({ mailCache: { newValue: [] } });
+  assert.equal(document.activeElement, document.getElementById("refresh-mail"), "removed mail focus returns to Mail control");
 });

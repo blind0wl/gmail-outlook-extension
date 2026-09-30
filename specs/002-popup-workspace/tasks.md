@@ -25,10 +25,10 @@ then Back to Mail without losing scroll, focus or pending state.
 
 Goal: separate each configured account without changing links or provider transport.
 
-- [ ] T005 [US1] Write failing DOM cases in tests/popup-ui.test.js: two Gmail plus Outlook groups, stable configured order/newest-first messages, provider filters, empty/disabled/stale/signed-out accounts and excluded orphan cache. Covers FR-001/002/003, SC-001.
-- [ ] T006 [US1] Implement section headers, full addresses, cached unread counts and matching mail lists in src/popup/popup.js and popup.css; integrate existing status feedback and recovery-to-Settings focus. Depends T005 and T004; focused test passes.
-- [ ] T007 [US1] Write/update meaningful preview/Open behavior tests in tests/popup-ui.test.js, then make preview expand/collapse without mark-read in src/popup/popup.js. Keep existing Open route and local mark-read; retain stable message/action focus across refresh. Covers FR-005/007/010. Depends T006; test worker request absence for preview and correct account-specific Open.
-- [ ] T008 [US1] Verify long/missing metadata, live cache/account updates and focused/expanded-message removal using tests/popup-ui.test.js and src/popup/popup.js. Adopt a defined surviving-control focus fallback. Depends T007; run `npm test` checkpoint.
+- [x] T005 [US1] Write failing DOM cases in tests/popup-ui.test.js: two Gmail plus Outlook groups, stable configured order/newest-first messages, provider filters, empty/disabled/stale/signed-out accounts and excluded orphan cache. Covers FR-001/002/003, SC-001.
+- [x] T006 [US1] Implement section headers, full addresses, cached unread counts and matching mail lists in src/popup/popup.js and popup.css; integrate existing status feedback and recovery-to-Settings focus. Depends T005 and T004; focused test passes.
+- [x] T007 [US1] Write/update meaningful preview/Open behavior tests in tests/popup-ui.test.js, then make preview expand/collapse without mark-read in src/popup/popup.js. Keep existing Open route and local mark-read; retain stable message/action focus across refresh. Covers FR-005/007/010. Depends T006; test worker request absence for preview and correct account-specific Open.
+- [x] T008 [US1] Verify long/missing metadata, live cache/account updates and focused/expanded-message removal using tests/popup-ui.test.js and src/popup/popup.js. Adopt a defined surviving-control focus fallback. Depends T007; run `npm test` checkpoint.
 
 Independent test: identify 2/1/1 sample messages under three accounts, filter,
 preview without a read mutation, Open the exact account link and recover sign-in

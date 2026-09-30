@@ -72,3 +72,9 @@ Fresh baseline verify passed160 tests/34syntax/identity. Navigation DOM test fai
 for missing Mail/Settings shells before the change, then passed with existing
 lifecycle coverage (3 popup tests). Form drafts, pending account controls and
 sound workflow coverage remain intact. T001–T004 accepted; feature gates pending.
+
+Per-account grouping test failed with no account sections before implementation;
+then passed grouping/order/filter/status, orphan exclusion, preview-only toggle,
+existing Open link/local behavior and recovery-to-Settings checks. Old lifecycle
+assertions were updated for explicitly approved preview/recovery behavior, keeping
+focus and pending-action coverage. T005–T008 accepted; no provider code changed.
