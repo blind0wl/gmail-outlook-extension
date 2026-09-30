@@ -24,7 +24,10 @@ clearing extension credentials while preserving old cached mail.
 - [x] Open selects the requested Outlook message after sign-in and refresh,
       based on the owner's report.
 - [ ] Another Microsoft mailbox signed into the browser: not separately
-      reported in this acceptance.
+      accepted. Owner subsequently added a second Outlook account; sign-in
+      and cached mail passed, but Open reported "The message might have been
+      moved or deleted". The initial account's Open still works. This gate
+      failed and remains under investigation.
 
 The baseline's broader smoke report remains separate. This record does not
 claim a complete checklist rerun, stable extension identity, or canonical
