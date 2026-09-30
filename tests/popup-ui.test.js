@@ -186,3 +186,70 @@ test("notification is silent so mute governs all extension sound", async () => {
   );
   assert.equal(options.silent, true);
 });
+
+let popupFixtureId = 0;
+async function workspaceFixture(overrides = {}) {
+  const { window, document } = parseHTML(
+    readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
+  );
+  globalThis.document = document;
+  globalThis.window = window;
+  let focused;
+  window.HTMLElement.prototype.focus = function () { focused = this; };
+  Object.defineProperty(document, "activeElement", { get: () => focused });
+  const data = {
+    accounts: [{ provider: "gmail", account: "work@example.com" }],
+    mailCache: [{ key: "gmail:work%40example.com:1", provider: "gmail",
+      account: "work@example.com", subject: "Project review", unread: true,
+      snippet: "A cached preview", date: Date.now() }],
+    ...overrides,
+  };
+  const messages = [];
+  const tabs = [];
+  let listener;
+  globalThis.chrome = {
+    runtime: { sendMessage: async msg => { messages.push(msg); return { ok: true }; } },
+    tabs: { create: async tab => { tabs.push(tab); } },
+    storage: {
+      local: {
+        get: async key => ({ [key]: data[key] }),
+        set: async value => Object.assign(data, value),
+      },
+      onChanged: { addListener: callback => { listener = callback; } },
+    },
+  };
+  await import(`../src/popup/popup.js?workspace=${++popupFixtureId}`);
+  await tick(); await tick();
+  return { document, window, data, messages, tabs,
+    change: changes => listener(changes, "local") };
+}
+
+test("workspace Settings isolates configuration and preserves Mail position and account drafts", async () => {
+  const { document, change } = await workspaceFixture();
+  const mail = document.getElementById("mail-view");
+  const settings = document.getElementById("settings-view");
+  assert.ok(mail && settings, "Mail and Settings have independent view shells");
+  assert.equal(mail.hidden, false);
+  assert.equal(settings.hidden, true);
+  assert.equal(mail.querySelector("#add-gmail"), null);
+  mail.scrollTop = 143;
+  const opener = document.getElementById("open-settings");
+  opener.focus(); opener.click();
+  assert.equal(mail.hidden, true);
+  assert.equal(settings.hidden, false);
+  document.getElementById("add-gmail").click();
+  const input = document.getElementById("add-account-email");
+  input.value = "draft@example.com";
+  change({ mailCache: { newValue: [] } });
+  change({ accounts: { newValue: [{ provider: "gmail", account: "work@example.com" }] } });
+  assert.equal(input.value, "draft@example.com");
+  assert.equal(document.activeElement, input);
+  document.getElementById("back-to-mail").click();
+  assert.equal(settings.hidden, true);
+  assert.equal(mail.hidden, false);
+  assert.equal(mail.scrollTop, 143);
+  assert.equal(document.activeElement, opener);
+  opener.click();
+  assert.equal(input.value, "draft@example.com");
+  assert.equal(document.getElementById("add-account-form").hidden, false);
+});

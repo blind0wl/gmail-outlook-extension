@@ -354,3 +354,8 @@ input[type="checkbox"] { flex-shrink: 0; margin: 3px 0 0; }
     outline-color: Highlight;
   }
 }
+
+[hidden] { display: none !important; }
+.inbox-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#mail-tools { display: flex; gap: 6px; }
+#mail-view, #settings-view { overflow-y: auto; }

@@ -15,6 +15,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   var CACHE_KEY = "mailCache";
 
   var filter = "all";
+  var mailScroll = 0;
   var items = [];
   // Configured accounts from the same storage key the worker polls
   // (`accounts`), so per-account chime toggles exist even with an empty
@@ -459,7 +460,23 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     });
   }
 
+  function showView(settings) {
+    var mail = document.getElementById("mail-view");
+    var view = document.getElementById("settings-view");
+    if (settings && !mail.hidden) mailScroll = mail.scrollTop;
+    mail.hidden = settings;
+    view.hidden = !settings;
+    document.getElementById("mail-tools").hidden = settings;
+    document.getElementById("settings-tools").hidden = !settings;
+    document.getElementById("workspace-title").textContent = settings ? "Settings" : "Inbox";
+    document.getElementById("unread-count").hidden = settings;
+    if (!settings) mail.scrollTop = mailScroll;
+    document.getElementById(settings ? "back-to-mail" : "open-settings").focus();
+  }
+
   function init() {
+    document.getElementById("open-settings").addEventListener("click", function () { showView(true); });
+    document.getElementById("back-to-mail").addEventListener("click", function () { showView(false); });
     var focusedToggle = document.getElementById("skip-focused");
     // Suppression is opt-in: unset means alerts always fire, even with
     // a provider tab focused.
