@@ -105,3 +105,12 @@ The owner ran the hint experiment and reported it opened the initial account's
 message while Outlook web was on the second account. The minimal repair now
 adds that account hint to validated outlook.live.com provider links. Real
 popup acceptance in both directions is still pending the final candidate.
+
+## Final popup acceptance
+
+The owner tested `dfbdda5` after reloading, using Open from each Outlook account
+without manually switching the browser's mailbox, and reported "test passed".
+The final real-account gate for the affected link behavior passes. See
+`docs/acceptance/2026-09-30-outlook-links.md`. Prior failures are preserved above
+as diagnosis history, not remaining link defects. Canonical writer closeout
+and merge remain separate from this owner acceptance result.
