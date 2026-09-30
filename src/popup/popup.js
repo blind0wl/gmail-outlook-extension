@@ -5,6 +5,7 @@
 // Per-account error rows (stale, offline, needs sign in) read the worker's
 // "accountState" flags and recover via a "sign-in" runtime message.
 
+import { THEME_KEY, DEFAULT_THEME, validTheme, loadTheme, saveTheme } from "./themes.js";
 import { normalizeAccount, accountKey } from "../store/accounts.js";
 import { threadUrl } from "./links.js";
 import { accountStatusLabel } from "../notify/notify.js";
@@ -17,6 +18,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   var filter = "all";
   var mailScroll = 0;
+  var themeWrites = 0;
+  var themeSelection = 0;
   var items = [];
   // Configured accounts from the same storage key the worker polls
   // (`accounts`), so per-account chime toggles exist even with an empty
@@ -80,10 +83,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     try {
       var result = await chrome.runtime.sendMessage(message);
       var code = result?.code ? " (" + result.code + ")" : "";
-      status.textContent = result?.ok ? "" : "Account action failed" + code + ". Check the account details and try Sign in.";
+      status.textContent = result?.ok ? "" : message.type === "refresh" ? "Could not refresh mail. Try Refresh again." : "Account action failed" + code + ". Check the account details and try Sign in.";
       return result;
     } catch {
-      status.textContent = "Account action failed. Try again.";
+      status.textContent = message.type === "refresh" ? "Could not refresh mail. Try Refresh again." : "Account action failed. Try again.";
     } finally {
       if (actionKey) {
         pendingAccountActions.delete(actionKey);
@@ -116,7 +119,12 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       name.textContent = acct.account;
       var actions = document.createElement("div");
       actions.className = "account-row-actions";
-      row.append(name, actions);
+      var identity = document.createElement("small");
+      identity.className = "account-detail";
+      var stateLabel = accountStatusLabel(acct, accountState[accountKey(acct)] || {});
+      identity.textContent = (acct.provider === "outlook" ? "Outlook" : "Gmail") +
+        (acct.enabled === false ? " · Paused" : stateLabel ? " · " + stateLabel.slice(acct.account.length + 3) : "");
+      row.append(name, identity, actions);
       [["Sign in", "sign-in"], ["Sign out", "sign-out"], ["Remove", "remove-account"]].forEach(function (entry) {
         var button = document.createElement("button");
         button.type = "button";
@@ -124,7 +132,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         // Keep pending controls focusable through cache updates; sendAction
         // blocks repeated activation while aria-disabled exposes busy state.
         button.setAttribute("aria-disabled", String(pendingAccountActions.has(row.dataset.accountKey + ":" + entry[1])));
-        button.textContent = entry[0];
+        button.textContent = pendingAccountActions.has(row.dataset.accountKey + ":" + entry[1])
+          ? entry[1] === "sign-in" ? "Signing in…" : "Working…" : entry[0];
         button.setAttribute("aria-label", entry[0] + " " + acct.account);
         button.addEventListener("click", function () {
           void sendAction({type: entry[1], provider: acct.provider, account: acct.account}, button);
@@ -405,6 +414,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function renderStatus() {
+    renderAccounts();
     renderList();
   }
 
@@ -452,7 +462,43 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     document.getElementById(settings ? "back-to-mail" : "open-settings").focus();
   }
 
+  function applyTheme(theme) {
+    var selected = validTheme(theme);
+    document.documentElement.dataset.theme = selected;
+    document.querySelectorAll('[name="popup-theme"]').forEach(function (radio) { radio.checked = radio.value === selected; });
+  }
+
+  function initThemes() {
+    var message = document.getElementById("theme-message");
+    var timer;
+    var deadline = new Promise(function (_, reject) { timer = setTimeout(function () { reject(new Error("Theme read timed out")); }, 1500); });
+    Promise.race([loadTheme(), deadline]).then(applyTheme).catch(function () {
+      applyTheme(DEFAULT_THEME);
+      message.textContent = "Could not load your theme. Midnight desk is available; try choosing a theme again.";
+    }).finally(function () {
+      clearTimeout(timer);
+      document.body.removeAttribute("data-theme-loading");
+    });
+    document.querySelectorAll('[name="popup-theme"]').forEach(function (radio) {
+      radio.addEventListener("change", async function () {
+        if (!radio.checked) return;
+        var selection = ++themeSelection;
+        applyTheme(radio.value);
+        themeWrites++;
+        try {
+          await saveTheme(radio.value);
+          if (selection === themeSelection) message.textContent = "";
+        } catch {
+          if (selection === themeSelection) message.textContent = "Your theme could not be saved. Try choosing it again.";
+        } finally {
+          themeWrites--;
+        }
+      });
+    });
+  }
+
   function init() {
+    initThemes();
     document.getElementById("open-settings").addEventListener("click", function () { showView(true); });
     document.getElementById("back-to-mail").addEventListener("click", function () { showView(false); });
     var focusedToggle = document.getElementById("skip-focused");
@@ -558,6 +604,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
         if (area === "local" && changes) {
+          if (changes[THEME_KEY] && !themeWrites) applyTheme(changes[THEME_KEY].newValue);
           if (changes[CACHE_KEY]) {
             var next = changes[CACHE_KEY].newValue;
             items = Array.isArray(next) ? next : [];

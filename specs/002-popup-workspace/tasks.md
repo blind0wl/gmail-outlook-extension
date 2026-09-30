@@ -6,7 +6,7 @@ increments; feature completion still requires the declared gates. Requirements c
 
 ## Phase 1 — Setup and foundation
 
-- [x] T001 Prepare a feature branch preserving approved preparation files; persist the Impeccable direction contract for src/popup/ via surface-brief, and run fresh `npm run verify` baseline. Inspect explicit intended paths; exclude .impeccable/questions and local workflow records. Record in .dev/evidence/popup-workspace.md. No new design interview or global tooling changes.
+- [x] T001 Prepare a feature branch preserving approved preparation files; persist the Impeccable direction contract for src/popup/ via surface-brief, and run fresh `npm run verify` baseline. Inspect explicit intended paths; exclude .impeccable/questions and local workflow records. Record implementation verification in docs/ui-workspace/. No new design interview or global tooling changes.
 
 No new framework, dependency, authentication or provider setup prerequisite.
 
@@ -38,10 +38,10 @@ through Settings. No server-write icons are exposed in this stage.
 
 Goal: approved appearance choices apply consistently and survive reopen/reload.
 
-- [ ] T009 [US3] Write failing persistence tests in tests/popup-themes.test.js for valid/missing/invalid IDs, failed reads/writes and rapid serialized choices. Covers FR-006/009, SC-003. Verify with `node --test tests/popup-themes.test.js`.
-- [ ] T010 [US3] Add src/popup/themes.js validation/load/save and integrate root theme application plus Settings native radios in popup.js, popup.html and popup.css. Copy corrected approved palette roles, use Midnight fallback, show sanitized save error and serialize preference writes. Depends T009/T004; focused tests pass.
-- [ ] T011 [US3] Extend tests/popup-ui.test.js for immediate palette choice, unchanged focused radio/form input/expanded mail, storage updates and reopen. Adjust popup.js only for failed cases. Covers FR-006/007/009 and SC-003; no full popup rerender solely to apply a theme. Depends T010.
-- [ ] T012 [US3] Complete all existing component/state styling in src/popup/popup.css and popup.html: normal-case system text, pending/error/empty forms, native control contrast and focus/target sizes in each theme. Preserve keyboard semantics and wrap. Depends T011; run `npm run verify` checkpoint.
+- [x] T009 [US3] Write failing persistence tests in tests/popup-themes.test.js for valid/missing/invalid IDs, failed reads/writes and rapid serialized choices. Covers FR-006/009, SC-003. Verify with `node --test tests/popup-themes.test.js`.
+- [x] T010 [US3] Add src/popup/themes.js validation/load/save and integrate root theme application plus Settings native radios in popup.js, popup.html and popup.css. Copy corrected approved palette roles, use Midnight fallback, show sanitized save error and serialize preference writes. Depends T009/T004; focused tests pass.
+- [x] T011 [US3] Extend tests/popup-ui.test.js for immediate palette choice, unchanged focused radio/form input/expanded mail, storage updates and reopen. Adjust popup.js only for failed cases. Covers FR-006/007/009 and SC-003; no full popup rerender solely to apply a theme. Depends T010.
+- [x] T012 [US3] Complete all existing component/state styling in src/popup/popup.css and popup.html: normal-case system text, pending/error/empty forms, native control contrast and focus/target sizes in each theme. Preserve keyboard semantics and wrap. Depends T011; run `npm run verify` checkpoint.
 
 Independent test: keyboard-select each theme, reopen/reload, simulate storage
 failure and use every Settings section without a focus/draft reset.
@@ -53,11 +53,11 @@ failure and use every Settings section without a focus/draft reset.
 - [ ] T015 Extract the implemented design through Impeccable's finish documentation workflow into DESIGN.md/sidecar; update README.md, tests/popup-checklist.md and docs/pr-checklist.md for the actual stage. Keep historical baseline/proposal provenance, describe preview-only plus existing Open behavior, and exclude future action buttons. Refresh affected review evidence if documentation reveals a mismatch. Depends T014.
 - [ ] T016 Run final `npm run verify` and curate explicit intended changes; preserve tests, stable extension ID and no provider/scope changes. Inspect complete diff, update candidate-bound .dev/evidence/popup-workspace.md with actual results and current hashes. No old test/preview pass substitutes. Depends T015.
 - [ ] T017 Prepare the focused implementation PR and register its URL with T3; ask owner for affected-path real-account Chromium acceptance on the exact verified revision, recording browser/revision in docs/acceptance/. No automatic merge. Covers SC-001–SC-005. Depends T016.
-Completion procedure after T017: perform canonical pre-commit closeout and independent candidate-bound completion audit; fix findings/reverify/renew acceptance as applicable, then reconcile tasks/state and permitted completion commit. Done/merge only with required current evidence and policy. This is a lifecycle barrier, not a task that must check itself before its own validation. No unchecked required gate may be waived.
+Completion after T017: record owner acceptance against the tested revision and merge through the reviewed PR. Addy and Impeccable govern review and verification; the retired ai-dev-system closeout/index policy no longer applies.
 
 ## Dependencies and execution order
 
-T001 → T002–T004 → T005–T008 → T009–T012 → T013–T017 and closeout. Each
+T001 → T002–T004 → T005–T008 → T009–T012 → T013–T017 and owner acceptance. Each
 behavior slice uses red/green verification before its checkpoint. US2 runs first
 because both other stories share navigation/form preservation; each completed
 story can be demonstrated independently on the same existing provider reads.
@@ -82,7 +82,7 @@ loaded and independence is established; this plan does not dispatch workers.
 | SC-002 | T002–004/013/017 |
 | SC-003 | T009–011/013/017 |
 | SC-004 | T012–014/017 |
-| SC-005 | T014–017 and closeout |
+| SC-005 | T014–017 and owner acceptance |
 
 ## Implementation strategy
 

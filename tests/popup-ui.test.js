@@ -306,3 +306,52 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
   change({ mailCache: { newValue: [] } });
   assert.equal(document.activeElement, document.getElementById("refresh-mail"), "removed mail focus returns to Mail control");
 });
+
+test("workspace themes persist without replacing focused controls or draft form input", async () => {
+  const { document, window, data, change } = await workspaceFixture({ popupTheme: "slate" });
+  assert.equal(document.documentElement.dataset.theme, "slate");
+  document.getElementById("open-settings").click();
+  document.getElementById("add-gmail").click();
+  const draft = document.getElementById("add-account-email");
+  draft.value = "unfinished@example.com";
+  const signal = document.querySelector('input[name="popup-theme"][value="signal"]');
+  signal.focus(); signal.checked = true;
+  signal.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await tick();
+  assert.equal(document.documentElement.dataset.theme, "signal");
+  assert.equal(document.activeElement, signal);
+  assert.equal(draft.value, "unfinished@example.com");
+  assert.equal(data.popupTheme, "signal");
+  change({ popupTheme: { newValue: "slate" } });
+  assert.equal(document.documentElement.dataset.theme, "slate");
+  assert.equal(document.activeElement, signal, "external preference update preserves focus");
+  const next = await workspaceFixture({ popupTheme: data.popupTheme });
+  assert.equal(next.document.documentElement.dataset.theme, "signal", "reopen loads saved choice");
+});
+
+test("workspace failed theme save reports recovery while retaining usable selected appearance", async () => {
+  const { document, window } = await workspaceFixture();
+  document.getElementById("open-settings").click();
+  chrome.storage.local.set = async () => { throw new Error("private storage details"); };
+  const slate = document.querySelector('input[name="popup-theme"][value="slate"]');
+  assert.ok(slate, "Settings includes native theme choices");
+  slate.checked = true;
+  slate.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await tick(); await tick();
+  assert.equal(document.documentElement.dataset.theme, "slate");
+  assert.match(document.getElementById("theme-message").textContent, /could not be saved/i);
+  assert.equal(document.body.textContent.includes("private storage details"), false);
+  document.getElementById("back-to-mail").click();
+  assert.equal(document.getElementById("mail-view").hidden, false);
+});
+
+test("Mail refresh failures are announced outside the hidden Settings view", async () => {
+  const { document } = await workspaceFixture();
+  chrome.runtime.sendMessage = async () => { throw new Error("private provider detail"); };
+  document.getElementById("refresh-mail").click();
+  await tick();
+  const status = document.getElementById("lifecycle-message");
+  assert.ok(!status.closest("#settings-view"), "Mail must expose refresh failure feedback");
+  assert.match(status.textContent, /refresh/i);
+  assert.equal(status.textContent.includes("private provider detail"), false);
+});

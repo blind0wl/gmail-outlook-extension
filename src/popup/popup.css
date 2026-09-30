@@ -1,372 +1,112 @@
-html {
-  width: 404px;
-  max-width: 100%;
+:root {
+  color-scheme: dark;
+  --bg: #15232f; --panel: #223443; --header: #293e50;
+  --text: #ecf2f8; --muted: #b1c3d4; --line: #3d5163;
+  --hover: #2f4659; --accent: #8ed3cc; --danger: #ffb0ad;
+  --tag: #344d62; --control: #2c4356; --on-accent: #15232f;
 }
-
+:root[data-theme="slate"] {
+  color-scheme: light;
+  --bg: #dce4ef; --panel: #f8faff; --header: #eaf0f8;
+  --text: #26384e; --muted: #596d85; --line: #dbe4ef;
+  --hover: #eaf0f8; --accent: #3a649b; --danger: #a43d48;
+  --tag: #dee8f6; --control: #eef3fa; --on-accent: #ffffff;
+}
+:root[data-theme="signal"] {
+  color-scheme: light;
+  --bg: #c8cdd1; --panel: #e6e8e9; --header: #d7dadd;
+  --text: #242a2e; --muted: #50585f; --line: #c2c9cf;
+  --hover: #d9dee1; --accent: #765014; --danger: #a33132;
+  --tag: #f2dfb4; --control: #d9dee1; --on-accent: #ffffff;
+}
+html { width: 404px; max-width: 100%; background: var(--bg); }
 *, *::before, *::after { box-sizing: border-box; }
-
-body {
-  font-family: system-ui, sans-serif;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  padding: 12px 12px 16px;
-  color: #111111;
-  background: #ffffff;
-}
-
-.inbox-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.inbox-header h1 {
-  font-size: 18px;
-  margin: 0;
-  color: #111111;
-}
-
-#unread-count {
-  font-weight: 400;
-  color: #111111;
-}
-
-.pills {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-button {
-  font: inherit;
-  font-weight: 600;
-  min-height: 32px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  background: #ffffff;
-  color: #111111;
-  border: 1px solid #5f6368;
-}
-
-button:hover:not(:disabled):not([aria-disabled="true"]) { background: #f8f9fa; }
-button:active:not(:disabled):not([aria-disabled="true"]) { background: #e8eaed; }
-button:disabled, button[aria-disabled="true"] { color: #5f6368; cursor: default; }
-button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible {
-  outline: 2px solid #1a73e8;
-  outline-offset: 2px;
-}
-input { font: inherit; accent-color: #1a73e8; }
-a { color: #0f6cbd; text-underline-offset: 3px; }
-::selection { color: #ffffff; background: #0f6cbd; }
-input[type="email"] { caret-color: #1a73e8; }
-input::placeholder { color: #5f6368; opacity: 1; }
-.pills { flex-wrap: wrap; }
-.pills button { padding-inline: 14px; }
-
-.pills button[aria-pressed="true"] {
-  background: #111111;
-  color: #ffffff;
-  border-color: #111111;
-}
-
-#inbox-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.card {
-  position: relative;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: #ffffff;
-}
-
-.card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.card-account {
-  font-size: 12px;
-  color: #202124;
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  border-radius: 4px;
-  padding: 1px 6px;
-  margin-right: 6px;
-  vertical-align: baseline;
-}
-
-.badge-gmail {
-  background: #111111;
-  color: #ffffff;
-}
-
-.badge-outlook {
-  background: #ffffff;
-  color: #0f6cbd;
-  border: 1px solid #0f6cbd;
-}
-
-.card-time {
-  font-size: 12px;
-  color: #5f6368;
-  flex-shrink: 0;
-}
-
-.card-main {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
-
-.avatar {
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #e8eaed;
-  color: #202124;
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.card-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.card-subject {
-  font-size: 14px;
-  font-weight: 600;
-  color: #111111;
-  margin: 0 0 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.card.read .card-subject {
-  font-weight: 400;
-}
-
-.card-snippet {
-  font-size: 13px;
-  color: #5f6368;
-  margin: 0 0 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.unread-dot {
-  position: absolute;
-  left: 3px;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #1a73e8;
-  transform: translateY(-50%);
-}
-
-.card.read .unread-dot {
-  display: none;
-}
-
-.card-summary {
-  display: block;
-  width: 100%;
-  min-height: 0;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  font-weight: 400;
-  text-align: left;
-}
-
-.card-subject, .card-snippet { display: block; }
-.card-open { margin-left: 42px; }
-
-#inbox-empty {
-  font-size: 13px;
-  color: #5f6368;
-  margin: 16px 0 0;
-}
-
-#account-status {
-  margin: 12px 0 0;
-}
-
-#account-status h2 {
-  font-size: 13px;
-  font-weight: 600;
-  color: #111111;
-  margin: 0 0 6px;
-}
-
-#account-status-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.status-row {
-  font-size: 13px;
-  color: #202124;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.status-signin, #add-account-submit {
-  flex-shrink: 0;
-  background: #111111;
-  color: #ffffff;
-  border-color: #111111;
-}
-.status-signin:hover:not(:disabled), #add-account-submit:hover:not(:disabled) {
-  background: #202124;
-}
-.status-signin:disabled, #add-account-submit:disabled {
-  background: #f8f9fa;
-  color: #5f6368;
-  border-color: #5f6368;
-}
-
-/* Expanded text and account identities must wrap, not widen the popup. */
-.card-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 0 0 42px; }
-.card-preview p { margin: 6px 0; }
-.account-settings { margin-bottom: 16px; }
-.account-settings > p { margin: 0 0 8px; color: #5f6368; }
-.account-actions, .account-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-#account-controls, #sound-accounts { list-style: none; margin: 8px 0 0; padding: 0; }
-#account-controls li { padding: 8px 0; border-top: 1px solid #dadce0; }
-.account-name { display: block; margin-bottom: 6px; overflow-wrap: anywhere; color: #202124; }
-#lifecycle-message { color: #8b1b1b; overflow-wrap: anywhere; }
-#lifecycle-message:empty { display: none; }
-
-.check-row, #sound-accounts label {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 32px;
-  padding: 6px 0;
-}
-.check-row span, #sound-accounts label span { min-width: 0; overflow-wrap: anywhere; }
-input[type="checkbox"] { flex-shrink: 0; margin: 3px 0 0; }
-#skip-focused { margin-top: 3px; }
-.account-settings > .check-row { margin-top: 8px; }
-#sound-settings { margin-top: 16px; padding-top: 12px; border-top: 1px solid #dadce0; }
-#sound-settings h2 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
-.volume-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 4ch; align-items: center; gap: 8px; min-height: 32px; }
-#sound-volume { width: 100%; min-width: 0; margin: 0; }
-#sound-volume-value { text-align: right; font-variant-numeric: tabular-nums; }
-
-#add-account-form {
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin: 8px 0;
-  background: #f8f9fa;
-}
-
-#add-account-form h2 {
-  font-size: 14px;
-  margin: 0 0 8px;
-}
-
-#add-account-form label {
-  display: block;
-  font-size: 13px;
-  margin: 0 0 8px;
-}
-
-#add-account-form input {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  font-size: 13px;
-  padding: 6px 8px;
-  margin-top: 4px;
-  border: 1px solid #5f6368;
-  border-radius: 6px;
-}
-
-#add-account-form details {
-  font-size: 12px;
-  margin: 0 0 8px;
-}
-
-#add-account-form details ol {
-  margin: 6px 0;
-  padding-left: 20px;
-}
-
-#add-account-form details li {
-  margin-bottom: 4px;
-}
-
-#add-account-error {
-  font-size: 13px;
-  color: #8b1b1b;
-}
-
-#add-account-form button { margin: 0 8px 0 0; }
-#add-account-form p { overflow-wrap: anywhere; }
-#add-account-form summary { cursor: pointer; min-height: 24px; }
-@media (forced-colors: active) {
-  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible {
-    outline-color: Highlight;
-  }
-}
-
 [hidden] { display: none !important; }
-.inbox-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+body {
+  margin: 0; height: min(600px, 100vh); display: flex; flex-direction: column;
+  font: 13px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg);
+}
+body[data-theme-loading] { visibility: hidden; }
+.inbox-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px; flex-shrink: 0; }
+.inbox-header h1 { font-size: 20px; line-height: 1.3; margin: 0; font-weight: 650; }
+#unread-count { font-size: 13px; color: var(--muted); font-weight: 400; }
 #mail-tools { display: flex; gap: 6px; }
-#mail-view, #settings-view { overflow-y: auto; }
-
-.account-section { list-style: none; margin-bottom: 16px; background: #f8f9fa; border-radius: 12px; overflow: hidden; }
-.account-heading { padding: 12px; }
-.account-heading h2 { margin: 5px 0 0; font-size: 14px; overflow-wrap: anywhere; }
-.account-heading-top { display: flex; justify-content: space-between; gap: 8px; }
-.account-mail { list-style: none; margin: 0; padding: 0; }
-.account-mail .card { border: 0; border-radius: 0; background: transparent; }
-.account-mail .card + .card { border-top: 1px solid #dadce0; }
-.account-note, .account-empty { margin: 0; padding: 12px; overflow-wrap: anywhere; }
+button { font: inherit; font-weight: 600; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); }
+button:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--hover); }
+button:active:not(:disabled):not([aria-disabled="true"]) { border-color: var(--accent); }
+button:disabled, button[aria-disabled="true"] { color: var(--muted); cursor: default; }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input { font: inherit; accent-color: var(--accent); }
+a { color: var(--accent); text-underline-offset: 3px; }
+::selection { color: var(--on-accent); background: var(--accent); }
+input[type="email"] { caret-color: var(--accent); }
+input::placeholder { color: var(--muted); opacity: 1; }
+#mail-view, #settings-view { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 16px; scrollbar-color: var(--muted) var(--bg); scrollbar-width: thin; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 12px; }
+.pills button { border-radius: 999px; padding-inline: 14px; background: transparent; border-color: transparent; color: var(--muted); }
+.pills button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+#inbox-list, .account-mail, #account-controls, #sound-accounts { list-style: none; margin: 0; padding: 0; }
+#inbox-list { display: flex; flex-direction: column; gap: 12px; }
+.account-section { background: var(--panel); border-radius: 12px; overflow: hidden; }
+.account-heading { padding: 12px 14px; background: var(--header); }
+.account-heading h2 { margin: 6px 0 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; font-weight: 600; }
+.account-heading-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.badge, .account-count { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--tag); color: var(--text); }
+.account-count { color: var(--accent); background: transparent; font-variant-numeric: tabular-nums; }
+.card { position: relative; padding: 12px 14px 10px 20px; }
+.card + .card { border-top: 1px solid var(--line); }
+.card-summary { display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font-weight: 400; text-align: left; }
+.card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.card-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.card-main, .card-text, .card-subject, .card-snippet { display: block; min-width: 0; }
+.card-subject { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.read .card-subject, .card.read .card-sender { font-weight: 400; }
+.card-snippet { color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unread-dot { position: absolute; left: 8px; top: 20px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+.card.read .unread-dot { display: none; }
+.card-open { margin-top: 8px; background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; margin-left: -8px; }
+.card-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding-top: 8px; }
+.card-preview p { margin: 6px 0; }
+.account-note, .account-empty { margin: 0; padding: 12px 14px; overflow-wrap: anywhere; color: var(--muted); }
 .account-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.card-sender { font-weight: 600; overflow-wrap: anywhere; }
+.status-signin { color: var(--accent); background: transparent; }
+#inbox-empty { margin: 16px 4px; color: var(--muted); }
+#settings-view > section { padding: 14px; margin-bottom: 12px; background: var(--panel); border-radius: 12px; }
+h2 { font-size: 14px; margin: 0 0 10px; font-weight: 650; }
+p { overflow-wrap: anywhere; }
+.account-settings > p { color: var(--muted); margin: 0 0 12px; }
+.account-actions, .account-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+#account-controls li { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
+.account-name { display: block; margin-bottom: 2px; overflow-wrap: anywhere; }
+#lifecycle-message, #theme-message, #add-account-error { color: var(--danger); }
+#lifecycle-message { flex-shrink: 0; padding: 10px 16px; margin: 0; background: var(--panel); }
+#lifecycle-message:empty, #theme-message:empty { display: none; }
+.check-row, #sound-accounts label { display: flex; align-items: flex-start; gap: 8px; min-height: 32px; padding: 6px 0; }
+.check-row span, #sound-accounts label span { min-width: 0; overflow-wrap: anywhere; }
+input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; height: 16px; margin: 2px 0 0; }
+.volume-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 4ch; align-items: center; gap: 8px; min-height: 32px; }
+#sound-volume { width: 100%; min-width: 0; margin: 0; min-height: 24px; }
+#sound-volume-value { text-align: right; font-variant-numeric: tabular-nums; }
+#sound-accounts { margin-top: 8px; }
+#add-account-form { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
+#add-account-form label { display: block; margin-bottom: 8px; }
+#add-account-form input { display: block; width: 100%; padding: 8px; margin-top: 4px; border: 1px solid var(--muted); border-radius: 6px; color: var(--text); background: var(--control); }
+#add-account-form details { margin: 12px 0; }
+#add-account-form summary { cursor: pointer; min-height: 24px; }
+#add-account-form button { margin: 0 6px 6px 0; }
+#add-account-submit { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.theme-choice { display: flex; align-items: center; gap: 8px; padding: 8px 0; cursor: pointer; min-height: 36px; }
+.theme-choice small { margin-left: auto; font-size: 11px; color: var(--muted); }
+.theme-swatch { width: 24px; height: 24px; border: 1px solid var(--muted); border-radius: 4px; flex-shrink: 0; }
+.midnight-swatch { background: #293e50; }.slate-swatch { background: #b8cbe2; }.signal-swatch { background: #b4b8bc; }
+:root[data-theme="signal"] .inbox-header { background: linear-gradient(#dce0e3, #cbd0d4); margin-bottom: 12px; }
+@media (max-width: 340px) { .inbox-header { flex-wrap: wrap; } #mail-tools { margin-left: auto; } }
+@media (forced-colors: active) {
+  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline-color: Highlight; }
+  .account-section, #settings-view > section { border: 1px solid CanvasText; }
+  .unread-dot { background: CanvasText; }
+  .theme-swatch { forced-color-adjust: none; }
+}
+
+.account-detail { display: block; margin-bottom: 8px; color: var(--muted); overflow-wrap: anywhere; }
