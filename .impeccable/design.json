@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-30T04:56:33.346289+00:00",
+  "title": "Design System: Gmail plus Outlook",
+  "extensions": {
+    "shadows": [],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Selected provider filter",
+      "kind": "chip",
+      "refersTo": "provider-filter",
+      "description": "Existing active filter pill.",
+      "html": "<button class=\"filter\" aria-pressed=\"true\">All</button>",
+      "css": ".filter { font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px; border: 1px solid #111111; background: #111111; color: #ffffff; cursor: pointer; }"
+    },
+    {
+      "name": "Sign-in recovery",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Existing recovery action in account status.",
+      "html": "<button class=\"signin\">Sign in</button>",
+      "css": ".signin { font-size: 13px; font-weight: 600; background: #111111; color: #ffffff; border: 1px solid #111111; border-radius: 999px; padding: 4px 12px; cursor: pointer; }"
+    },
+    {
+      "name": "Mail card",
+      "kind": "card",
+      "refersTo": "mail-card",
+      "description": "Existing card shell and focus treatment.",
+      "html": "<div class=\"card\" tabindex=\"0\"><p>Project review</p></div>",
+      "css": ".card { border: 1px solid #dadce0; border-radius: 8px; padding: 8px 10px; background: #ffffff; color: #111111; font-family: system-ui, sans-serif; } .card p { font-size: 14px; font-weight: 600; margin: 0 0 2px; } .card:focus-visible { outline: 2px solid #1a73e8; outline-offset: 1px; }"
+    }
+  ],
+  "narrative": {
+    "overview": "Factual baseline of the existing clean, minimal A v5 popup. Account identity, unread state, and fast triage lead.",
+    "keyCharacteristics": [
+      "Compact single column",
+      "Flat white surfaces",
+      "Dark active pills",
+      "Account identity on each card"
+    ],
+    "rules": [],
+    "dos": [
+      "Render external mail as text and retain visible keyboard focus."
+    ],
+    "donts": [
+      "Do not treat synthetic screenshot coverage as real-account acceptance or a completed accessibility audit."
+    ]
+  }
+}

@@ -1,50 +1,55 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Gmail plus Outlook Constitution
+
+This document records existing project principles from `.dev/project.md` and
+the v1 design spec. It adds no new product scope or completion gate.
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Local-only, personal-account scope
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+Mail, settings, and credentials stay in the browser profile. Provider requests
+go directly to Gmail or Microsoft; there is no backend, analytics, or proxy.
+V1 supports Gmail and personal Outlook.com accounts, with read plus notify
+behavior. Sending and in-popup server mutations are outside scope.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. Least privilege and safe diagnostics
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+Gmail uses the existing session-cookie Atom feed without OAuth tokens.
+Microsoft uses personal-account OAuth with PKCE, no client secret, and delegated
+`User.Read`, `Mail.Read`, and `offline_access`. Tokens use session storage.
+Diagnostics exclude credentials, mail content, response bodies, and raw
+provider exception text. External mail renders as text, not injected HTML.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. Clear ownership and account isolation
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+The worker owns authentication, polling, serialized storage writes, badge, and
+notification dispatch. The popup reads cached mail and sends actions to the
+worker; it never fetches provider APIs. Each account's failures, credentials,
+backoff, and sign-out state remain isolated from the other accounts.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. Providers own server state
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+Mail identity includes provider, normalized account address, and message ID.
+Local read flags survive cache merges without changing provider mail. The cache
+retains up to 200 messages within seven days. A failed or partial snapshot must
+not delete absent cached messages. Serialized work must respect newer state and
+account/session invalidation.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. Evidence before completion
+
+Run the applicable gates in `.dev/verification.yaml`. Tests use fixtures and
+Chrome substitutes; real-account Chrome acceptance is required for feature and
+bug work. Historical checked boxes are not acceptance of a new candidate.
+Changes land through reviewed PRs to `main`. Failed or unrun required gates
+remain visible and prevent a completion claim.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+The repository's development-system skill owns lifecycle routing, Spec Kit owns
+specification artifacts, and the canonical writer named in `.dev/project.md`
+owns shared project state. The v1 design and approved amendments own product
+scope; plans and dated evidence supply implementation and verification context.
+Changes to scope, principles, or gate policy require explicit owner approval.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: existing project decisions, 2026-09-29 |
+**Documented**: 2026-09-30

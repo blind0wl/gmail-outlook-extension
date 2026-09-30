@@ -2,6 +2,14 @@
   "name": "gmail-outlook-extension",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "check": "node scripts/check.mjs",
+    "verify": "npm run check && npm test"
+  },
   "devDependencies": {
     "linkedom": "^0.18.13"
   }

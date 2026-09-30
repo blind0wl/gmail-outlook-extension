@@ -1,7 +1,7 @@
 # Gmail plus Outlook extension design
 
 Date: 2026-09-28
-Status: draft for review
+Status: implemented v1; baseline documentation reconciled 2026-09-30
 Scope: v1 personal use, read plus notify, no sending
 
 ## Outcome and success
@@ -43,11 +43,11 @@ Manifest V3, local only, no backend. Three parts:
 
 - Service worker owns auth refresh, polling, cache writes, and notifications.
 - Popup owns the inbox view and reads cache only.
-- Two provider adapters sit behind one mail interface, one for Gmail REST and one for Graph. The popup never calls provider APIs directly.
+- Two provider adapters sit behind one mail interface, one for Gmail session-cookie Atom feeds and one for Graph. The popup never calls provider APIs directly.
 
 Storage stays in the browser profile. Tokens live in chrome.storage.session. Mail cache lives in chrome.storage.local with a 200 item cap and 7 day expiry. Bodies trim to snippet plus minimal preview. Logs and persisted diagnostic errors may carry ids, timestamps, a fixed operation label `op`, and numeric HTTP `status`. They must never contain mail content, tokens, request or response bodies, or exception text.
 
-Permissions are identity, alarms, notifications, storage, offscreen, and tabs. The tabs permission is an explicit final-review amendment for reading the focused tab URL; no tab history is stored. Host access remains only to gmail.googleapis.com, accounts.google.com, graph.microsoft.com, and login.microsoftonline.com.
+Permissions are identity, alarms, notifications, storage, offscreen, and tabs. The tabs permission is an explicit final-review amendment for reading the focused tab URL; no tab history is stored. Host access is limited to mail.google.com, graph.microsoft.com, and login.microsoftonline.com.
 
 ## Auth and accounts
 
@@ -63,7 +63,7 @@ Gmail needs no Google verification or assessment because it requests no OAuth sc
 
 Flow is one way and local. Service worker wakes on alarm or manual refresh, fetches unread plus recent per account through the adapter, normalizes to id, provider, account address, from, subject, snippet, date, and read state, then writes to cache. Popup reads cache only. Selection expands the full cached subject and snippet, without bodies or new scopes, and preserves keyboard focus. The popup sends a mark-read message; the worker serializes the mutation with poll commits, persists it, and updates the badge. Polls merge new mail without clearing local read flags. Providers stay the source of truth for server unread counts until a later scope upgrade adds true mark read.
 
-Polling uses chrome.alarms with 1 minute default, per account toggle, configurable range 30 seconds to 5 hours, plus manual refresh. 401 gets one silent token renewal and one retry. Auth and mailbox 429/5xx persist a retry deadline and failure count across worker termination. No notify on manual refresh. The popup option to skip alerts while a provider tab is focused defaults on and suppresses both toast and chime only for that provider. Cache and badge still update.
+Polling uses chrome.alarms with 1 minute default, per account toggle, configurable range 30 seconds to 5 hours, plus manual refresh. 401 gets one silent token renewal and one retry. Auth and mailbox 429/5xx persist a retry deadline and failure count across worker termination. No notify on manual refresh. The popup option to skip alerts while a provider tab is focused defaults off and suppresses both toast and chime only for that provider when enabled. Cache and badge still update.
 
 Notifications use chrome.notifications grouped per account with per account mute. Badge shows total unread across enabled accounts. Sound uses a gentle chime on by default with master mute, per account toggle, and volume setting. Sound stays silent on manual refresh. Service workers cannot play audio directly, so sound needs a small offscreen document. This stays in the implementation plan, not in popup code.
 
@@ -71,7 +71,7 @@ Push was investigated and deferred. Gmail push needs Cloud PubSub with users.wat
 
 ## Privacy technical
 
-Local only means mail content and tokens stay in the browser profile. Allowed hosts are the four listed above. No custom backend or proxy. No analytics. Scopes stay least privilege with no send or write scopes.
+Local only means mail content and tokens stay in the browser profile. Allowed fetch hosts are the three listed above. No custom backend or proxy. No analytics. Scopes stay least privilege with no send or write scopes.
 
 Tokens live in chrome.storage.session and clear on sign out. Cache lives in chrome.storage.local with cap and expiry above. Diagnostic logs and errors permit only ids, timestamps, a fixed `op`, and numeric HTTP `status`; mail content, tokens, request and response bodies, and exception text are forbidden. Error messages show account address and code only.
 
@@ -85,7 +85,7 @@ Testing is manual plus light automation. Manual loads unpacked in Chrome from ch
 
 Automated checks cover adapter normalization, cache cap and expiry, and badge counts from fixtures, run on every PR. No real tokens in tests.
 
-Workflow is private GitHub repo, still to create, with branches per change and PR review including a load in Chrome checklist. Regular unpacked loads as it develops. No app scaffold exists yet. Spec approval gates the implementation plan.
+Workflow uses the existing GitHub repository, branches per change, and PR review including the Chrome acceptance checklist. Regular unpacked loads verify browser behavior. The extension loads directly from source without a build step; see README.md for setup and commands.
 
 ## Research notes
 
@@ -96,9 +96,17 @@ Gmail reads unread sender, subject, snippet, and timestamp from the session-cook
 ## Final-review contract amendments, 2026-09-29
 
 - Mail identity is `provider + ':' + encodeURIComponent(account) + ':' + messageId`. Cache, notification deduplication, and link extraction use that identity. Hydration migrates old keys while preserving localRead.
-- A poll queries inbox mail received within seven days, including read and unread items. Each account reads at most four pages of 25 messages. Gmail makes at most 105 requests and Outlook at most five requests without redirects. Outlook allows up to five validated same-origin redirect hops per request. Each request has a 15-second deadline; each account mailbox scan has a 45-second deadline. The global cache still caps at 200 newest items and keeps the exact seven-day boundary.
+- Outlook queries inbox mail received within seven days, including read and unread items, at most four pages of 25 messages plus one profile request. Gmail probes at most ten browser-session slots and reads only unread Atom feed entries within seven days; its feed count can exceed the roughly 20 entries returned. Outlook allows up to five validated same-origin redirect hops per request. Each provider request has a 15-second deadline; Outlook's mailbox scan additionally has a 45-second deadline. Gmail has no shared scan deadline. The global cache still caps at 200 newest items and keeps the exact seven-day boundary.
 - Adapters report whether the bounded query is complete. Only a successful complete snapshot removes absent cached messages for that account. Failed or capped partial snapshots preserve absent records until normal expiry or capacity pruning. Completed accounts commit independently, while poll cycles and cache/account-state writes are serialized.
 - The first successful population is a quiet baseline, including an empty inbox. Automatic notifications require an enabled, notification-enabled account and a server-unread, locally unread item. Persisted per-account seen IDs prevent cache-cap eviction from causing repeated alerts. Manual refresh never alerts.
 - OS DND amendment: Chrome's notifications API exposes permission level, not the OS DND state. Native toast presentation follows the OS, but the extension cannot reliably infer DND for offscreen audio. Enable Mute all sounds before using OS DND. Toasts set `silent: true`, so the separately controlled chime is the only extension sound. The earlier promise of automatic OS DND detection is withdrawn, rather than simulated with a dependency-injection flag.
 
-The four-host contract is unchanged. The Web OAuth redirect does not add a fetch host permission. OAuth pages are opened through Chrome identity, and tokens remain in session storage.
+The Gmail session-cookie transport supersedes the historical Gmail REST/OAuth host contract: mail.google.com replaces gmail.googleapis.com and accounts.google.com. The Web OAuth redirect does not add a fetch host permission. Microsoft OAuth pages are opened through Chrome identity, and Microsoft tokens remain in session storage.
+
+## Baseline gaps, 2026-09-30
+
+The header search icon described in the UX lock is not implemented. Poll interval
+and account enabled/notify settings exist in worker/storage logic but are not
+exposed as popup controls. These differences are recorded for scope decisions,
+not treated as implemented features. Outlook exact-message links and stable
+unpacked-extension identity remain outstanding reliability work.

@@ -2,18 +2,24 @@
 
 Every step below needs a real browser, real accounts, or human eyes, so
 every step is **human-only**. Headless CI covers adapters, cache, badge
-counts, retry, and sanitization (`node --test tests/`); it cannot load
+counts, retry, and sanitization (`npm run verify`); it does not load
 the extension, see a toast, hear a chime, or sign in. Do not merge until
 each box is ticked by hand in Chrome with your own accounts.
 
 Setup for the whole pass (human-only):
 
 - `chrome://extensions` > Developer mode > Load unpacked > repo root.
-- Configure two Gmail accounts plus one Outlook.com account under the
-  `accounts` storage key (provider plus address plus toggles; outlook
-  records carry the Entra application id as `clientId`).
+- Add two Gmail accounts plus one Outlook.com account using the popup.
+  Gmail requires existing browser sessions; Outlook uses the developer's
+  registered public application ID. No storage edits or client IDs are
+  needed in ordinary use (see `docs/manual-auth.md`).
 - Keep DevTools open on the popup (Console plus Network) for the
   zero-error and zero-request checks.
+
+The checked boxes below preserve the 2026-09-29 acceptance history. For each
+new candidate, copy the procedure to a new dated acceptance record and start
+with unchecked boxes. Record the commit, browser version, and any failures;
+these historical ticks do not accept later changes.
 
 ## Load and inbox (human-only)
 
@@ -76,7 +82,7 @@ Setup for the whole pass (human-only):
 
 - [x] `node --test tests/` passes with no `MODULE_TYPELESS_PACKAGE_JSON`
       warning (`package.json` keeps `"type": "module"`).
-- [x] `node --check src/popup/popup.js src/background/service-worker.js`
-      parses.
+- [x] Source parses (historical check). For new changes run `npm run check`,
+      which checks each source, test, and tooling file individually.
 - [x] `grep -rn "fetch(\|XMLHttpRequest\|console\.log" src/popup/`
       returns nothing (no popup network calls, nothing logged).

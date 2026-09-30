@@ -1,0 +1,27 @@
+{
+  "capturedAt": "2026-09-30T04:59:29.618650+00:00",
+  "browser": "T3 Code Linux Chromium 152.0.7977.130",
+  "viewport": {
+    "width": 404,
+    "height": 1200
+  },
+  "productionSourceCommit": "1b94326",
+  "syntheticData": true,
+  "states": [
+    "empty",
+    "populated",
+    "expanded",
+    "signed-out",
+    "error"
+  ],
+  "sourceSha256": {
+    "src/popup/popup.html": "c988ea85f3b7ea08b77b143c716c62590241d7a20fdd0deb26f900585326e0e9",
+    "src/popup/popup.css": "fb1087c1da84a01de4bc80d72815d6dee0b0d6d30e2e626c45362335ad1658d1",
+    "src/popup/popup.js": "ad0a3ffab0dbd5c6f4afcc2abc64e009b7af98d042f8d21b3ace211df5356c30",
+    "src/popup/links.js": "ed1be5f1ada8032873ccb9d4d9213ed68d05165af28388458239ee3a4916881b",
+    "src/notify/notify.js": "20540f91ef214a46fdc489461c76cc9e0d32921e21c61f0e4377384e9223a4d8",
+    "src/notify/sound.js": "7618501656eb745caefc56336fd2088acb02d7dee8432b77d90b12a9bbd81845",
+    "tests/visual/popup.html": "71977a32acd9a4e0df1f4a8ea1cf1587b536b5817fe98f1001836c8ea1cc1f8c",
+    "tests/visual/popup-fixture.js": "a04a131dfaf459356c3eb8a0bc01844249020a3384e6963e68ea036a76721723"
+  }
+}
