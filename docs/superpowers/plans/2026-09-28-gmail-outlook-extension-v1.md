@@ -44,7 +44,7 @@
 - `src/notify/notify.js` owns new id diff plus toast plus badge count, exposes `diffNewIds(oldKeys, newKeys)`, `unreadCount(items)`.
 - `src/notify/sound.js` plus `src/notify/offscreen.html` plus `src/notify/offscreen.js` own chime playback plus mute plus volume.
 - `src/popup/popup.html` plus `src/popup/popup.css` plus `src/popup/popup.js` own A v5 inbox view.
-- `tests/fixtures/gmail-list.json` plus `tests/fixtures/graph-list.json` own provider samples.
+- `tests/normalize-gmail.test.js` contains inline Atom feed samples; `tests/fixtures/graph-list.json` owns Graph provider samples.
 - `tests/cache.test.js`, `tests/normalize-gmail.test.js`, `tests/normalize-outlook.test.js`, `tests/notify.test.js` own automated checks.
 
 Normalized mail shape every task uses: `{ key, provider, account, from, subject, snippet, date, unread, localRead }` where `key` is `provider + ':' + encodeURIComponent(account) + ':' + id`.
@@ -138,9 +138,13 @@ git commit -m "feat: add cache with local read and expiry"
 
 ### Task 3: Gmail adapter normalization
 
+Cleanup note (2026-09-30): the unused Gmail REST fixture was removed after the
+switch to session-cookie Atom feeds. Current transport tests and feed samples
+live in `tests/normalize-gmail.test.js`; the REST implementation steps below
+are retained as historical planning context.
+
 **Files:**
 - Create: `src/providers/gmail.js`
-- Create: `tests/fixtures/gmail-list.json`
 - Test: `tests/normalize-gmail.test.js`
 
 **Interfaces:**
@@ -153,10 +157,10 @@ git commit -m "feat: add cache with local read and expiry"
 import test from "node:test";
 import assert from "node:assert";
 import { normalizeGmailMessage } from "../src/providers/gmail.js";
-import raw from "../tests/fixtures/gmail-list.json" with { type: "json" };
 test("gmail normalize keeps account and key", () => {
-  const out = normalizeGmailMessage(raw.messages[0], "work@gmail.com");
-  assert.equal(out.key, "gmail:work%40gmail.com:" + raw.messages[0].id);
+  const raw = { id: "1901a2b3c4d5" };
+  const out = normalizeGmailMessage(raw, "work@gmail.com");
+  assert.equal(out.key, "gmail:work%40gmail.com:" + raw.id);
   assert.equal(out.account, "work@gmail.com");
 });
 ```
@@ -179,7 +183,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/providers/gmail.js tests/normalize-gmail.test.js tests/fixtures/gmail-list.json
+git add src/providers/gmail.js tests/normalize-gmail.test.js
 git commit -m "feat: add gmail read only adapter"
 ```
 
