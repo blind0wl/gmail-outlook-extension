@@ -64,8 +64,8 @@ No living-spec split adopted.
 
 - Owner selected the focused popup usability/accessibility refinement with
   Impeccable after PR #10 merged (`e94de2e`). Scope is in
-  `specs/001-popup-usability/spec.md`; owner acceptance passed on `95650aa`.
-- After this refinement merges, revisit visual direction with the owner.
+  `specs/001-popup-usability/spec.md`; owner acceptance passed on `95650aa`; PR #11 merged as `253e7a9`.
+- Next, revisit visual direction with the owner.
   Present proposed design choices and previews for approval before further
   UI changes. No redesign direction or later feature is selected.
 - Gmail stale Open briefly displays deleted mail in Inbox while it remains
