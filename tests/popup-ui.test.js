@@ -61,9 +61,8 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   assert.equal(messages[0].type, "mark-read");
   for (const id of ["add-gmail", "add-outlook", "refresh-mail"])
     assert.ok(document.getElementById(id), id);
-  async function submitAddForm(email, clientId) {
+  async function submitAddForm(email) {
     document.getElementById("add-account-email").value = email;
-    document.getElementById("add-account-client").value = clientId;
     document.getElementById("add-account-form").dispatchEvent(
       new window.Event("submit", { bubbles: true, cancelable: true }),
     );
@@ -75,24 +74,22 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   assert.equal(document.getElementById("add-account-form").hidden, false);
   assert.equal(document.getElementById("add-account-help-gmail").hidden, false);
   assert.equal(document.getElementById("add-account-help-outlook").hidden, true);
-  await submitAddForm("second@gmail.com", "google-web-client");
+  await submitAddForm("second@gmail.com");
   assert.deepEqual(messages.at(-1), {
     type: "add-account",
     provider: "gmail",
     account: "second@gmail.com",
-    clientId: "google-web-client",
   });
   assert.equal(document.getElementById("add-account-form").hidden, true);
   document.getElementById("add-outlook").click();
   await tick();
   assert.equal(document.getElementById("add-account-help-gmail").hidden, true);
   assert.equal(document.getElementById("add-account-help-outlook").hidden, false);
-  await submitAddForm("second@outlook.com", "entra-client");
+  await submitAddForm("second@outlook.com");
   assert.deepEqual(messages.at(-1), {
     type: "add-account",
     provider: "outlook",
     account: "second@outlook.com",
-    clientId: "entra-client",
   });
   document.getElementById("refresh-mail").click();
   await tick();

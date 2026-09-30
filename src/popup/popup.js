@@ -441,8 +441,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var addForm = document.getElementById("add-account-form");
     var addTitle = document.getElementById("add-account-title");
     var addEmail = document.getElementById("add-account-email");
-    var addClientRow = document.getElementById("add-account-client-row");
-    var addClient = document.getElementById("add-account-client");
     var addNote = document.getElementById("add-account-note");
     var addHelpGmail = document.getElementById("add-account-help-gmail");
     var addHelpOutlook = document.getElementById("add-account-help-outlook");
@@ -454,7 +452,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       addTitle.textContent = isGmail ? "Add Gmail account" : "Add Outlook account";
       // Neither provider asks users for IDs anymore: Gmail reads the
       // browser session, Outlook consent is handled by the extension.
-      addClientRow.hidden = true;
       addNote.hidden = false;
       addNote.textContent = isGmail
         ? "No setup needed. Log into Gmail in any tab and press Add account."
@@ -481,17 +478,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     addForm.addEventListener("submit", async function (event) {
       event.preventDefault();
       var account = addEmail.value.trim();
-      var clientId = addClient.value.trim();
       if (!account) {
         addError.textContent = "Enter your email address.";
         addError.hidden = false;
         return;
       }
       var submit = document.getElementById("add-account-submit");
-      var result = await sendAction({type: "add-account", provider: addProvider, account, clientId}, submit);
+      var result = await sendAction({type: "add-account", provider: addProvider, account}, submit);
       if (result && result.ok) {
         addEmail.value = "";
-        addClient.value = "";
         hideAddForm();
       } else {
         var addCode = result?.code ? " (" + result.code + ")" : "";
