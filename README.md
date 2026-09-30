@@ -5,8 +5,10 @@ mail in one popup, with an unread badge, desktop notifications, and an optional
 chime. There is no backend or analytics. Mail and credentials stay in your
 browser profile and are exchanged only with the providers.
 
-The popup previews cached subjects and snippets. Reading a card marks it read
-locally; server mail remains unchanged. Use **Open** for actions in the provider.
+The popup groups cached mail under each account. Expanding a preview displays
+the cached subject and snippet without marking it read. **Open** opens the
+provider message and retains the extension’s existing local read flag; server
+mail remains unchanged.
 Compose/send, archive/delete, search, and Microsoft work/school accounts are
 outside v1.
 
@@ -29,9 +31,9 @@ npm run verify
 1. Open `chrome://extensions` in Chrome and enable **Developer mode**.
 2. Choose **Load unpacked** and select this repository root.
 3. Pin **Gmail plus Outlook**, then open its popup.
-4. Log into Gmail in a browser tab, choose **Add Gmail**, and enter that address.
+4. Log into Gmail in a browser tab, open **Settings → Accounts → Add Gmail**, and enter that address.
    Gmail uses your existing browser session; there is no OAuth registration.
-5. Choose **Add Outlook**, enter a personal Microsoft address, and complete
+5. Choose **Settings → Accounts → Add Outlook**, enter a personal Microsoft address, and complete
    consent. The developer must first register the extension's exact redirect
    URI with the Microsoft application, as described in
    [manual auth](docs/manual-auth.md).
@@ -75,7 +77,7 @@ framework, bundler, or production npm dependencies.
 | `src/popup/` | Cache-only rendering, provider links, and actions sent to the worker. |
 | `src/notify/` | Notifications, mute/volume settings, and offscreen Web Audio chime. |
 | `tests/` | Automated regressions, fixtures, and the popup acceptance procedure. |
-| `.dev/`, `.specify/`, `.pi/` | Managed project evidence and development workflows. |
+| `.dev/`, `.specify/` | Historical workflow records and specification tooling; not an active ai-dev-system workflow. |
 
 The worker fetches provider data, normalizes it, and writes to
 `chrome.storage.local`. The popup reads that cache and sends account/refresh/
@@ -97,13 +99,14 @@ Before merging feature or bug changes, run the
 and, for auth changes, [manual auth checklist](docs/manual-auth.md) with real
 accounts. Use two Gmail accounts and one Outlook.com account to check isolation.
 
-After reloading the extension or restarting the browser, use **Sign in** beside
-the Outlook account in the popup, then **Refresh**. Outlook credentials live in
+After reloading the extension or restarting the browser, use **Settings → Accounts → Sign in** beside
+the Outlook account, then return to Mail and press **Refresh**. Outlook credentials live in
 session storage and are cleared on reload/restart; cached mail remains visible.
 Being signed into Outlook in a browser tab does not restore the extension's
 Graph credentials.
 
-Verify loading, filtering, keyboard navigation, local read/focus preservation,
+Verify account grouping, Mail/Settings navigation, preview-only expansion,
+keyboard use, theme persistence, local Open/read behavior and focus preservation,
 provider links, sign-in/out/removal, worker restart, badge, automatic alerts,
 silent refresh, master/per-account mute, and offline/error recovery. Inspect
 the popup Console and Network panel for errors and provider API requests.
@@ -112,6 +115,23 @@ Record the tested commit, Chrome version, date, results, and remaining failures
 in a new acceptance record. Existing checked boxes document a historical pass
 and do not establish acceptance of a new revision. Never record tokens, real
 mail content, or sensitive diagnostics in the repository.
+
+## Popup workspace
+
+Mail shows one section per configured account, including empty or paused
+accounts. All/Gmail/Outlook filters retain separate account ownership. Settings
+contains Themes, Accounts, Notifications and Sound; Back returns to the prior
+Mail scroll position. Account drafts survive cache updates and theme changes.
+
+**Midnight desk** is the default for new or unset profiles. Choose **Slate
+workspace** or **Signal panel** under Settings → Themes; the `popupTheme` local
+preference survives reopen and extension reload. Existing mail, accounts and
+sound preferences need no migration.
+
+Real mailbox read/unread, Trash and Undo actions are approved follow-up work
+after the Gmail API authorization stage; this stage exposes Preview and Open.
+The [workspace specification](specs/002-popup-workspace/spec.md) records scope,
+and [synthetic browser verification](docs/ui-workspace/README.md) records checks.
 
 ## Known limitations and development rules
 
@@ -139,6 +159,7 @@ Diagnostics must exclude mail content, credentials, and raw provider errors.
 Read [AGENTS.md](AGENTS.md) for the repository workflow and
 [the v1 design](docs/superpowers/specs/2026-09-28-gmail-outlook-extension-design.md)
 for product scope. [DESIGN.md](DESIGN.md) documents the existing visual system;
-[the UI baseline](docs/ui-baseline/README.md) provides synthetic captures and
-reproduction steps. The original implementation plan is historical context;
+[the original UI baseline](docs/ui-baseline/README.md) preserves historical
+captures; [the workspace fixture](docs/ui-workspace/README.md) reuses current
+production files with synthetic accounts. The original implementation plan is historical context;
 current source and dated acceptance records describe the implemented behavior.

@@ -1,52 +1,656 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-30T04:56:33.346289+00:00",
+  "generatedAt": "2026-09-30T11:38:15.170943+00:00",
   "title": "Design System: Gmail plus Outlook",
   "extensions": {
+    "colorMeta": {
+      "midnight-bg": {
+        "role": "neutral",
+        "displayName": "Midnight bg",
+        "tonalRamp": [
+          "oklch(15% 0.02997 245.27)",
+          "oklch(26.43% 0.02997 245.27)",
+          "oklch(37.86% 0.02997 245.27)",
+          "oklch(49.29% 0.02997 245.27)",
+          "oklch(60.71% 0.02997 245.27)",
+          "oklch(72.14% 0.02997 245.27)",
+          "oklch(83.57% 0.02997 245.27)",
+          "oklch(95% 0.02997 245.27)"
+        ]
+      },
+      "midnight-panel": {
+        "role": "neutral",
+        "displayName": "Midnight panel",
+        "tonalRamp": [
+          "oklch(15% 0.03579 244.41)",
+          "oklch(26.43% 0.03579 244.41)",
+          "oklch(37.86% 0.03579 244.41)",
+          "oklch(49.29% 0.03579 244.41)",
+          "oklch(60.71% 0.03579 244.41)",
+          "oklch(72.14% 0.03579 244.41)",
+          "oklch(83.57% 0.03579 244.41)",
+          "oklch(95% 0.03579 244.41)"
+        ]
+      },
+      "midnight-header": {
+        "role": "neutral",
+        "displayName": "Midnight header",
+        "tonalRamp": [
+          "oklch(15% 0.04124 245.19)",
+          "oklch(26.43% 0.04124 245.19)",
+          "oklch(37.86% 0.04124 245.19)",
+          "oklch(49.29% 0.04124 245.19)",
+          "oklch(60.71% 0.04124 245.19)",
+          "oklch(72.14% 0.04124 245.19)",
+          "oklch(83.57% 0.04124 245.19)",
+          "oklch(95% 0.04124 245.19)"
+        ]
+      },
+      "midnight-text": {
+        "role": "neutral",
+        "displayName": "Midnight text",
+        "tonalRamp": [
+          "oklch(15% 0.01031 247.93)",
+          "oklch(26.43% 0.01031 247.93)",
+          "oklch(37.86% 0.01031 247.93)",
+          "oklch(49.29% 0.01031 247.93)",
+          "oklch(60.71% 0.01031 247.93)",
+          "oklch(72.14% 0.01031 247.93)",
+          "oklch(83.57% 0.01031 247.93)",
+          "oklch(95% 0.01031 247.93)"
+        ]
+      },
+      "midnight-muted": {
+        "role": "neutral",
+        "displayName": "Midnight muted",
+        "tonalRamp": [
+          "oklch(15% 0.03111 246.66)",
+          "oklch(26.43% 0.03111 246.66)",
+          "oklch(37.86% 0.03111 246.66)",
+          "oklch(49.29% 0.03111 246.66)",
+          "oklch(60.71% 0.03111 246.66)",
+          "oklch(72.14% 0.03111 246.66)",
+          "oklch(83.57% 0.03111 246.66)",
+          "oklch(95% 0.03111 246.66)"
+        ]
+      },
+      "midnight-line": {
+        "role": "neutral",
+        "displayName": "Midnight line",
+        "tonalRamp": [
+          "oklch(15% 0.03900 246.04)",
+          "oklch(26.43% 0.03900 246.04)",
+          "oklch(37.86% 0.03900 246.04)",
+          "oklch(49.29% 0.03900 246.04)",
+          "oklch(60.71% 0.03900 246.04)",
+          "oklch(72.14% 0.03900 246.04)",
+          "oklch(83.57% 0.03900 246.04)",
+          "oklch(95% 0.03900 246.04)"
+        ]
+      },
+      "midnight-hover": {
+        "role": "neutral",
+        "displayName": "Midnight hover",
+        "tonalRamp": [
+          "oklch(15% 0.04336 244.18)",
+          "oklch(26.43% 0.04336 244.18)",
+          "oklch(37.86% 0.04336 244.18)",
+          "oklch(49.29% 0.04336 244.18)",
+          "oklch(60.71% 0.04336 244.18)",
+          "oklch(72.14% 0.04336 244.18)",
+          "oklch(83.57% 0.04336 244.18)",
+          "oklch(95% 0.04336 244.18)"
+        ]
+      },
+      "midnight-accent": {
+        "role": "primary",
+        "displayName": "Midnight accent",
+        "tonalRamp": [
+          "oklch(15% 0.07017 187.88)",
+          "oklch(26.43% 0.07017 187.88)",
+          "oklch(37.86% 0.07017 187.88)",
+          "oklch(49.29% 0.07017 187.88)",
+          "oklch(60.71% 0.07017 187.88)",
+          "oklch(72.14% 0.07017 187.88)",
+          "oklch(83.57% 0.07017 187.88)",
+          "oklch(95% 0.07017 187.88)"
+        ]
+      },
+      "midnight-danger": {
+        "role": "neutral",
+        "displayName": "Midnight danger",
+        "tonalRamp": [
+          "oklch(15% 0.09316 21.67)",
+          "oklch(26.43% 0.09316 21.67)",
+          "oklch(37.86% 0.09316 21.67)",
+          "oklch(49.29% 0.09316 21.67)",
+          "oklch(60.71% 0.09316 21.67)",
+          "oklch(72.14% 0.09316 21.67)",
+          "oklch(83.57% 0.09316 21.67)",
+          "oklch(95% 0.09316 21.67)"
+        ]
+      },
+      "midnight-tag": {
+        "role": "neutral",
+        "displayName": "Midnight tag",
+        "tonalRamp": [
+          "oklch(15% 0.04682 244.64)",
+          "oklch(26.43% 0.04682 244.64)",
+          "oklch(37.86% 0.04682 244.64)",
+          "oklch(49.29% 0.04682 244.64)",
+          "oklch(60.71% 0.04682 244.64)",
+          "oklch(72.14% 0.04682 244.64)",
+          "oklch(83.57% 0.04682 244.64)",
+          "oklch(95% 0.04682 244.64)"
+        ]
+      },
+      "midnight-control": {
+        "role": "neutral",
+        "displayName": "Midnight control",
+        "tonalRamp": [
+          "oklch(15% 0.04360 244.26)",
+          "oklch(26.43% 0.04360 244.26)",
+          "oklch(37.86% 0.04360 244.26)",
+          "oklch(49.29% 0.04360 244.26)",
+          "oklch(60.71% 0.04360 244.26)",
+          "oklch(72.14% 0.04360 244.26)",
+          "oklch(83.57% 0.04360 244.26)",
+          "oklch(95% 0.04360 244.26)"
+        ]
+      },
+      "midnight-on-accent": {
+        "role": "neutral",
+        "displayName": "Midnight on accent",
+        "tonalRamp": [
+          "oklch(15% 0.02997 245.27)",
+          "oklch(26.43% 0.02997 245.27)",
+          "oklch(37.86% 0.02997 245.27)",
+          "oklch(49.29% 0.02997 245.27)",
+          "oklch(60.71% 0.02997 245.27)",
+          "oklch(72.14% 0.02997 245.27)",
+          "oklch(83.57% 0.02997 245.27)",
+          "oklch(95% 0.02997 245.27)"
+        ]
+      },
+      "slate-bg": {
+        "role": "neutral",
+        "displayName": "Slate bg",
+        "tonalRamp": [
+          "oklch(15% 0.01729 256.28)",
+          "oklch(26.43% 0.01729 256.28)",
+          "oklch(37.86% 0.01729 256.28)",
+          "oklch(49.29% 0.01729 256.28)",
+          "oklch(60.71% 0.01729 256.28)",
+          "oklch(72.14% 0.01729 256.28)",
+          "oklch(83.57% 0.01729 256.28)",
+          "oklch(95% 0.01729 256.28)"
+        ]
+      },
+      "slate-panel": {
+        "role": "neutral",
+        "displayName": "Slate panel",
+        "tonalRamp": [
+          "oklch(15% 0.00697 268.55)",
+          "oklch(26.43% 0.00697 268.55)",
+          "oklch(37.86% 0.00697 268.55)",
+          "oklch(49.29% 0.00697 268.55)",
+          "oklch(60.71% 0.00697 268.55)",
+          "oklch(72.14% 0.00697 268.55)",
+          "oklch(83.57% 0.00697 268.55)",
+          "oklch(95% 0.00697 268.55)"
+        ]
+      },
+      "slate-header": {
+        "role": "neutral",
+        "displayName": "Slate header",
+        "tonalRamp": [
+          "oklch(15% 0.01254 255.51)",
+          "oklch(26.43% 0.01254 255.51)",
+          "oklch(37.86% 0.01254 255.51)",
+          "oklch(49.29% 0.01254 255.51)",
+          "oklch(60.71% 0.01254 255.51)",
+          "oklch(72.14% 0.01254 255.51)",
+          "oklch(83.57% 0.01254 255.51)",
+          "oklch(95% 0.01254 255.51)"
+        ]
+      },
+      "slate-text": {
+        "role": "neutral",
+        "displayName": "Slate text",
+        "tonalRamp": [
+          "oklch(15% 0.04560 253.95)",
+          "oklch(26.43% 0.04560 253.95)",
+          "oklch(37.86% 0.04560 253.95)",
+          "oklch(49.29% 0.04560 253.95)",
+          "oklch(60.71% 0.04560 253.95)",
+          "oklch(72.14% 0.04560 253.95)",
+          "oklch(83.57% 0.04560 253.95)",
+          "oklch(95% 0.04560 253.95)"
+        ]
+      },
+      "slate-muted": {
+        "role": "neutral",
+        "displayName": "Slate muted",
+        "tonalRamp": [
+          "oklch(15% 0.04537 253.26)",
+          "oklch(26.43% 0.04537 253.26)",
+          "oklch(37.86% 0.04537 253.26)",
+          "oklch(49.29% 0.04537 253.26)",
+          "oklch(60.71% 0.04537 253.26)",
+          "oklch(72.14% 0.04537 253.26)",
+          "oklch(83.57% 0.04537 253.26)",
+          "oklch(95% 0.04537 253.26)"
+        ]
+      },
+      "slate-line": {
+        "role": "neutral",
+        "displayName": "Slate line",
+        "tonalRamp": [
+          "oklch(15% 0.01786 253.35)",
+          "oklch(26.43% 0.01786 253.35)",
+          "oklch(37.86% 0.01786 253.35)",
+          "oklch(49.29% 0.01786 253.35)",
+          "oklch(60.71% 0.01786 253.35)",
+          "oklch(72.14% 0.01786 253.35)",
+          "oklch(83.57% 0.01786 253.35)",
+          "oklch(95% 0.01786 253.35)"
+        ]
+      },
+      "slate-hover": {
+        "role": "neutral",
+        "displayName": "Slate hover",
+        "tonalRamp": [
+          "oklch(15% 0.01254 255.51)",
+          "oklch(26.43% 0.01254 255.51)",
+          "oklch(37.86% 0.01254 255.51)",
+          "oklch(49.29% 0.01254 255.51)",
+          "oklch(60.71% 0.01254 255.51)",
+          "oklch(72.14% 0.01254 255.51)",
+          "oklch(83.57% 0.01254 255.51)",
+          "oklch(95% 0.01254 255.51)"
+        ]
+      },
+      "slate-accent": {
+        "role": "primary",
+        "displayName": "Slate accent",
+        "tonalRamp": [
+          "oklch(15% 0.10027 255.79)",
+          "oklch(26.43% 0.10027 255.79)",
+          "oklch(37.86% 0.10027 255.79)",
+          "oklch(49.29% 0.10027 255.79)",
+          "oklch(60.71% 0.10027 255.79)",
+          "oklch(72.14% 0.10027 255.79)",
+          "oklch(83.57% 0.10027 255.79)",
+          "oklch(95% 0.10027 255.79)"
+        ]
+      },
+      "slate-danger": {
+        "role": "neutral",
+        "displayName": "Slate danger",
+        "tonalRamp": [
+          "oklch(15% 0.13603 17.08)",
+          "oklch(26.43% 0.13603 17.08)",
+          "oklch(37.86% 0.13603 17.08)",
+          "oklch(49.29% 0.13603 17.08)",
+          "oklch(60.71% 0.13603 17.08)",
+          "oklch(72.14% 0.13603 17.08)",
+          "oklch(83.57% 0.13603 17.08)",
+          "oklch(95% 0.13603 17.08)"
+        ]
+      },
+      "slate-tag": {
+        "role": "neutral",
+        "displayName": "Slate tag",
+        "tonalRamp": [
+          "oklch(15% 0.02185 256.73)",
+          "oklch(26.43% 0.02185 256.73)",
+          "oklch(37.86% 0.02185 256.73)",
+          "oklch(49.29% 0.02185 256.73)",
+          "oklch(60.71% 0.02185 256.73)",
+          "oklch(72.14% 0.02185 256.73)",
+          "oklch(83.57% 0.02185 256.73)",
+          "oklch(95% 0.02185 256.73)"
+        ]
+      },
+      "slate-control": {
+        "role": "neutral",
+        "displayName": "Slate control",
+        "tonalRamp": [
+          "oklch(15% 0.01080 256.70)",
+          "oklch(26.43% 0.01080 256.70)",
+          "oklch(37.86% 0.01080 256.70)",
+          "oklch(49.29% 0.01080 256.70)",
+          "oklch(60.71% 0.01080 256.70)",
+          "oklch(72.14% 0.01080 256.70)",
+          "oklch(83.57% 0.01080 256.70)",
+          "oklch(95% 0.01080 256.70)"
+        ]
+      },
+      "slate-on-accent": {
+        "role": "neutral",
+        "displayName": "Slate on accent",
+        "tonalRamp": [
+          "oklch(15% 0.00000 89.88)",
+          "oklch(26.43% 0.00000 89.88)",
+          "oklch(37.86% 0.00000 89.88)",
+          "oklch(49.29% 0.00000 89.88)",
+          "oklch(60.71% 0.00000 89.88)",
+          "oklch(72.14% 0.00000 89.88)",
+          "oklch(83.57% 0.00000 89.88)",
+          "oklch(95% 0.00000 89.88)"
+        ]
+      },
+      "signal-bg": {
+        "role": "neutral",
+        "displayName": "Signal bg",
+        "tonalRamp": [
+          "oklch(15% 0.00783 241.68)",
+          "oklch(26.43% 0.00783 241.68)",
+          "oklch(37.86% 0.00783 241.68)",
+          "oklch(49.29% 0.00783 241.68)",
+          "oklch(60.71% 0.00783 241.68)",
+          "oklch(72.14% 0.00783 241.68)",
+          "oklch(83.57% 0.00783 241.68)",
+          "oklch(95% 0.00783 241.68)"
+        ]
+      },
+      "signal-panel": {
+        "role": "neutral",
+        "displayName": "Signal panel",
+        "tonalRamp": [
+          "oklch(15% 0.00255 228.79)",
+          "oklch(26.43% 0.00255 228.79)",
+          "oklch(37.86% 0.00255 228.79)",
+          "oklch(49.29% 0.00255 228.79)",
+          "oklch(60.71% 0.00255 228.79)",
+          "oklch(72.14% 0.00255 228.79)",
+          "oklch(83.57% 0.00255 228.79)",
+          "oklch(95% 0.00255 228.79)"
+        ]
+      },
+      "signal-header": {
+        "role": "neutral",
+        "displayName": "Signal header",
+        "tonalRamp": [
+          "oklch(15% 0.00525 247.88)",
+          "oklch(26.43% 0.00525 247.88)",
+          "oklch(37.86% 0.00525 247.88)",
+          "oklch(49.29% 0.00525 247.88)",
+          "oklch(60.71% 0.00525 247.88)",
+          "oklch(72.14% 0.00525 247.88)",
+          "oklch(83.57% 0.00525 247.88)",
+          "oklch(95% 0.00525 247.88)"
+        ]
+      },
+      "signal-text": {
+        "role": "neutral",
+        "displayName": "Signal text",
+        "tonalRamp": [
+          "oklch(15% 0.01127 237.05)",
+          "oklch(26.43% 0.01127 237.05)",
+          "oklch(37.86% 0.01127 237.05)",
+          "oklch(49.29% 0.01127 237.05)",
+          "oklch(60.71% 0.01127 237.05)",
+          "oklch(72.14% 0.01127 237.05)",
+          "oklch(83.57% 0.01127 237.05)",
+          "oklch(95% 0.01127 237.05)"
+        ]
+      },
+      "signal-muted": {
+        "role": "neutral",
+        "displayName": "Signal muted",
+        "tonalRamp": [
+          "oklch(15% 0.01527 244.51)",
+          "oklch(26.43% 0.01527 244.51)",
+          "oklch(37.86% 0.01527 244.51)",
+          "oklch(49.29% 0.01527 244.51)",
+          "oklch(60.71% 0.01527 244.51)",
+          "oklch(72.14% 0.01527 244.51)",
+          "oklch(83.57% 0.01527 244.51)",
+          "oklch(95% 0.01527 244.51)"
+        ]
+      },
+      "signal-line": {
+        "role": "neutral",
+        "displayName": "Signal line",
+        "tonalRamp": [
+          "oklch(15% 0.01140 243.68)",
+          "oklch(26.43% 0.01140 243.68)",
+          "oklch(37.86% 0.01140 243.68)",
+          "oklch(49.29% 0.01140 243.68)",
+          "oklch(60.71% 0.01140 243.68)",
+          "oklch(72.14% 0.01140 243.68)",
+          "oklch(83.57% 0.01140 243.68)",
+          "oklch(95% 0.01140 243.68)"
+        ]
+      },
+      "signal-hover": {
+        "role": "neutral",
+        "displayName": "Signal hover",
+        "tonalRamp": [
+          "oklch(15% 0.00681 233.65)",
+          "oklch(26.43% 0.00681 233.65)",
+          "oklch(37.86% 0.00681 233.65)",
+          "oklch(49.29% 0.00681 233.65)",
+          "oklch(60.71% 0.00681 233.65)",
+          "oklch(72.14% 0.00681 233.65)",
+          "oklch(83.57% 0.00681 233.65)",
+          "oklch(95% 0.00681 233.65)"
+        ]
+      },
+      "signal-accent": {
+        "role": "primary",
+        "displayName": "Signal accent",
+        "tonalRamp": [
+          "oklch(15% 0.08858 73.62)",
+          "oklch(26.43% 0.08858 73.62)",
+          "oklch(37.86% 0.08858 73.62)",
+          "oklch(49.29% 0.08858 73.62)",
+          "oklch(60.71% 0.08858 73.62)",
+          "oklch(72.14% 0.08858 73.62)",
+          "oklch(83.57% 0.08858 73.62)",
+          "oklch(95% 0.08858 73.62)"
+        ]
+      },
+      "signal-danger": {
+        "role": "neutral",
+        "displayName": "Signal danger",
+        "tonalRamp": [
+          "oklch(15% 0.14994 24.22)",
+          "oklch(26.43% 0.14994 24.22)",
+          "oklch(37.86% 0.14994 24.22)",
+          "oklch(49.29% 0.14994 24.22)",
+          "oklch(60.71% 0.14994 24.22)",
+          "oklch(72.14% 0.14994 24.22)",
+          "oklch(83.57% 0.14994 24.22)",
+          "oklch(95% 0.14994 24.22)"
+        ]
+      },
+      "signal-tag": {
+        "role": "neutral",
+        "displayName": "Signal tag",
+        "tonalRamp": [
+          "oklch(15% 0.05984 86.97)",
+          "oklch(26.43% 0.05984 86.97)",
+          "oklch(37.86% 0.05984 86.97)",
+          "oklch(49.29% 0.05984 86.97)",
+          "oklch(60.71% 0.05984 86.97)",
+          "oklch(72.14% 0.05984 86.97)",
+          "oklch(83.57% 0.05984 86.97)",
+          "oklch(95% 0.05984 86.97)"
+        ]
+      },
+      "signal-control": {
+        "role": "neutral",
+        "displayName": "Signal control",
+        "tonalRamp": [
+          "oklch(15% 0.00681 233.65)",
+          "oklch(26.43% 0.00681 233.65)",
+          "oklch(37.86% 0.00681 233.65)",
+          "oklch(49.29% 0.00681 233.65)",
+          "oklch(60.71% 0.00681 233.65)",
+          "oklch(72.14% 0.00681 233.65)",
+          "oklch(83.57% 0.00681 233.65)",
+          "oklch(95% 0.00681 233.65)"
+        ]
+      },
+      "signal-on-accent": {
+        "role": "neutral",
+        "displayName": "Signal on accent",
+        "tonalRamp": [
+          "oklch(15% 0.00000 89.88)",
+          "oklch(26.43% 0.00000 89.88)",
+          "oklch(37.86% 0.00000 89.88)",
+          "oklch(49.29% 0.00000 89.88)",
+          "oklch(60.71% 0.00000 89.88)",
+          "oklch(72.14% 0.00000 89.88)",
+          "oklch(83.57% 0.00000 89.88)",
+          "oklch(95% 0.00000 89.88)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Title",
+        "purpose": "Inbox and Settings toolbar heading."
+      },
+      "subject": {
+        "displayName": "Subject",
+        "purpose": "Unread subject; read subjects use regular weight."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Snippets, help and expanded cached text."
+      },
+      "metadata": {
+        "displayName": "Metadata",
+        "purpose": "Timestamps and theme default label."
+      }
+    },
     "shadows": [],
     "motion": [],
-    "breakpoints": []
+    "breakpoints": [
+      {
+        "name": "toolbar-wrap",
+        "value": "340px"
+      },
+      {
+        "name": "title-row",
+        "value": "240px"
+      }
+    ]
   },
   "components": [
     {
-      "name": "Selected provider filter",
-      "kind": "chip",
-      "refersTo": "provider-filter",
-      "description": "Existing active filter pill.",
-      "html": "<button class=\"filter\" aria-pressed=\"true\">All</button>",
-      "css": ".filter { font: 600 13px system-ui, sans-serif; padding: 6px 14px; border-radius: 999px; border: 1px solid #111111; background: #111111; color: #ffffff; cursor: pointer; }"
+      "name": "Standard action",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Account and settings native action.",
+      "html": "<button class=\"ds-button\">Add Gmail</button>",
+      "css": ".ds-button { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted);  } .ds-button:hover:not(:disabled) { background: var(--hover); } .ds-button:active:not(:disabled) { border-color: var(--accent); } .ds-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-button:disabled { color: var(--muted); cursor: default; }"
     },
     {
-      "name": "Sign-in recovery",
+      "name": "Primary submit",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Existing recovery action in account status.",
-      "html": "<button class=\"signin\">Sign in</button>",
-      "css": ".signin { font-size: 13px; font-weight: 600; background: #111111; color: #ffffff; border: 1px solid #111111; border-radius: 999px; padding: 4px 12px; cursor: pointer; }"
+      "description": "Accent action for account submission.",
+      "html": "<button class=\"ds-submit\">Add account</button>",
+      "css": ".ds-submit { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: var(--accent); color: var(--on-accent); border-color: transparent; } .ds-submit:hover:not(:disabled) { background: var(--hover); } .ds-submit:active:not(:disabled) { border-color: var(--accent); } .ds-submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-submit:disabled { color: var(--muted); cursor: default; } .ds-submit:hover:not(:disabled) { background: var(--accent); }"
     },
     {
-      "name": "Mail card",
+      "name": "Open message",
+      "kind": "button",
+      "refersTo": "button-open",
+      "description": "Sibling action opens the provider and retains local read behavior.",
+      "html": "<button class=\"ds-open\">Open</button>",
+      "css": ".ds-open { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; margin-top: 8px; margin-left: -8px; } .ds-open:hover:not(:disabled) { background: var(--hover); } .ds-open:active:not(:disabled) { border-color: var(--accent); } .ds-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-open:disabled { color: var(--muted); cursor: default; }"
+    },
+    {
+      "name": "Provider filters",
+      "kind": "nav",
+      "refersTo": "provider-filter",
+      "description": "Pressed state identifies the selected provider.",
+      "html": "<nav class=\"ds-filters\" aria-label=\"Provider filter\"><button aria-pressed=\"true\">All</button><button aria-pressed=\"false\">Gmail</button><button aria-pressed=\"false\">Outlook</button></nav>",
+      "css": ".ds-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 12px; } .ds-filters button { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); border-radius: 999px; padding-inline: 14px; background: transparent; border-color: transparent; color: var(--muted); } .ds-filters button:hover { background: var(--hover); } .ds-filters button[aria-pressed=\"true\"], .ds-filters button[aria-pressed=\"true\"]:hover { background: var(--accent); color: var(--on-accent); } .ds-filters button:active { border-color: var(--accent); } .ds-filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Provider badge",
+      "kind": "chip",
+      "refersTo": "provider-badge",
+      "description": "Noninteractive provider identity inside an account header.",
+      "html": "<span class=\"ds-badge\">Gmail</span>",
+      "css": ".ds-badge { font: 600 11px/1.5 system-ui, sans-serif; padding: 2px 6px; border-radius: 4px; background: var(--tag); color: var(--text); }"
+    },
+    {
+      "name": "Account panel",
       "kind": "card",
-      "refersTo": "mail-card",
-      "description": "Existing card shell and focus treatment.",
-      "html": "<div class=\"card\" tabindex=\"0\"><p>Project review</p></div>",
-      "css": ".card { border: 1px solid #dadce0; border-radius: 8px; padding: 8px 10px; background: #ffffff; color: #111111; font-family: system-ui, sans-serif; } .card p { font-size: 14px; font-weight: 600; margin: 0 0 2px; } .card:focus-visible { outline: 2px solid #1a73e8; outline-offset: 1px; }"
+      "refersTo": "account-panel",
+      "description": "One full address owns one panel.",
+      "html": "<section class=\"ds-account\"><header class=\"ds-account-header\"><span class=\"ds-account-badge\">Outlook</span><h2>desk@example.com</h2></header><p class=\"ds-account-empty\">No messages to show.</p></section>",
+      "css": ".ds-account { font: 13px/1.5 system-ui, sans-serif; background: var(--panel); color: var(--text); border-radius: 12px; overflow: hidden; } .ds-account-header { padding: 12px 14px; background: var(--header); } .ds-account-header h2 { margin: 6px 0 0; font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; } .ds-account-badge { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--tag); } .ds-account-empty { margin: 0; padding: 12px 14px; color: var(--muted); overflow-wrap: anywhere; }"
+    },
+    {
+      "name": "Mail row",
+      "kind": "custom",
+      "refersTo": "mail-row",
+      "description": "Flat cached message with preview control and sibling Open.",
+      "html": "<article class=\"ds-row\"><span class=\"ds-dot\" role=\"img\" aria-label=\"Unread\"></span><button class=\"ds-summary\" aria-expanded=\"false\"><span class=\"ds-top\"><span class=\"ds-sender\">Project team</span><time class=\"ds-time\">10:42</time></span><span class=\"ds-subject\">Weekly review</span><span class=\"ds-snippet\">The updated notes are ready.</span></button><button class=\"ds-row-open\">Open</button></article>",
+      "css": ".ds-row { position: relative; font: 13px/1.5 system-ui, sans-serif; padding: 12px 14px 10px 20px; background: var(--panel); color: var(--text); } .ds-dot { position: absolute; left: 8px; top: 20px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); } .ds-summary { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font-weight: 400; text-align: left; } .ds-summary:hover { background: var(--hover); } .ds-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; } .ds-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; } .ds-subject, .ds-snippet { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-subject { font-size: 14px; font-weight: 600; } .ds-snippet { color: var(--muted); margin-top: 3px; } .ds-row-open { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; margin-top: 8px; margin-left: -8px; } .ds-row-open:hover:not(:disabled) { background: var(--hover); } .ds-row-open:active:not(:disabled) { border-color: var(--accent); } .ds-row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-row-open:disabled { color: var(--muted); cursor: default; }"
+    },
+    {
+      "name": "Email field",
+      "kind": "input",
+      "refersTo": "email-input",
+      "description": "Native account address field with themed caret and placeholder.",
+      "html": "<label class=\"ds-field\">Your email address<input type=\"email\" placeholder=\"you@example.com\" autocomplete=\"email\"></label>",
+      "css": ".ds-field { display: block; font: 13px/1.5 system-ui, sans-serif; color: var(--text); } .ds-field input { display: block; width: 100%; font: inherit; padding: 8px; margin-top: 4px; border: 1px solid var(--muted); border-radius: 6px; color: var(--text); background: var(--control); caret-color: var(--accent); } .ds-field input::placeholder { color: var(--muted); opacity: 1; } .ds-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Settings toolbar icon",
+      "kind": "button",
+      "refersTo": "toolbar-icon",
+      "description": "Authored SVG replaces glyph icons.",
+      "html": "<button class=\"ds-icon\" aria-label=\"Settings\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16M4 17h16\"/><circle cx=\"9\" cy=\"7\" r=\"3\"/><circle cx=\"15\" cy=\"17\" r=\"3\"/></svg></button>",
+      "css": ".ds-icon { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 6px; border-color: transparent; background: transparent; } .ds-icon:hover:not(:disabled) { background: var(--hover); } .ds-icon:active:not(:disabled) { border-color: var(--accent); } .ds-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-icon:disabled { color: var(--muted); cursor: default; } .ds-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .ds-icon svg circle { fill: var(--bg); }"
     }
   ],
   "narrative": {
-    "overview": "Factual baseline of the existing clean, minimal A v5 popup. Account identity, unread state, and fast triage lead.",
+    "northStar": "Midnight desk",
+    "overview": "The approved world is a compact, calm desk for checking personal mail. Blue-grey\nsurfaces and a pale teal accent make Midnight the default; Slate workspace and\nSignal panel apply the same component grammar through their own palettes.\nNormal-case native typography and crisp authored icons keep the interface direct.\n\nThis is the implementation record extracted on 2026-09-30 from\n`src/popup/popup.css`, `popup.html`, `popup.js` and `themes.js`. It replaces the\nformer white A v5 world. Historical screenshots and reproduction provenance stay\nin `docs/ui-baseline/`; they are historical evidence, not current tokens.\nCurrent synthetic verification is in `docs/ui-workspace/`; real-account owner\nacceptance of this candidate remains pending.",
     "keyCharacteristics": [
-      "Compact single column",
-      "Flat white surfaces",
-      "Dark active pills",
-      "Account identity on each card"
+      "Three complete palettes with Midnight as the remembered-preference fallback.",
+      "Flat mail rows inside separate account panels.",
+      "Normal-case system typography and authored SVG toolbar icons.",
+      "Immediate state changes without ambient or theme-transition motion."
     ],
-    "rules": [],
+    "rules": [
+      {
+        "name": "The Complete Palette Rule",
+        "body": "Switch every semantic role together, including native color scheme, selection, focus, caret and scrollbar colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Plain Label Rule",
+        "body": "Use normal-case system UI text; do not inherit uppercase, widely tracked comparison-board lettering.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Row Rule",
+        "body": "Give each account one enclosing panel; separate its messages with dividers rather than independent raised cards.",
+        "section": "elevation & depth"
+      }
+    ],
     "dos": [
-      "Render external mail as text and retain visible keyboard focus."
+      "Do apply the active theme to every surface and interaction color.",
+      "Do preserve full account identity, native keyboard controls and visible focus.",
+      "Do render external mail as text and keep expanded preview display-only.",
+      "Do use synthetic account addresses and message content in design examples."
     ],
     "donts": [
-      "Do not treat synthetic screenshot coverage as real-account acceptance or a completed accessibility audit."
+      "Don't combine messages from different accounts into one account panel.",
+      "Don't introduce uppercase tracked labels, glyph toolbar icons or ambient motion.",
+      "Don't add later-stage mailbox write controls to the Stage 1 component set.",
+      "Don't treat synthetic screenshots as real-account acceptance."
     ]
   }
 }

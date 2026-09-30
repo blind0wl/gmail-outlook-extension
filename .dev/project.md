@@ -65,9 +65,12 @@ No living-spec split adopted.
 - Owner selected the focused popup usability/accessibility refinement with
   Impeccable after PR #10 merged (`e94de2e`). Scope is in
   `specs/001-popup-usability/spec.md`; owner acceptance passed on `95650aa`; PR #11 merged as `253e7a9`.
-- Next, revisit visual direction with the owner.
-  Present proposed design choices and previews for approval before further
-  UI changes. No redesign direction or later feature is selected.
+- Owner approved the new popup direction and all three themes, with Midnight
+  desk default. Approved delivery order: popup-workspace, gmail-api, then
+  mailbox-actions; the latter adds real read/unread and Trash with Undo.
+  The first-stage written scope is in `specs/002-popup-workspace/spec.md`;
+  specification, technical plan and execution tasks are owner-approved;
+  implementation is active. Approved boundaries and future setup research are in `docs/design/popup-directions/`.
 - Gmail stale Open briefly displays deleted mail in Inbox while it remains
   in Trash. Recorded separately in `.specify/bugs/gmail-stale-open/assessment.md`;
   low-priority link UX follow-up, not a persistent restoration.
@@ -91,4 +94,5 @@ The prior Pi claim is provenance, not a harness-specific ownership lock.
   Node 24. Required human acceptance is unchanged. Historical evidence v1 is
   retained as history rather than rewritten to claim a new run.
 - GitHub has no open issues at reconciliation. The selected popup usability
-  refinement is active; the local Gmail assessment remains queued separately.
+  refinement is done (PR #11 and closeout PR #12 merged). Popup-workspace
+  implementation is active; the local Gmail assessment remains queued separately.

@@ -1,25 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="midnight">
 <head>
   <meta charset="utf-8">
   <title>Gmail plus Outlook inbox</title>
   <link rel="stylesheet" href="popup.css">
 </head>
-<body>
+<body data-theme-loading>
   <header class="inbox-header">
-    <h1>Inbox <span id="unread-count" aria-live="polite"></span></h1>
+    <h1><span id="workspace-title">Inbox</span> <span id="unread-count" aria-live="polite"></span></h1>
+    <div id="mail-tools"><button id="refresh-mail" class="icon-button" type="button" aria-label="Refresh" title="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"/></svg></button><button id="open-settings" class="icon-button" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></button></div>
+    <div id="settings-tools" hidden><button id="back-to-mail" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg>Back to mail</button></div>
   </header>
+  <div id="mail-view">
   <nav class="pills" aria-label="Provider filter">
     <button type="button" data-filter="all" aria-pressed="true">All</button>
     <button type="button" data-filter="gmail" aria-pressed="false">Gmail</button>
     <button type="button" data-filter="outlook" aria-pressed="false">Outlook</button>
   </nav>
+  <main>
+    <ul id="inbox-list"></ul>
+    <p id="inbox-empty" hidden>No mail cached yet.</p>
+  </main>
+  </div>
+  <div id="settings-view" hidden>
+    <section class="theme-settings" aria-labelledby="themes-title">
+      <h2 id="themes-title">Themes</h2>
+      <div role="radiogroup" aria-label="Theme">
+        <label class="theme-choice"><input type="radio" name="popup-theme" value="midnight" checked><span class="theme-swatch midnight-swatch" aria-hidden="true"></span><span>Midnight desk</span><small>Default</small></label>
+        <label class="theme-choice"><input type="radio" name="popup-theme" value="slate"><span class="theme-swatch slate-swatch" aria-hidden="true"></span><span>Slate workspace</span></label>
+        <label class="theme-choice"><input type="radio" name="popup-theme" value="signal"><span class="theme-swatch signal-swatch" aria-hidden="true"></span><span>Signal panel</span></label>
+      </div>
+      <p id="theme-message" role="status"></p>
+    </section>
   <section class="account-settings" aria-label="Accounts">
+    <h2>Accounts</h2>
     <p>Connect an account to read recent inbox mail and receive alerts. Mail stays in this browser.</p>
     <div class="account-actions">
       <button id="add-gmail" type="button">Add Gmail</button>
       <button id="add-outlook" type="button">Add Outlook</button>
-      <button id="refresh-mail" type="button">Refresh</button>
     </div>
     <form id="add-account-form" hidden>
       <h2 id="add-account-title">Add account</h2>
@@ -41,17 +59,11 @@
       <button type="submit" id="add-account-submit">Add account</button>
       <button type="button" id="add-account-cancel">Cancel</button>
     </form>
-    <label class="check-row"><input id="skip-focused" type="checkbox"> <span>Pause alerts while a provider tab is focused</span></label>
-    <p id="lifecycle-message" role="status"></p>
     <ul id="account-controls"></ul>
   </section>
-  <main>
-    <ul id="inbox-list"></ul>
-    <p id="inbox-empty" hidden>No mail cached yet.</p>
-  </main>
-  <section id="account-status" aria-label="Account status" hidden>
-    <h2>Status</h2>
-    <ul id="account-status-list"></ul>
+  <section aria-labelledby="notifications-title">
+    <h2 id="notifications-title">Notifications</h2>
+    <label class="check-row"><input id="skip-focused" type="checkbox"> <span>Pause alerts while a provider tab is focused</span></label>
   </section>
   <section id="sound-settings" aria-label="Sound settings">
     <h2>Sound</h2>
@@ -59,6 +71,8 @@
     <label class="volume-row"><span>Volume</span> <input type="range" id="sound-volume" min="0" max="100" step="1" value="50"> <span id="sound-volume-value"></span></label>
     <ul id="sound-accounts"></ul>
   </section>
+  </div>
+  <p id="lifecycle-message" role="status"></p>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

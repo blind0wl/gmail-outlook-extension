@@ -64,7 +64,7 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
     cached.subject + cached.snippet,
   );
   assert.equal(writes, 0);
-  assert.equal(messages[0].type, "mark-read");
+  assert.equal(messages.length, 0, "preview does not mark read");
   storageListener({ mailCache: { newValue: [cached] } }, "local");
   assert.equal(document.activeElement, document.querySelector(".card-summary"));
   assert.equal(document.activeElement.getAttribute("aria-expanded"), "true");
@@ -152,22 +152,24 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   document.querySelector(".status-signin").focus();
   storageListener({ mailCache: { newValue: [cached] } }, "local");
   assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  const beforeRecovery = pendingRequests;
   document.activeElement.click();
-  storageListener({ accountState: { newValue: recoveryState } }, "local");
-  assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  assert.equal(document.getElementById("settings-view").hidden, false);
+  assert.equal(document.activeElement.dataset.action, "sign-in");
+  assert.equal(pendingRequests, beforeRecovery, "Mail recovery navigates without starting auth");
+  document.activeElement.click();
+  storageListener({ mailCache: { newValue: [cached] } }, "local");
+  assert.equal(document.activeElement.dataset.action, "sign-in");
   assert.equal(document.activeElement.getAttribute("aria-disabled"), "true");
-  assert.equal(document.activeElement.textContent, "Signing in…");
   document.activeElement.click();
-  document.querySelector('#account-controls [data-action="sign-in"]').click();
-  assert.equal(pendingRequests, 2, "recovery and account controls share one pending sign-in");
+  assert.equal(pendingRequests, beforeRecovery + 1, "Settings sign-in cannot be repeated while pending");
   data.accountState = recoveryState;
   finishAction({ ok: true });
-  await tick();
-  await tick();
-  assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  await tick(); await tick();
+  assert.equal(document.activeElement.dataset.action, "sign-in");
   assert.equal(document.activeElement.getAttribute("aria-disabled"), "false");
-  storageListener({ accountState: { newValue: {} } }, "local");
-  assert.equal(document.activeElement, document.getElementById("add-gmail"), "removed recovery has a surviving focus destination");
+  storageListener({ accounts: { newValue: [] } }, "local");
+  assert.equal(document.activeElement, document.getElementById("add-gmail"), "removed account has a surviving focus destination");
 });
 test("notification is silent so mute governs all extension sound", async () => {
   const { sendNotification } =
@@ -185,4 +187,193 @@ test("notification is silent so mute governs all extension sound", async () => {
     { title: "title", message: "text" },
   );
   assert.equal(options.silent, true);
+});
+
+let popupFixtureId = 0;
+async function workspaceFixture(overrides = {}) {
+  const { window, document } = parseHTML(
+    readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
+  );
+  globalThis.document = document;
+  globalThis.window = window;
+  let focused;
+  window.HTMLElement.prototype.focus = function () { focused = this; };
+  Object.defineProperty(document, "activeElement", { get: () => focused });
+  const data = {
+    accounts: [{ provider: "gmail", account: "work@example.com" }],
+    mailCache: [{ key: "gmail:work%40example.com:1", provider: "gmail",
+      account: "work@example.com", subject: "Project review", unread: true,
+      snippet: "A cached preview", date: Date.now() }],
+    ...overrides,
+  };
+  const messages = [];
+  const tabs = [];
+  let listener;
+  globalThis.chrome = {
+    runtime: { sendMessage: async msg => { messages.push(msg); return { ok: true }; } },
+    tabs: { create: async tab => { tabs.push(tab); } },
+    storage: {
+      local: {
+        get: async key => ({ [key]: data[key] }),
+        set: async value => Object.assign(data, value),
+      },
+      onChanged: { addListener: callback => { listener = callback; } },
+    },
+  };
+  await import(`../src/popup/popup.js?workspace=${++popupFixtureId}`);
+  await tick(); await tick();
+  return { document, window, data, messages, tabs,
+    change: changes => listener(changes, "local") };
+}
+
+test("workspace Settings isolates configuration and preserves Mail position and account drafts", async () => {
+  const { document, change } = await workspaceFixture();
+  const mail = document.getElementById("mail-view");
+  const settings = document.getElementById("settings-view");
+  assert.ok(mail && settings, "Mail and Settings have independent view shells");
+  assert.equal(mail.hidden, false);
+  assert.equal(settings.hidden, true);
+  assert.equal(mail.querySelector("#add-gmail"), null);
+  mail.scrollTop = 143;
+  const opener = document.getElementById("open-settings");
+  opener.focus(); opener.click();
+  assert.equal(mail.hidden, true);
+  assert.equal(settings.hidden, false);
+  document.getElementById("add-gmail").click();
+  const input = document.getElementById("add-account-email");
+  input.value = "draft@example.com";
+  change({ mailCache: { newValue: [] } });
+  change({ accounts: { newValue: [{ provider: "gmail", account: "work@example.com" }] } });
+  assert.equal(input.value, "draft@example.com");
+  assert.equal(document.activeElement, input);
+  document.getElementById("back-to-mail").click();
+  assert.equal(settings.hidden, true);
+  assert.equal(mail.hidden, false);
+  assert.equal(mail.scrollTop, 143);
+  assert.equal(document.activeElement, opener);
+  opener.click();
+  assert.equal(input.value, "draft@example.com");
+  assert.equal(document.getElementById("add-account-form").hidden, false);
+});
+
+test("workspace groups same-provider accounts independently and keeps empty/status sections", async () => {
+  const work = { provider: "gmail", account: "work@example.com" };
+  const personal = { provider: "gmail", account: "personal@example.com" };
+  const outlook = { provider: "outlook", account: "outlook@example.com" };
+  const empty = { provider: "gmail", account: "empty@example.com", enabled: false };
+  const mail = (acct, id, date) => ({ ...acct, key: `${acct.provider}:${encodeURIComponent(acct.account)}:${id}`,
+    from: "Sender", subject: id, snippet: "Cached text", date, unread: true });
+  const now = Date.now();
+  const { document, messages, tabs, change } = await workspaceFixture({
+    accounts: [work, personal, outlook, empty],
+    mailCache: [mail(outlook, "outlook", now), mail(work, "old", now - 1000),
+      mail(personal, "personal", now), mail(work, "new", now),
+      mail({ provider: "gmail", account: "orphan@example.com" }, "orphan", now)],
+    accountState: { "outlook:outlook@example.com": { needsSignIn: true } },
+  });
+  const sections = [...document.querySelectorAll(".account-section")];
+  assert.deepEqual(sections.map(s => s.dataset.accountKey),
+    ["gmail:work@example.com", "gmail:personal@example.com", "outlook:outlook@example.com", "gmail:empty@example.com"]);
+  assert.deepEqual([...sections[0].querySelectorAll(".card-subject")].map(x => x.textContent), ["new", "old"]);
+  assert.equal(sections[1].querySelectorAll(".card").length, 1);
+  assert.equal(sections[2].querySelectorAll(".card").length, 1);
+  assert.match(sections[3].textContent, /Paused/);
+  assert.match(sections[3].textContent, /No messages/);
+  assert.equal(document.querySelector('[data-key*="orphan"]'), null);
+  const preview = sections[0].querySelector(".card-summary");
+  preview.focus(); preview.click();
+  assert.equal(messages.length, 0, "expanding only displays cached text");
+  assert.equal(sections[0].querySelector(".account-count").textContent, "2 unread");
+  preview.click();
+  assert.equal(preview.getAttribute("aria-expanded"), "false");
+  sections[0].querySelector(".card-open").click();
+  await tick();
+  assert.equal(messages.at(-1).type, "mark-read", "Open keeps existing local behavior");
+  assert.match(tabs[0].url, /authuser=work%40example.com/);
+  document.querySelector('[data-filter="outlook"]').click();
+  assert.equal(document.querySelectorAll(".account-section").length, 1);
+  const recovery = document.querySelector(".status-signin");
+  const before = messages.length;
+  recovery.click();
+  assert.equal(document.getElementById("settings-view").hidden, false);
+  assert.equal(document.activeElement.closest("li").dataset.accountKey, "outlook:outlook@example.com");
+  assert.equal(document.activeElement.dataset.action, "sign-in");
+  assert.equal(messages.length, before, "Mail recovery navigates; Settings starts sign-in explicitly");
+  document.getElementById("back-to-mail").click();
+  document.querySelector('[data-filter="all"]').click();
+  const remaining = document.querySelector('.card-summary');
+  remaining.focus();
+  change({ mailCache: { newValue: [] } });
+  assert.equal(document.activeElement, document.getElementById("refresh-mail"), "removed mail focus returns to Mail control");
+});
+
+test("workspace themes persist without replacing focused controls or draft form input", async () => {
+  const { document, window, data, change } = await workspaceFixture({ popupTheme: "slate" });
+  assert.equal(document.documentElement.dataset.theme, "slate");
+  document.getElementById("open-settings").click();
+  document.getElementById("add-gmail").click();
+  const draft = document.getElementById("add-account-email");
+  draft.value = "unfinished@example.com";
+  const signal = document.querySelector('input[name="popup-theme"][value="signal"]');
+  signal.focus(); signal.checked = true;
+  signal.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await tick();
+  assert.equal(document.documentElement.dataset.theme, "signal");
+  assert.equal(document.activeElement, signal);
+  assert.equal(draft.value, "unfinished@example.com");
+  assert.equal(data.popupTheme, "signal");
+  change({ popupTheme: { newValue: "slate" } });
+  assert.equal(document.documentElement.dataset.theme, "slate");
+  assert.equal(document.activeElement, signal, "external preference update preserves focus");
+  const next = await workspaceFixture({ popupTheme: data.popupTheme });
+  assert.equal(next.document.documentElement.dataset.theme, "signal", "reopen loads saved choice");
+});
+
+test("workspace failed theme save reports recovery while retaining usable selected appearance", async () => {
+  const { document, window } = await workspaceFixture();
+  document.getElementById("open-settings").click();
+  chrome.storage.local.set = async () => { throw new Error("private storage details"); };
+  const slate = document.querySelector('input[name="popup-theme"][value="slate"]');
+  assert.ok(slate, "Settings includes native theme choices");
+  slate.checked = true;
+  slate.dispatchEvent(new window.Event("change", { bubbles: true }));
+  await tick(); await tick();
+  assert.equal(document.documentElement.dataset.theme, "slate");
+  assert.match(document.getElementById("theme-message").textContent, /could not be saved/i);
+  assert.equal(document.body.textContent.includes("private storage details"), false);
+  document.getElementById("back-to-mail").click();
+  assert.equal(document.getElementById("mail-view").hidden, false);
+});
+
+test("Mail refresh failures are announced outside the hidden Settings view", async () => {
+  const { document } = await workspaceFixture();
+  chrome.runtime.sendMessage = async () => { throw new Error("private provider detail"); };
+  document.getElementById("refresh-mail").click();
+  await tick();
+  const status = document.getElementById("lifecycle-message");
+  assert.ok(!status.closest("#settings-view"), "Mail must expose refresh failure feedback");
+  assert.match(status.textContent, /refresh/i);
+  assert.equal(status.textContent.includes("private provider detail"), false);
+});
+
+for (const outcome of [{ ok: true }, { ok: false, code: "SIGNED_OUT" }]) test(`a completed account add (${outcome.ok ? "success" : "failure"}) cannot close a newer form or erase its draft`, async () => {
+  const { document, window } = await workspaceFixture();
+  let finish;
+  chrome.runtime.sendMessage = async () => new Promise(resolve => { finish = resolve; });
+  document.getElementById("open-settings").click();
+  document.getElementById("add-gmail").click();
+  const email = document.getElementById("add-account-email");
+  email.value = "first@example.com";
+  document.getElementById("add-account-form").dispatchEvent(new window.Event("submit", { cancelable: true }));
+  await tick();
+  document.getElementById("add-account-cancel").click();
+  document.getElementById("add-outlook").click();
+  email.value = "new-draft@example.com";
+  finish(outcome);
+  await tick();
+  assert.equal(email.value, "new-draft@example.com");
+  assert.equal(document.getElementById("add-account-form").hidden, false);
+  assert.ok(document.activeElement === email);
+  assert.match(document.getElementById("add-account-title").textContent, /Outlook/);
+  assert.equal(document.getElementById("add-account-error").hidden, true);
 });
