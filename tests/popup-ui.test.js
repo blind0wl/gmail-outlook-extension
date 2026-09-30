@@ -28,6 +28,7 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
     accounts: [{ provider: "gmail", account: "a@gmail.com" }],
   };
   const messages = [];
+  let storageListener;
   let writes = 0;
   globalThis.chrome = {
     runtime: {
@@ -41,24 +42,44 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
         get: async (key) => ({ [key]: data[key] }),
         set: async () => writes++,
       },
-      onChanged: { addListener() {} },
+      onChanged: { addListener(listener) { storageListener = listener; } },
     },
   };
   await import(`../src/popup/popup.js?ui=${Date.now()}`);
   await tick();
   await tick();
   const card = document.querySelector(".card");
-  card.focus();
-  card.click();
+  const summary = card.querySelector("button.card-summary");
+  assert.ok(summary, "preview uses a native button distinct from Open");
+  assert.equal(card.hasAttribute("role"), false, "list item contains independent controls");
+  assert.equal(summary.querySelector("button"), null);
+  summary.focus();
+  summary.click();
   await tick();
-  assert.equal(document.activeElement, card);
-  assert.equal(card.getAttribute("aria-expanded"), "true");
+  assert.equal(document.activeElement, summary);
+  assert.equal(summary.getAttribute("aria-expanded"), "true");
+  assert.equal(summary.getAttribute("aria-controls"), card.querySelector(".card-preview").id);
   assert.equal(
     card.querySelector(".card-preview").textContent,
     cached.subject + cached.snippet,
   );
   assert.equal(writes, 0);
   assert.equal(messages[0].type, "mark-read");
+  storageListener({ mailCache: { newValue: [cached] } }, "local");
+  assert.equal(document.activeElement, document.querySelector(".card-summary"));
+  assert.equal(document.activeElement.getAttribute("aria-expanded"), "true");
+  const chime = document.querySelector("#sound-accounts input");
+  chime.focus();
+  storageListener({ soundSettings: { newValue: {
+    masterMuted: false, volume: 0.7, mutedAccounts: { "gmail:a@gmail.com": true },
+  } } }, "local");
+  assert.equal(document.activeElement, document.querySelector("#sound-accounts input"));
+  assert.equal(document.activeElement.checked, false);
+  const volume = document.getElementById("sound-volume");
+  volume.value = "25";
+  volume.dispatchEvent(new window.Event("input"));
+  assert.equal(document.getElementById("sound-volume-value").textContent, "25%");
+  assert.equal(volume.getAttribute("aria-valuetext"), "25%");
   for (const id of ["add-gmail", "add-outlook", "refresh-mail"])
     assert.ok(document.getElementById(id), id);
   async function submitAddForm(email) {
@@ -81,6 +102,7 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
     account: "second@gmail.com",
   });
   assert.equal(document.getElementById("add-account-form").hidden, true);
+  assert.equal(document.activeElement, document.getElementById("add-gmail"));
   document.getElementById("add-outlook").click();
   await tick();
   assert.equal(document.getElementById("add-account-help-gmail").hidden, true);
@@ -107,6 +129,45 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   remove.click();
   await tick();
   assert.equal(messages.at(-1).type, "remove-account");
+  let finishAction;
+  let pendingRequests = 0;
+  chrome.runtime.sendMessage = () => {
+    pendingRequests++;
+    return new Promise(resolve => { finishAction = resolve; });
+  };
+  const pending = document.querySelector('#account-controls [data-action="sign-out"]');
+  pending.focus();
+  pending.click();
+  storageListener({ mailCache: { newValue: [cached] } }, "local");
+  assert.equal(document.activeElement.dataset.action, "sign-out");
+  assert.equal(document.activeElement.getAttribute("aria-disabled"), "true", "pending action stays focusable");
+  document.activeElement.click();
+  assert.equal(pendingRequests, 1, "pending action cannot be triggered twice");
+  finishAction({ ok: true });
+  await tick();
+  assert.equal(document.activeElement.dataset.action, "sign-out");
+  assert.equal(document.activeElement.getAttribute("aria-disabled"), "false");
+  const recoveryState = { "gmail:a@gmail.com": { needsSignIn: true } };
+  storageListener({ accountState: { newValue: recoveryState } }, "local");
+  document.querySelector(".status-signin").focus();
+  storageListener({ mailCache: { newValue: [cached] } }, "local");
+  assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  document.activeElement.click();
+  storageListener({ accountState: { newValue: recoveryState } }, "local");
+  assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  assert.equal(document.activeElement.getAttribute("aria-disabled"), "true");
+  assert.equal(document.activeElement.textContent, "Signing in…");
+  document.activeElement.click();
+  document.querySelector('#account-controls [data-action="sign-in"]').click();
+  assert.equal(pendingRequests, 2, "recovery and account controls share one pending sign-in");
+  data.accountState = recoveryState;
+  finishAction({ ok: true });
+  await tick();
+  await tick();
+  assert.ok(document.activeElement === document.querySelector(".status-signin"), "recovery focus survives refresh");
+  assert.equal(document.activeElement.getAttribute("aria-disabled"), "false");
+  storageListener({ accountState: { newValue: {} } }, "local");
+  assert.equal(document.activeElement, document.getElementById("add-gmail"), "removed recovery has a surviving focus destination");
 });
 test("notification is silent so mute governs all extension sound", async () => {
   const { sendNotification } =

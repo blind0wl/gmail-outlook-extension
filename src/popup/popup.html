@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <title>Gmail plus Outlook inbox</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -13,11 +14,13 @@
     <button type="button" data-filter="gmail" aria-pressed="false">Gmail</button>
     <button type="button" data-filter="outlook" aria-pressed="false">Outlook</button>
   </nav>
-  <section aria-label="Accounts">
+  <section class="account-settings" aria-label="Accounts">
     <p>Connect an account to read recent inbox mail and receive alerts. Mail stays in this browser.</p>
-    <button id="add-gmail" type="button">Add Gmail</button>
-    <button id="add-outlook" type="button">Add Outlook</button>
-    <button id="refresh-mail" type="button">Refresh</button>
+    <div class="account-actions">
+      <button id="add-gmail" type="button">Add Gmail</button>
+      <button id="add-outlook" type="button">Add Outlook</button>
+      <button id="refresh-mail" type="button">Refresh</button>
+    </div>
     <form id="add-account-form" hidden>
       <h2 id="add-account-title">Add account</h2>
       <label>Your email address
@@ -38,7 +41,7 @@
       <button type="submit" id="add-account-submit">Add account</button>
       <button type="button" id="add-account-cancel">Cancel</button>
     </form>
-    <label><input id="skip-focused" type="checkbox"> Pause alerts while a provider tab is focused</label>
+    <label class="check-row"><input id="skip-focused" type="checkbox"> <span>Pause alerts while a provider tab is focused</span></label>
     <p id="lifecycle-message" role="status"></p>
     <ul id="account-controls"></ul>
   </section>
@@ -52,8 +55,8 @@
   </section>
   <section id="sound-settings" aria-label="Sound settings">
     <h2>Sound</h2>
-    <label><input type="checkbox" id="sound-muted"> Mute all sounds</label>
-    <label>Volume <input type="range" id="sound-volume" min="0" max="100" step="1" value="50"> <span id="sound-volume-value"></span></label>
+    <label class="check-row"><input type="checkbox" id="sound-muted"> <span>Mute all sounds</span></label>
+    <label class="volume-row"><span>Volume</span> <input type="range" id="sound-volume" min="0" max="100" step="1" value="50"> <span id="sound-volume-value"></span></label>
     <ul id="sound-accounts"></ul>
   </section>
   <script type="module" src="popup.js"></script>

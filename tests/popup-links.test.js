@@ -4,7 +4,6 @@ import {
   gmailThreadUrl,
   outlookThreadUrl,
   threadUrl,
-  isCardSelfKeydown,
   messageIdOf,
 } from "../src/popup/links.js";
 
@@ -55,19 +54,4 @@ test("every built link carries the account address", () => {
 test("messageIdOf strips the provider prefix", () => {
   assert.equal(messageIdOf("gmail:abc"), "abc");
   assert.equal(messageIdOf("outlook:A=B"), "A=B");
-});
-
-test("card keys mark read only when targeted at the card itself", () => {
-  const card = { id: "card" };
-  const button = { id: "open" };
-  // Enter/Space on the focused card: handler runs, marks read.
-  assert.equal(isCardSelfKeydown({ key: "Enter", target: card, currentTarget: card }), true);
-  assert.equal(isCardSelfKeydown({ key: " ", target: card, currentTarget: card }), true);
-  // Enter/Space bubbled from the nested Open button: handler ignores, so
-  // the button keeps native activation and still opens the thread.
-  assert.equal(isCardSelfKeydown({ key: "Enter", target: button, currentTarget: card }), false);
-  assert.equal(isCardSelfKeydown({ key: " ", target: button, currentTarget: card }), false);
-  // Other keys never mark read wherever they land.
-  assert.equal(isCardSelfKeydown({ key: "a", target: card, currentTarget: card }), false);
-  assert.equal(isCardSelfKeydown({ key: "Tab", target: card, currentTarget: card }), false);
 });

@@ -1,5 +1,5 @@
 version: 1
-focus: null
+focus: popup-usability
 work:
   extension-v1:
     kind: feature
@@ -46,3 +46,10 @@ work:
     ref: ".specify/bugs/gmail-stale-open/assessment.md"
     priority: low
     phase: discovery
+  popup-usability:
+    kind: feature
+    title: "Focused popup controls, scrolling and keyboard usability"
+    status: active
+    ref: "specs/001-popup-usability/spec.md"
+    phase: acceptance
+    checkpoint: ".dev/evidence/popup-usability.md"
