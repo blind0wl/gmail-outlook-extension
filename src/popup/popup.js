@@ -227,6 +227,17 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   var pendingMailActions = new Set();
   var mailActions = {};
+  var mailActionsRevision = 0;
+  async function syncMailActions() {
+    var revision = ++mailActionsRevision;
+    try {
+      var data = await storageLocal()?.get("mailActions");
+      if (revision !== mailActionsRevision) return;
+      mailActions = data?.mailActions || {};
+      renderList();
+      renderUndo();
+    } catch { /* Keep the saved recovery view if local storage is unavailable. */ }
+  }
   // Project pending actions over authoritative cache; never write optimistic mail state.
   var mailFeedback = new Map();
   function settleMailFeedback() {
@@ -296,6 +307,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       mailErrors[key] = unconfirmedMessage;
       setStatus(mailErrors[key], "error");
     } finally {
+      await syncMailActions();
       pendingMailActions.delete(key);
       renderHeader();
       renderList();
@@ -683,11 +695,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function load() {
-    storageLocal()?.get("mailActions").then(function (data) {
-      mailActions = data.mailActions || {};
-      renderList();
-      renderUndo();
-    });
+    void syncMailActions();
     var store = storageLocal();
     if (!store) {
       items = [];
@@ -881,6 +889,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       chrome.storage.onChanged.addListener(function (changes, area) {
         if (area === "local" && changes) {
           if (changes.mailActions) {
+            mailActionsRevision++;
             mailActions = changes.mailActions.newValue || {};
             renderList();
             renderUndo();

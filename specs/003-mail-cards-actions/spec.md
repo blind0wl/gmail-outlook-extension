@@ -160,3 +160,21 @@ session discovery and unclassified failures report service unavailability.
 Delayed state is a reproduced synthetic failure mode and candidate explanation,
 not a verified cause of the owner's Gmail incident. Fresh real-account acceptance
 is pending in docs/acceptance/2026-10-01-undo-burst-confirmation.md.
+
+
+## 2026-10-01 Undo queue follow-up candidate
+
+Owner reports the HTML extension page became stuck after four or five Undos with
+“already queued” feedback; closing/reopening restored responsiveness and all mail
+was back in Gmail Inbox. Exact live cause remains unverified. Tests reproduce two
+relevant defects: completed Undo entries remain if action-journal storage events
+are missed, and a duplicate in-flight Undo gets an immediate `pending` response.
+
+The popup now rereads the saved action journal after every action response. A
+revision guard prevents older asynchronous snapshots replacing newer events or
+reads. This remains local-storage only, with no provider request in the popup.
+Duplicate in-flight Undo for the same key now shares the original result, including
+uncertainty; it never adds a second provider write. Other overlapping operations
+still reject duplicates. The worker clears in-flight tracking after completion;
+durable uncertainty/restart locks are unchanged. Fresh acceptance is pending in
+docs/acceptance/2026-10-01-undo-queue-follow-up.md.

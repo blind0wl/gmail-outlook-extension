@@ -383,6 +383,7 @@ export async function handleMarkRead(key, accounts, deps = {}) {
 // move. The same poll queue orders provider reads and writes; sign-out epochs
 // are bumped immediately and checked again before cache commits.
 const pendingMail = new Set();
+const pendingUndos = new Map();
 export const MAIL_ACTIONS_KEY = "mailActions";
 const UNDO_MS = 10 * 60000;
 async function mailJournal() {
@@ -447,6 +448,7 @@ globalThis.inspectSavedGmailTrash = () => inspectSavedGmailTrash();
 
 export async function handleMailboxAction(msg, deps = {}) {
   if (!msg || !["read", "trash", "undo", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
+  if (msg.action === "undo" && pendingUndos.has(msg.key)) return pendingUndos.get(msg.key);
   if (pendingMail.has(msg.key)) return { ok: false, code: "pending" };
   pendingMail.add(msg.key);
   const run = pollTail.then(async () => {
@@ -532,7 +534,12 @@ export async function handleMailboxAction(msg, deps = {}) {
     }
   });
   pollTail = run.catch(() => {});
-  try { return await run; } finally { pendingMail.delete(msg.key); }
+  const completion = run.finally(() => {
+    pendingMail.delete(msg.key);
+    pendingUndos.delete(msg.key);
+  });
+  if (msg.action === "undo") pendingUndos.set(msg.key, completion);
+  return completion;
 }
 
 async function runPoll(accounts, deps) {
