@@ -1,6 +1,6 @@
 # Read-only Gmail Trash verification — 2026-10-01
 
-Runtime candidate: `ebcfa83527c680d5fe7a0a1d9e5f5f92ec88597e` on
+Runtime candidate: `cc5008b6d8b37ace7eac4cd431299dfa5a23c683` on
 `fix/gmail-trash-investigation`, based on merged main `392e5c5`.
 Real-account query validation: **pending**. Gmail Trash remains disabled.
 Owner-reported browser: Version 0.18.2.1 (Official Build, Chromium
@@ -31,13 +31,17 @@ repeat calls inspect that same target while its lock remains saved.
 The public helper returns ordinal verdicts/counts/fixed error codes only. The
 internal exported parser returns target identifiers for matching/testing; do not
 log or paste those. No subject/body, URL, account, ID or token is included in the
-helper result. The 2 MiB/32-frame limit bounds parsing, not response downloading;
+helper result. Unrecognized replies include a content-free diagnostic: fixed
+format/parse-issue enums, frame counts, reference-path array types/counts, target
+type counts and a session-challenge-marker boolean. That marker is not proof of
+a challenge; no raw strings or object keys are returned. The shared decoder
+preserves the confirmation rules. The 2 MiB/32-frame limit bounds parsing, not response downloading;
 `response.text()` first buffers the provider response. Queries time out after
 15 seconds. Private protocol compatibility remains unverified on the real account.
 
 ## Fresh verification
 
-- Node 24.21.0: `npm run verify` passed all **222 tests**, none skipped.
+- Node 24.21.0: `npm run verify` passed all **223 tests**, none skipped.
 - New tests failed before the helper existed. Tests cover raw/framed/XSSI search
   replies, UTF-8 frame lengths, malformed and unsupported data, query-only POST,
   account recheck, privacy, failures and invalid/oversized target batches.
@@ -65,7 +69,7 @@ helper result. The 2 MiB/32-frame limit bounds parsing, not response downloading
   not relaxed success recognition.
 
 ```js
-console.log(await inspectSavedGmailTrash())
+console.log(JSON.stringify(await inspectSavedGmailTrash()))
 ```
 
 Do not press “I’ve checked” as part of this diagnostic or re-enable Gmail Trash.
@@ -78,3 +82,16 @@ prohibition before any inspection ran. The supplied command was incorrect; it
 does not provide a Gmail query result. This candidate uses static imports and
 the global console helper above, consistent with Chrome's documented restriction:
 https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/basics
+
+## Owner query result and summary candidate
+
+The corrected static command ran and returned ok false, code unrecognized-search,
+HTTP 200, with one unconfirmed result. This is the first actual query evidence;
+it does not verify Trash or contradict the deleted notice visible via Gmail's
+exact-target link. The current reply does not match the supported reference
+format/schema. No raw response was collected. The next candidate adds only the
+safe diagnostic summary above to distinguish HTML/session markers, malformed
+framing and schema/identifier differences. New summary/privacy tests failed
+before the export existed, and independent review found no blocker. No new
+browser-context verification is claimed for the summary-only change; the prior
+static worker check remains historical evidence. Real summary validation is pending.
