@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+function exactState(url, labels) {
+  const cs = Array(9).fill(null);
+  cs[0] = 'cs'; cs[1] = new URL(url).searchParams.get('th'); cs[3] = 1; cs[8] = ['aa01'];
+  const ms = Array(10).fill(null);
+  ms[0] = 'ms'; ms[1] = 'aa01'; ms[9] = labels;
+  return JSON.stringify([[cs, ms], 'synthetic-trailer']);
+}
+
 test('Graph mailbox actions use account token, escaped message ID and recoverable folder moves', async () => {
   const { mutateOutlookMessage } = await import('../src/providers/mail-actions.js');
   const calls = [];
@@ -26,6 +34,7 @@ test('Gmail resolves the owning browser slot before sending a conversation mutat
   globalThis.chrome={cookies:{get:async()=>({value:'csrf'})}};
   globalThis.fetch=async(url,options)=>{
     calls.push({url,...options});
+    if(new URL(url).searchParams.get('view')==='cv')return {ok:true,status:200,text:async()=>exactState(url,['^i'])};
     if(url.endsWith('/feed/atom'))return {ok:true,status:200,text:async()=>`<feed><title>Gmail - Inbox for ${url.includes('/u/0/')?'other@example.test':'owner@example.test'}</title><fullcount>1</fullcount></feed>`};
     if(options.method==='POST')return {ok:true,status:200,text:async()=>`["ar",1,"OK"]`};
     return {ok:true,status:200,text:async()=>`var GM_ID_KEY = "identity-key";`};
@@ -70,10 +79,10 @@ test('Gmail rechecks worker authorization immediately before a session POST',asy
   assert.equal(posts,0);
 });
 
-test('Gmail Undo only reports positive action acknowledgements, including read conversations',async()=>{
+test('Gmail Undo confirms complete Inbox restoration, including read conversations',async()=>{
   const {mutateGmailConversation}=await import('../src/providers/mail-actions.js');
   globalThis.chrome={cookies:{get:async()=>({value:'csrf'})}};
-  globalThis.fetch=async(url,options)=>({ok:true,status:200,text:async()=>options.method==='POST'?'["ar",1,"OK"]':url.endsWith('/feed/atom')?'<feed><title>Gmail - Inbox for owner@example.test</title></feed>':'GM_ID_KEY="key"'});
+  globalThis.fetch=async(url,options)=>({ok:true,status:200,text:async()=>options.method==='POST'?'["ar",1,"OK"]':new URL(url).searchParams.get('view')==='cv'?exactState(url,['^i']):url.endsWith('/feed/atom')?'<feed><title>Gmail - Inbox for owner@example.test</title></feed>':'GM_ID_KEY="key"'});
   assert.deepEqual(await mutateGmailConversation('owner@example.test','abcdef','undo'),{id:'abcdef'});
 });
 
@@ -110,6 +119,7 @@ test('Gmail takes the action token after uncached session requests can rotate co
       return {ok:true,status:200,text:async()=>'["ar",1,"OK"]'};
     }
     assert.equal(options.cache,'no-store','ownership/session reads must not use cached pages');
+    if(new URL(url).searchParams.get('view')==='cv')return {ok:true,status:200,text:async()=>exactState(url,['^k'])};
     if(url.endsWith('/feed/atom'))return {ok:true,status:200,text:async()=>'<feed><title>Gmail - Inbox for owner@example.test</title></feed>'};
     cookie='current-session';
     return {ok:true,status:200,text:async()=>'GM_ID_KEY="key"'};
@@ -129,13 +139,13 @@ test('Gmail write diagnostics classify replies without logging mail or credentia
   console.info=value=>captured.push(JSON.parse(value));
   try {
     for(const reply of ['["ar",1,"Private subject"]','<script>https://mail.google.com/mail/u/0/spreauth</script>','<html>Private mail and credentials</html>']) {
-      globalThis.fetch=async(url,options)=>({ok:true,status:200,text:async()=>options.method==='POST'?reply:url.endsWith('/feed/atom')?'<feed><title>Gmail - Inbox for owner@example.test</title><fullcount>0</fullcount></feed>':'GM_ID_KEY="private-key"'});
+      globalThis.fetch=async(url,options)=>({ok:true,status:200,text:async()=>options.method==='POST'?reply:new URL(url).searchParams.get('view')==='cv'&&reply.startsWith('["ar"')?exactState(url,['^k']):url.endsWith('/feed/atom')?'<feed><title>Gmail - Inbox for owner@example.test</title><fullcount>0</fullcount></feed>':'GM_ID_KEY="private-key"'});
       if(reply.startsWith('["ar"'))await mutateGmailConversation('owner@example.test','abcdef','trash');
       else await assert.rejects(mutateGmailConversation('owner@example.test','abcdef','trash'),e=>e.uncertain===true);
     }
   } finally {console.info=original;}
   assert.equal(captured.length,3);
-  assert.deepEqual(captured.map(event=>event.response),['acknowledged','sign-in-challenge','unrecognized']);
+  assert.deepEqual(captured.map(event=>event.response),['state-verified','sign-in-challenge','unrecognized']);
   assert.deepEqual(captured.map(event=>event.outcome),['acknowledged','uncertain','uncertain']);
   assert.deepEqual(saved.mailActionDiagnostics,captured,'actual provider outcomes survive console loss');
   for(const event of captured) {

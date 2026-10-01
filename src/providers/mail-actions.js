@@ -1,6 +1,7 @@
 // Worker-only mailbox mutations. Never expose provider bodies or session secrets.
 import { parseFeed } from './gmail.js';
 import { recordMailActionDiagnostic } from './mail-action-diagnostics.js';
+import { verifyGmailConversationState } from './gmail-conversation-state.js';
 
 export class MailActionError extends Error {
   constructor(code, status, uncertain = false) {
@@ -78,13 +79,21 @@ export async function gmailSession(account) {
 
 export async function mutateGmailConversation(account, id, action, assertAuthorized = () => {}) {
   if (!/^[a-f0-9]+$/i.test(id) || !['read', 'trash', 'undo'].includes(action)) throw new MailActionError('invalid-action');
-  const { base, csrf, key } = await gmailSession(account);
+  const session = await gmailSession(account);
+  const { base, csrf, key } = session;
   // Fixed fields only: no account address, message ID, URL, body or session key.
   const diagnostic = { event: 'gmail-mail-action', entryPoint: 'popup-mail-action', requestId: crypto.randomUUID(), action, slot: Number(/\/u\/(\d+)\//.exec(base)[1]) };
   const report = async (outcome, status, response, unreadInboxAbsent = false) => {
     const event = { ...diagnostic, outcome, status, response, unreadInboxAbsent, at: Date.now() };
     try { console.info(JSON.stringify(event)); } catch { /* Diagnostics must not change a write's outcome. */ }
     await recordMailActionDiagnostic(event);
+  };
+  const confirmState = async status => {
+    assertAuthorized();
+    if (!await verifyGmailConversationState(account, session, id, action)) return null;
+    assertAuthorized();
+    await report('acknowledged', status, 'state-verified');
+    return { id };
   };
   let url;
   const body = new FormData();
@@ -104,34 +113,41 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
   let response;
   try { response = await request(url, { method: 'POST', credentials: 'include', body }, true); }
   catch (error) {
+    if (error.uncertain) {
+      const confirmed = await confirmState(error.status);
+      if (confirmed) return confirmed;
+    }
     await report(error.uncertain ? 'uncertain' : 'rejected', error.status, 'request-failed');
     throw error;
   }
   let text;
   try { text = await response.text(); } catch {
+    const confirmed = await confirmState(response.status);
+    if (confirmed) return confirmed;
     await report('uncertain', response.status, 'unreadable');
     throw new MailActionError('check-mailbox', undefined, true);
   }
-  if (!/\[\s*"ar"\s*,\s*1\s*,/.test(text)) {
-    const error = new MailActionError('check-mailbox', undefined, true);
-    error.unreadInboxAbsent = false;
-    if (action !== 'undo') {
-      try {
-        const response = await request(base + 'feed/atom', { credentials: 'include', cache: 'no-store' });
-        const xml = await response.text();
-        const feed = parseFeed(xml, Number(/\/u\/(\d+)\//.exec(base)[1]));
-        // Feed absence establishes inbox state, not which mutation succeeded.
-        // A truncated feed cannot prove absence; retain the uncertainty lock.
-        error.unreadInboxAbsent = feed.account === account.toLowerCase()
-          && /<fullcount>\d+<\/fullcount>/i.test(xml)
-          && feed.fullcount === feed.entries.length
-          && !feed.entries.some(entry => entry.id.toLowerCase() === id.toLowerCase());
-      } catch { /* Reconciliation failure must never replay the POST. */ }
-    }
-    const challenge = text.length < 200 && /https:\/\/mail\.google\.com\/mail\/u\/\d+\/spreauth\b/.test(text);
-    await report('uncertain', response.status, challenge ? 'sign-in-challenge' : 'unrecognized', error.unreadInboxAbsent);
-    throw error;
+  // The current private endpoint can finish a successful action without the
+  // legacy ar record. Prove the exact postcondition; never infer it from an
+  // HTTP status, a bounded search or absence in the unread feed.
+  const confirmed = await confirmState(response.status);
+  if (confirmed) return confirmed;
+  const error = new MailActionError('check-mailbox', undefined, true);
+  error.unreadInboxAbsent = false;
+  if (action !== 'undo') {
+    try {
+      const response = await request(base + 'feed/atom', { credentials: 'include', cache: 'no-store' });
+      const xml = await response.text();
+      const feed = parseFeed(xml, Number(/\/u\/(\d+)\//.exec(base)[1]));
+      // Feed absence establishes inbox state, not which mutation succeeded.
+      // A truncated feed cannot prove absence; retain the uncertainty lock.
+      error.unreadInboxAbsent = feed.account === account.toLowerCase()
+        && /<fullcount>\d+<\/fullcount>/i.test(xml)
+        && feed.fullcount === feed.entries.length
+        && !feed.entries.some(entry => entry.id.toLowerCase() === id.toLowerCase());
+    } catch { /* Reconciliation failure must never replay the POST. */ }
   }
-  await report('acknowledged', response.status, 'acknowledged');
-  return { id };
+  const challenge = text.length < 200 && /https:\/\/mail\.google\.com\/mail\/u\/\d+\/spreauth\b/.test(text);
+  await report('uncertain', response.status, challenge ? 'sign-in-challenge' : 'unrecognized', error.unreadInboxAbsent);
+  throw error;
 }
