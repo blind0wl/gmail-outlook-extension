@@ -1,7 +1,8 @@
 # Gmail poll freshness — 2026-10-01
 
 Runtime candidate: `e3f0e3e87959cfac5a3e4b0dd353423a4265c7bd` on
-`fix/gmail-action-recovery`, draft PR #18. Real-account recovery retest: **failed**.
+`fix/gmail-action-recovery`, draft PR #18. Five-message discrepancy: **resolved
+by refreshing Gmail**. Full candidate acceptance remains pending.
 Owner-reported browser: Version 0.18.2.1 (Official Build, Chromium
 154.0.8037.92). OS: Arch Linux (x86_64). Loaded commit not independently verified.
 
@@ -45,11 +46,26 @@ No provider write, automatic replay or recovery acknowledgement behavior changes
   attributing it to the cache policy. The prior acceptance records describe safe
   action diagnostics; a successful Refresh alone does not prove feed completeness.
 
-## Owner retest result — 2026-10-01
+## Initial owner retest result — 2026-10-01 (superseded below)
 
 After receiving the reload/reopen/All/Refresh instructions, the owner reported:
 “The 5 dont return” and supplied the browser and OS above. HTTP cache bypass is
 therefore insufficient to resolve this real-account report. Do not treat the
 passing simulated regression as acceptance or repeat the same retest unchanged.
-The next evidence needed is whether the owning account's fresh Atom feed itself
-contains the five conversations, before investigating parser/cache/UI exclusion.
+At that point the next proposed check was the owning account's Atom feed.
+
+## Owner correction — 2026-10-01
+
+Before performing the feed check, the owner refreshed the second account's Gmail
+Inbox and reported that its webpage had been stale. Asked whether the refreshed
+Inbox matched the extension, the five conversations had disappeared from Inbox,
+and they were present in Trash, the owner answered “yes confirmed”. The five
+earlier Trash attempts therefore succeeded; the extension correctly omitted
+these conversations from its unread Inbox list. No missing-mail parser/cache bug
+is established by this report, and HTTP cache bypass is not established as its
+remedy. The prior failed-recovery interpretation is superseded by this evidence.
+
+The repeated unconfirmed-result warnings remain unresolved: successful provider
+moves were reported as uncertain. Full fresh repeated-action acceptance in both
+accounts remains pending, as does the separate intermittent missing heading.
+The owner has supplied the browser/OS, but the loaded commit remains unverified.
