@@ -1,4 +1,5 @@
 import { mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
+import { inspectGmailTrash } from "../providers/gmail-trash-verification.js";
 import { messageIdOf } from "../popup/links.js";
 // Service worker entry. Owns polling, cache writes, badge, and toasts.
 // Popup reads the cache from chrome.storage.local only (Task 7).
@@ -416,6 +417,33 @@ async function patchMailAction(key, record, current = () => true) {
     await saveJournal(journal);
   });
 }
+
+// Explicit worker-console diagnostic. Static imports are required in MV3;
+// no runtime message, mailbox mutation or acknowledgement is introduced.
+export async function inspectSavedGmailTrash(deps = {}) {
+  const run = pollTail.then(async () => {
+    await ready;
+    const journal = await mailJournal();
+    const target = Object.values(journal).find(record => record?.item?.provider === "gmail"
+      && record.action === "trash" && ["pending", "uncertain"].includes(record.state));
+    if (!target) return { ok: false, code: "no-saved-target" };
+    const accounts = await loadAccounts();
+    const acct = accounts.find(account => accountKey(account) === accountKey(target.item));
+    if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct)))
+      return { ok: false, code: "account-unavailable" };
+    const generation = accountGeneration.get(accountKey(acct)) ?? 0;
+    const id = target.id || messageIdOf(target.item.key);
+    const result = await (deps.inspect ?? inspectGmailTrash)(acct.account, [id]);
+    if (generation !== (accountGeneration.get(accountKey(acct)) ?? 0))
+      return { ok: false, code: "account-changed", results: ["not-confirmed"] };
+    return result;
+  });
+  pollTail = run.catch(() => {});
+  try { return await run; }
+  catch { return { ok: false, code: "verification-unavailable", results: ["not-confirmed"] }; }
+}
+
+globalThis.inspectSavedGmailTrash = () => inspectSavedGmailTrash();
 
 export async function handleMailboxAction(msg, deps = {}) {
   if (!msg || !["read", "trash", "undo", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
