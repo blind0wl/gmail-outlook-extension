@@ -109,6 +109,10 @@ async function fetchSlot(slot) {
   try {
     res = await fetch(feedUrl(slot), {
       credentials: "include",
+      // A poll must reflect current unread mail, including conversations that
+      // remained in Inbox after an unconfirmed action. Never reuse an older
+      // HTTP snapshot for Refresh or account-slot ownership discovery.
+      cache: "no-store",
       redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     });
