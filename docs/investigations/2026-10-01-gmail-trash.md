@@ -66,3 +66,12 @@ console.table(Object.values(mailActions)
 Do not re-enable Trash on HTTP 200, unread-feed absence or a permissive third-party
 response test. A fix requires evidence of the specific Gmail outcome and a
 verification mechanism compatible with the approved read/Trash/Undo scope.
+
+## Exact-target navigation result
+
+The owner followed a saved-target link and reported that it opened the expected
+conversation, which Gmail described as deleted and offered a way to restore.
+That target therefore remains accessible and recoverable through Gmail's UI;
+the failed searches did not establish permanent deletion. No claim is made that
+every disputed target was checked or restored. Trash remains blocked while the
+confirmation mechanism is investigated.

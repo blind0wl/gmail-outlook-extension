@@ -67,3 +67,11 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [x] RED containment regressions, 215-test verification, synthetic browser and independent review complete.
 - [ ] Owner reloads and confirms disabled controls, without any new real-mail write.
 - [ ] Diagnose actual provider outcome using preserved evidence; missing mail is not established as permanently deleted.
+
+## Post-merge #16 investigation
+- [x] Compare request identifiers and response recognition against the reference client.
+- [x] Owner's exact-target link opens the deleted conversation with a restore option.
+- [x] Add a diagnostic-only fixed Trash query, positive exact-ID matching and fail-closed parsing.
+- [x] Node 24 verification passes 219 tests; independent review and fresh acceptance instructions complete.
+- [ ] Owner validates the query against existing locks without further Trash writes.
+- [ ] Choose and verify a confirmation fix based on the real query evidence; containment remains active.
