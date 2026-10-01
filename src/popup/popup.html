@@ -11,6 +11,10 @@
     <div id="mail-tools"><button id="refresh-mail" class="icon-button" type="button" aria-label="Refresh" title="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"/></svg></button><button id="open-settings" class="icon-button" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg></button></div>
     <div id="settings-tools" hidden><button id="back-to-mail" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7M7 12h13"/></svg>Back to mail</button></div>
   </header>
+  <details id="undo-tray" open hidden>
+    <summary id="undo-summary">Undo</summary>
+    <ul id="undo-list" aria-label="Deleted mail available to restore"></ul>
+  </details>
   <div id="mail-view">
   <nav class="pills" aria-label="Provider filter">
     <button type="button" data-filter="all" aria-pressed="true">All</button>

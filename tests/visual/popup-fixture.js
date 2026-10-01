@@ -1,6 +1,6 @@
 // Browser-only synthetic fixture. Never reads a real account or extension store.
 const state = new URLSearchParams(location.search).get("state") ?? "populated";
-if (!["empty", "populated", "expanded", "signed-out", "error", "long"].includes(state)) {
+if (!["empty", "populated", "expanded", "signed-out", "error", "long", "undo"].includes(state)) {
   throw new Error("Unknown popup fixture state");
 }
 
@@ -43,6 +43,12 @@ const data = {
       }
       : {},
 };
+if (state === "undo") {
+  data.mailActions = Object.fromEntries(Array.from({length: 12}, (_, index) => ["undo-" + index, {
+    state: "undo", expiresAt: Date.now() + (index + 1) * 45000,
+    item: {...accounts[index % accounts.length], subject: "Deleted message " + (index + 1)},
+  }]));
+}
 const listeners = [];
 const messages = [];
 const openedUrls = [];
@@ -72,7 +78,7 @@ globalThis.chrome = {
   },
   tabs: { create: (options) => openedUrls.push(options.url) },
 };
-globalThis.popupFixture = { state, messages, openedUrls };
+globalThis.popupFixture = { state, messages, openedUrls, data, change: (changes) => listeners.forEach(listener => listener(changes, "local")) };
 
 const response = await fetch("../../src/popup/popup.html");
 if (!response.ok) throw new Error("Unable to load production popup HTML");

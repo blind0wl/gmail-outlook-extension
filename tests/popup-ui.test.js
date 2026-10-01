@@ -465,7 +465,7 @@ test('hover actions use provider-specific labels and resist duplicate clicks', a
   assert.equal(messages[0].type,'mail-action');assert.equal(messages[0].action,'read');
   finish();await tick();
   change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com',subject:'Test'}}}}});
-  assert.equal(document.getElementById('mail-undo').hidden,false);
+  assert.equal(document.getElementById('undo-tray').hidden,false);
   assert.match(document.querySelector('[data-undo-key]').getAttribute('aria-label'),/Restore Test/);
 });
 
@@ -584,7 +584,7 @@ test('thirty uncertain actions use one account recovery button and acknowledgeme
   const recovery=document.querySelector(`[data-recovery-account="gmail:${account.account}"]`);
   assert.ok(recovery);
   assert.equal(document.querySelectorAll('[data-recovery-account]').length,2);
-  assert.equal(document.getElementById('mail-undo').children.length,3,'two account recoveries plus individual Undo');
+  assert.equal(document.getElementById('mail-undo').children.length,2,'two account recoveries; Undo has its own tray');
   assert.match(recovery.closest('li').textContent,/30 unconfirmed actions/);
   assert.match(recovery.getAttribute('aria-label'),/all 30 actions/);
   recovery.click();await tick();
@@ -619,4 +619,48 @@ test('account recovery resists duplicate clicks, keeps failures and leaves new u
   assert.match(document.querySelector('[data-recovery-account]').closest('li').textContent,/2 unconfirmed actions/);
   assert.equal(document.querySelector('[data-recovery-account]').getAttribute('aria-disabled'),'false');
   assert.match(document.getElementById('lifecycle-message').textContent,/1.*unlocked.*could not.*unlock/i);
+});
+
+
+test('Undo stays in a bounded tray, newest first, preserving older actions and focus', async () => {
+  const {document,change,messages}=await workspaceFixture();
+  const now=Date.now();
+  const item={provider:'gmail',account:'work@example.com',subject:'Older message'};
+  const older={state:'undo',expiresAt:now+120000,item};
+  const newer={state:'undo',expiresAt:now+600000,item:{...item,subject:'Newer message'}};
+  change({mailActions:{newValue:{older,newer,expired:{...older,expiresAt:now},foreign:{...newer,item:{...item,account:'other@example.com'}}}}});
+  const tray=document.getElementById('undo-tray');
+  assert.equal(tray.hidden,false);
+  assert.equal(tray.closest('#mail-view'),null,'new Undo cannot shift the scrollable mail list');
+  assert.deepEqual([...document.querySelectorAll('[data-undo-key]')].map(b=>b.dataset.undoKey),['newer','older']);
+  assert.match(document.getElementById('undo-summary').textContent,/2.*10 minutes/);
+  assert.match(document.getElementById('undo-list').textContent,/Newer message.*10 min left/);
+  document.querySelector('[data-undo-key="older"]').focus();
+  change({mailActions:{newValue:{older,newer}}});
+  assert.equal(document.activeElement.dataset.undoKey,'older');
+  document.activeElement.click();await tick();
+  assert.deepEqual(messages.at(-1),{type:'mail-action',key:'older',action:'undo'});
+});
+
+test('an open popup removes Undo at its deadline without a storage event', async t => {
+  const {document,change}=await workspaceFixture();
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:Date.now()});
+  change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+1000,item:{provider:'gmail',account:'work@example.com',subject:'Expiring'}}}}});
+  assert.equal(document.getElementById('undo-tray').hidden,false);
+  t.mock.timers.tick(1000);
+  assert.equal(document.getElementById('undo-tray').hidden,true);
+  assert.equal(document.querySelector('[data-undo-key]'),null);
+});
+
+
+test('Undo tray hides in Settings and returns with its collapse state intact', async () => {
+  const {document,change}=await workspaceFixture();
+  change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com'}}}}});
+  const tray=document.getElementById('undo-tray');
+  tray.removeAttribute('open');
+  document.getElementById('open-settings').click();
+  assert.equal(tray.hidden,true);
+  document.getElementById('back-to-mail').click();
+  assert.equal(tray.hidden,false);
+  assert.equal(tray.hasAttribute('open'),false);
 });

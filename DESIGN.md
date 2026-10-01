@@ -338,3 +338,14 @@ explicit “I’ve checked” step and explains that other mail remains usable.
 Unconfirmed actions use one row per account with a count and one acknowledgement
 button, including a busy state. Undo stays separate for each completed Trash.
 Confirmed Gmail read feedback includes guidance to refresh a stale open Gmail page.
+
+
+## Compact Undo tray — 2026-10-01
+
+Undo sits immediately below the toolbar, outside the scrolling Mail surface.
+The native disclosure can collapse; its open list has a fixed 112px viewport
+with independent themed scrolling. Newest deletion leads; individual buttons
+retain subject/account accessibility labels. Existing panel, line, text and
+control tokens apply across Midnight, Slate and Signal. Recovery locks remain
+in Mail. Synthetic 480px and 320px checks passed; real extension acceptance is
+pending in docs/acceptance/2026-10-01-compact-undo-stack.md.

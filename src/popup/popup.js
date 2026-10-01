@@ -287,7 +287,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var readMessage = actionItem?.provider === "gmail"
           ? "Marked as read in Gmail. If an open Gmail page still shows unread, refresh that page."
           : "Marked as read in your mailbox.";
-        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash. Undo is available in Mailbox recovery." : "Restored to your inbox.", "ok");
+        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash. Undo is available above the mail list." : "Restored to your inbox.", "ok");
       }
     } catch {
       mailFeedback.delete(key);
@@ -329,7 +329,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       renderUndo();
     }
   }
+  var undoTimer;
+  var newestUndo;
   function renderUndo() {
+    clearTimeout(undoTimer);
     var list = document.getElementById("mail-undo");
     var focused = document.activeElement?.dataset.undoKey;
     var focusedAccount = document.activeElement?.dataset.recoveryAccount;
@@ -359,12 +362,21 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       list.appendChild(row);
       if (focusedAccount === acctKey) button.focus();
     });
-    Object.entries(mailActions).forEach(function (entry) {
+    list.hidden = !list.childElementCount;
+    var tray = document.getElementById("undo-tray");
+    list = document.getElementById("undo-list");
+    var scroll = list.scrollTop;
+    list.replaceChildren();
+    var now = Date.now();
+    var nextUpdate = 60000;
+    Object.entries(mailActions).sort(function (a, b) { return b[1].expiresAt - a[1].expiresAt; }).forEach(function (entry) {
       var key = entry[0], record = entry[1];
-      if (pendingMailActions.has(key) || record.state !== "undo" || record.expiresAt < Date.now() || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
+      if (pendingMailActions.has(key) || record.state !== "undo" || record.expiresAt <= now || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
       var row = document.createElement("li");
       var text = document.createElement("span");
-      text.textContent = "Moved to Trash · " + record.item.account;
+      var remaining = record.expiresAt - now;
+      nextUpdate = Math.min(nextUpdate, remaining % 60000 || 60000);
+      text.textContent = (record.item.subject || "Mail") + " · " + record.item.account + " · " + Math.ceil(remaining / 60000) + " min left";
       var undo = document.createElement("button");
       undo.type = "button";
       undo.textContent = "Undo";
@@ -376,7 +388,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       list.appendChild(row);
       if (focused === key) undo.focus();
     });
-    list.hidden = !list.childElementCount;
+    document.getElementById("undo-summary").textContent = list.childElementCount + " moved to Trash · Undo for 10 minutes";
+    tray.hidden = !list.childElementCount || document.getElementById("mail-view").hidden;
+    var firstKey = list.querySelector("[data-undo-key]")?.dataset.undoKey;
+    if (focused || firstKey === newestUndo) list.scrollTop = scroll;
+    newestUndo = firstKey;
+    if (list.childElementCount) {
+      undoTimer = setTimeout(renderUndo, nextUpdate);
+      undoTimer?.unref?.();
+    }
   }
 
   function renderList() {
@@ -687,6 +707,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (settings && !mail.hidden) mailScroll = mail.scrollTop;
     mail.hidden = settings;
     view.hidden = !settings;
+    renderUndo();
     document.getElementById("mail-tools").hidden = settings;
     document.getElementById("settings-tools").hidden = !settings;
     document.getElementById("workspace-title").textContent = settings ? "Settings" : "Inbox";

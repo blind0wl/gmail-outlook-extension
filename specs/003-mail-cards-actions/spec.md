@@ -124,3 +124,17 @@ mutation. This is an explicit temporary deviation from the approved Trash scope
 while the private transport is investigated; it does not widen the permitted
 actions. Existing recovery records remain saved, and no action is replayed.
 See docs/acceptance/2026-10-01-gmail-trash-containment.md for fresh verification.
+
+
+## 2026-10-01 compact Undo stack
+
+Owner requested Undo remain at the top without forcing repeated scrolling while
+trashing multiple messages. Confirmed Undo now lives below the toolbar, outside
+the scrolling mail view, in a collapsible tray with a fixed 112px list viewport.
+Newer deletions precede older ones; each retains its own worker-validated Undo.
+The existing ten-minute durable window is unchanged. Rows show subject, account
+and rounded-up minutes remaining; a popup timer removes them at their deadline.
+New rows return the tray to the top unless an older Undo retains keyboard focus;
+countdown updates preserve tray scroll. Settings hides the tray and Back restores
+its disclosure state. Unconfirmed recovery stays grouped before the mail list.
+Fresh acceptance: docs/acceptance/2026-10-01-compact-undo-stack.md.
