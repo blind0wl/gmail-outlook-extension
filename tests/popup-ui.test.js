@@ -510,3 +510,51 @@ test('read cache arriving before action response settles feedback and allows lat
   change({mailCache:{newValue:[cached]}});
   assert.ok(document.querySelector('.card'),'future unread state can appear after cache/response handoff');
 });
+
+test('uncertain recovery precedes mail, names its scope and leaves unrelated actions usable',async()=>{
+  const {document,data,messages,change}=await workspaceFixture();
+  const original=data.mailCache[0];
+  const unrelated={...original,key:'gmail:work%40example.com:2',subject:'Other conversation'};
+  change({mailCache:{newValue:[original,unrelated]},mailActions:{newValue:{[original.key]:{state:'uncertain',item:{key:original.key,provider:'gmail',account:original.account}}}}});
+  const recovery=document.getElementById('mail-undo');
+  assert.equal(recovery.nextElementSibling.id,'inbox-list','recovery is available before a long inbox');
+  assert.match(recovery.getAttribute('aria-label'),/recovery/i);
+  assert.match(recovery.textContent,/this conversation/i);
+  assert.match(recovery.textContent,/Other mail is still available/);
+  const locked=document.querySelector(`[data-key="${original.key}"] [data-mail-action="trash"]`);
+  const usable=document.querySelector(`[data-key="${unrelated.key}"] [data-mail-action="trash"]`);
+  assert.equal(locked.getAttribute('aria-disabled'),'true');
+  assert.equal(usable.getAttribute('aria-disabled'),'false');
+  usable.click();await tick();
+  assert.equal(messages.at(-1).key,unrelated.key);
+  document.querySelector('[data-undo-key]').click();await tick();
+  assert.equal(messages.at(-1).action,'acknowledge');
+  assert.equal(messages.at(-1).key,original.key);
+});
+
+test('confirmed Gmail read explains open-page refresh even when cache arrives first',async()=>{
+  const {document,change,data,tabs}=await workspaceFixture();
+  const cached=data.mailCache[0];
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  change({mailCache:{newValue:[]}});
+  finish({ok:true});await tick();
+  assert.equal(document.querySelector('.card'),null);
+  assert.match(document.getElementById('lifecycle-message').textContent,/Marked as read.*open Gmail.*refresh/i);
+  assert.equal(tabs.length,0,'read must not open or reload provider tabs');
+  change({mailCache:{newValue:[cached]}});
+});
+
+test('Gmail refresh guidance is not shown for failed reads or Outlook',async()=>{
+  const {document}=await workspaceFixture();
+  chrome.runtime.sendMessage=async()=>({ok:false,code:'check-mailbox'});
+  document.querySelector('[data-mail-action="read"]').click();await tick();
+  const error=document.getElementById('lifecycle-message').textContent;
+  assert.doesNotMatch(error,/Marked as read|open Gmail.*refresh/i);
+  assert.match(error,/I’ve checked/);
+  const outlook={provider:'outlook',account:'studio@example.test'};
+  const fixture=await workspaceFixture({accounts:[outlook],mailCache:[{...outlook,key:'outlook:studio%40example.test:one',unread:true,date:Date.now()}]});
+  fixture.document.querySelector('[data-mail-action="read"]').click();await tick();
+  assert.equal(fixture.document.getElementById('lifecycle-message').textContent,'Marked as read in your mailbox.');
+});

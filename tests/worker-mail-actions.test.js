@@ -127,3 +127,47 @@ test('verified unread-inbox absence clears stale card but keeps an unconfirmed w
   assert.equal(data.mailActions[gmailKey].state,'uncertain');
   assert.equal(data.mailActions[gmailKey].item.subject,undefined);
 });
+
+test('checking an uncertain conversation succeeds with an unrelated action queued',async()=>{
+  const data=fixture();
+  const other={...item,key:'outlook:owner%40example.test:two'};
+  mergeMessages([other]);
+  data.mailActions[key]={state:'uncertain',item:{key,...account}};
+  let calls=0;
+  const checked=handleMailboxAction({key,action:'acknowledge'},deps);
+  const unrelated=handleMailboxAction({key:other.key,action:'trash'},{...deps,mutate:async()=>{calls++;return {id:'moved-two'};}});
+  assert.equal((await checked).ok,true);
+  assert.equal((await unrelated).ok,true);
+  assert.equal(data.mailActions[key],undefined);
+  assert.equal(data.mailActions[other.key].state,'undo');
+  assert.equal(calls,1,'acknowledgement must never send a provider write');
+});
+
+test('repeated Gmail Trash stays isolated after one uncertain result and explicit recovery',async()=>{
+  const gmail={provider:'gmail',account:'repeated@example.test'};
+  const other={provider:'gmail',account:'other-repeated@example.test'};
+  const data={accounts:[gmail,other],mailActions:{}};
+  globalThis.chrome={storage:{local:{get:async k=>({[k]:data[k]}),set:async p=>Object.assign(data,p)}}};
+  const messages=['aa','bb','cc','dd','ee','ff'].map(id=>({...item,...gmail,key:`gmail:repeated%40example.test:${id}`}));
+  const foreign={...item,...other,key:'gmail:other-repeated%40example.test:ab'};
+  reconcileAccount(gmail,[],true);reconcileAccount(other,[],true);
+  mergeMessages([...messages,foreign]);
+  const calls=[];
+  const mutate=async(a,id)=>{
+    calls.push({account:a.account,id});
+    if(id==='cc')throw Object.assign(Error(),{uncertain:true});
+    return {id};
+  };
+  for(const message of messages) {
+    const result=await handleMailboxAction({key:message.key,action:'trash'},{...deps,mutate});
+    assert.equal(result.ok,!message.key.endsWith(':cc'));
+  }
+  const locked=messages[2].key;
+  assert.equal((await handleMailboxAction({key:locked,action:'trash'},{...deps,mutate})).code,'check-mailbox');
+  assert.equal((await handleMailboxAction({key:foreign.key,action:'trash'},{...deps,mutate})).ok,true);
+  assert.equal(calls.length,7,'locked conversation was not replayed');
+  assert.equal((await handleMailboxAction({key:locked,action:'acknowledge'},deps)).ok,true);
+  assert.equal(data.mailActions[locked],undefined);
+  assert.equal(calls.length,7,'explicit recovery clears only the lock');
+  assert.equal(data.mailActions[foreign.key].state,'undo');
+});

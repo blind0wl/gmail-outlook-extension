@@ -431,7 +431,9 @@ export async function handleMailboxAction(msg, deps = {}) {
     const acct = accounts.find(a => item && accountKey(a) === accountKey(item));
     if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct))) return { ok: false, code: "sign-in" };
     if (msg.action === "acknowledge") {
-      if (!prior || pendingMail.size > 1) return { ok: false, code: "pending" };
+      // The poll queue serializes journal changes. Unrelated queued actions
+      // must not prevent the user from releasing this conversation's lock.
+      if (!prior) return { ok: false, code: "pending" };
       await patchMailAction(msg.key, null);
       return { ok: true };
     }

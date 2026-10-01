@@ -261,9 +261,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
   async function actOnMail(key, action) {
     if (pendingMailActions.has(key)) return;
+    var actionItem = items.find(function (item) { return item.key === key; }) || mailActions[key]?.item;
+    var unconfirmedMessage = "The result could not be confirmed. Check this action in your mailbox, then choose “I’ve checked” to unlock it. Other mail is still available.";
     pendingMailActions.add(key);
     delete mailErrors[key];
-    if (action === "read" || action === "trash") mailFeedback.set(key, { action: action, item: items.find(function (item) { return item.key === key; }), confirmed: false });
+    if (action === "read" || action === "trash") mailFeedback.set(key, { action: action, item: actionItem, confirmed: false });
     setStatus(action === "read" ? "Marking as read…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
     renderHeader();
     renderList();
@@ -273,7 +275,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (!result?.ok) {
         mailFeedback.delete(key);
         var code = result?.code;
-        mailErrors[key] = code === "check-mailbox" ? "The result could not be confirmed. Check your mailbox before acting again."
+        mailErrors[key] = code === "check-mailbox" ? unconfirmedMessage
           : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
           : code === "undo-expired" ? "Undo expired. Restore this mail in your mailbox."
           : "Could not complete the action. Check the account’s sign-in in Settings, then try again.";
@@ -282,11 +284,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;
         if (action === "undo") mailFeedback.delete(key);
         settleMailFeedback();
-        setStatus(action === "acknowledge" ? "Action lock cleared. Refresh to check your inbox." : action === "read" ? "Marked as read in your mailbox." : action === "trash" ? "Moved to Trash. Undo is available below." : "Restored to your inbox.", "ok");
+        var readMessage = actionItem?.provider === "gmail"
+          ? "Marked as read in Gmail. If an open Gmail page still shows unread, refresh that page."
+          : "Marked as read in your mailbox.";
+        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash. Undo is available in Mailbox recovery." : "Restored to your inbox.", "ok");
       }
     } catch {
       mailFeedback.delete(key);
-      mailErrors[key] = "The result could not be confirmed. Check your mailbox before acting again.";
+      mailErrors[key] = unconfirmedMessage;
       setStatus(mailErrors[key], "error");
     } finally {
       pendingMailActions.delete(key);
@@ -305,7 +310,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (pendingMailActions.has(key) || (!uncertain && (record.state !== "undo" || record.expiresAt < Date.now())) || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
       var row = document.createElement("li");
       var text = document.createElement("span");
-      text.textContent = (uncertain ? "Check your mailbox before acting again · " : "Moved to Trash · ") + record.item.account;
+      var target = record.item.provider === "gmail" ? "conversation" : "message";
+      text.textContent = (uncertain ? "Check this " + target + " in your mailbox, then choose “I’ve checked” to unlock it. Other mail is still available. · " : "Moved to Trash · ") + record.item.account;
       var undo = document.createElement("button");
       undo.type = "button";
       undo.textContent = uncertain ? "I’ve checked" : "Undo";
