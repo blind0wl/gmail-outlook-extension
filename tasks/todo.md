@@ -52,3 +52,11 @@ Files: popup.js, service-worker.js, their tests and the synthetic fixture.
 
 The regression models a stale HTTP response. The owner's specific cause and
 underlying Trash failure remain unconfirmed.
+
+## Owner follow-up — console evidence unavailable
+- [x] Persist the latest 20 content-free outcomes locally, with serial appends and allowlisted records.
+- [x] Verify actual provider events, restart retention, concurrency, privacy and storage failures; all 213 tests pass.
+- [x] Independent review and fresh acceptance/evidence-capture instructions complete.
+- [ ] Owner reloads and captures a new uncertain action's saved diagnostics.
+
+This candidate gathers evidence; it does not change acknowledgement recognition.

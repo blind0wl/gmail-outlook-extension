@@ -68,6 +68,10 @@ No automatic Gmail tab reload or content script is added.
 
 ## Content-free diagnostics for another failed write
 
+The console-only procedure below describes this historical candidate. The latest
+[saved diagnostics candidate](2026-10-01-saved-action-diagnostics.md) retains a
+bounded local history and includes a read-only retrieval command.
+
 Open `chrome://extensions`, find Gmail plus Outlook, and click its **service
 worker** link to inspect the worker console. Filter for `gmail-mail-action`.
 Keep only those structured lines when reporting a retest. Do not share Network
