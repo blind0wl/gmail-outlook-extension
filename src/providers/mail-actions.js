@@ -1,5 +1,6 @@
 // Worker-only mailbox mutations. Never expose provider bodies or session secrets.
 import { parseFeed } from './gmail.js';
+import { recordMailActionDiagnostic } from './mail-action-diagnostics.js';
 
 export class MailActionError extends Error {
   constructor(code, status, uncertain = false) {
@@ -80,8 +81,10 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
   const { base, csrf, key } = await gmailSession(account);
   // Fixed fields only: no account address, message ID, URL, body or session key.
   const diagnostic = { event: 'gmail-mail-action', entryPoint: 'popup-mail-action', requestId: crypto.randomUUID(), action, slot: Number(/\/u\/(\d+)\//.exec(base)[1]) };
-  const report = (outcome, status, response, unreadInboxAbsent = false) => {
-    try { console.info(JSON.stringify({ ...diagnostic, outcome, status, response, unreadInboxAbsent })); } catch { /* Diagnostics must not change a write's outcome. */ }
+  const report = async (outcome, status, response, unreadInboxAbsent = false) => {
+    const event = { ...diagnostic, outcome, status, response, unreadInboxAbsent, at: Date.now() };
+    try { console.info(JSON.stringify(event)); } catch { /* Diagnostics must not change a write's outcome. */ }
+    await recordMailActionDiagnostic(event);
   };
   let url;
   const body = new FormData();
@@ -101,12 +104,12 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
   let response;
   try { response = await request(url, { method: 'POST', credentials: 'include', body }, true); }
   catch (error) {
-    report(error.uncertain ? 'uncertain' : 'rejected', error.status, 'request-failed');
+    await report(error.uncertain ? 'uncertain' : 'rejected', error.status, 'request-failed');
     throw error;
   }
   let text;
   try { text = await response.text(); } catch {
-    report('uncertain', response.status, 'unreadable');
+    await report('uncertain', response.status, 'unreadable');
     throw new MailActionError('check-mailbox', undefined, true);
   }
   if (!/\[\s*"ar"\s*,\s*1\s*,/.test(text)) {
@@ -126,9 +129,9 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
       } catch { /* Reconciliation failure must never replay the POST. */ }
     }
     const challenge = text.length < 200 && /https:\/\/mail\.google\.com\/mail\/u\/\d+\/spreauth\b/.test(text);
-    report('uncertain', response.status, challenge ? 'sign-in-challenge' : 'unrecognized', error.unreadInboxAbsent);
+    await report('uncertain', response.status, challenge ? 'sign-in-challenge' : 'unrecognized', error.unreadInboxAbsent);
     throw error;
   }
-  report('acknowledged', response.status, 'acknowledged');
+  await report('acknowledged', response.status, 'acknowledged');
   return { id };
 }

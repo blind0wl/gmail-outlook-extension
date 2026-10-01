@@ -120,7 +120,10 @@ test('Gmail takes the action token after uncached session requests can rotate co
 
 test('Gmail write diagnostics classify replies without logging mail or credentials',async()=>{
   const {mutateGmailConversation}=await import('../src/providers/mail-actions.js');
-  globalThis.chrome={cookies:{get:async()=>({value:'private-csrf'})}};
+  let saved={};
+  globalThis.chrome={cookies:{get:async()=>({value:'private-csrf'})},storage:{local:{
+    get:async()=>structuredClone(saved),set:async value=>{saved=structuredClone(value);}
+  }}};
   const captured=[];
   const original=console.info;
   console.info=value=>captured.push(JSON.parse(value));
@@ -134,6 +137,7 @@ test('Gmail write diagnostics classify replies without logging mail or credentia
   assert.equal(captured.length,3);
   assert.deepEqual(captured.map(event=>event.response),['acknowledged','sign-in-challenge','unrecognized']);
   assert.deepEqual(captured.map(event=>event.outcome),['acknowledged','uncertain','uncertain']);
+  assert.deepEqual(saved.mailActionDiagnostics,captured,'actual provider outcomes survive console loss');
   for(const event of captured) {
     assert.equal(event.event,'gmail-mail-action');
     assert.equal(event.entryPoint,'popup-mail-action');
