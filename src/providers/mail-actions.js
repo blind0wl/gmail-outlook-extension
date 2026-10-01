@@ -51,7 +51,7 @@ export async function gmailSession(account) {
   for (let slot = 0; slot < 10; slot++) {
     let feed;
     try {
-      const response = await request(`https://mail.google.com/mail/u/${slot}/feed/atom`, { credentials: 'include' });
+      const response = await request(`https://mail.google.com/mail/u/${slot}/feed/atom`, { credentials: 'include', cache: 'no-store' });
       feed = parseFeed(await response.text(), slot);
     } catch (error) {
       if (error.status === 404) break;
@@ -59,15 +59,17 @@ export async function gmailSession(account) {
     }
     if (feed.account !== account.toLowerCase()) continue;
     const base = `https://mail.google.com/mail/u/${slot}/`;
-    const cookie = await globalThis.chrome?.cookies?.get({ name: 'GMAIL_AT', url: base });
-    if (!cookie?.value) throw new MailActionError('sign-in');
-    const response = await request(base, { credentials: 'include' });
+    const response = await request(base, { credentials: 'include', cache: 'no-store' });
     const html = await response.text();
     const key = /(?:GM_ID_KEY|ID_KEY)\s*=\s*["']([^"']+)["']/.exec(html)?.[1];
     if (!key) throw new MailActionError('gmail-changed');
     // Recheck ownership after collecting session values, before any write.
-    const check = await request(base + 'feed/atom', { credentials: 'include' });
+    const check = await request(base + 'feed/atom', { credentials: 'include', cache: 'no-store' });
     if (parseFeed(await check.text(), slot).account !== account.toLowerCase()) throw new MailActionError('sign-in');
+    // Session GETs can update cookies. Take the action token last so the POST
+    // does not pair a fresh session cookie with a token captured beforehand.
+    const cookie = await globalThis.chrome?.cookies?.get({ name: 'GMAIL_AT', url: base });
+    if (!cookie?.value) throw new MailActionError('sign-in');
     return { base, csrf: cookie.value, key };
   }
   throw new MailActionError('sign-in');
@@ -76,6 +78,11 @@ export async function gmailSession(account) {
 export async function mutateGmailConversation(account, id, action, assertAuthorized = () => {}) {
   if (!/^[a-f0-9]+$/i.test(id) || !['read', 'trash', 'undo'].includes(action)) throw new MailActionError('invalid-action');
   const { base, csrf, key } = await gmailSession(account);
+  // Fixed fields only: no account address, message ID, URL, body or session key.
+  const diagnostic = { event: 'gmail-mail-action', entryPoint: 'popup-mail-action', requestId: crypto.randomUUID(), action, slot: Number(/\/u\/(\d+)\//.exec(base)[1]) };
+  const report = (outcome, status, response, unreadInboxAbsent = false) => {
+    try { console.info(JSON.stringify({ ...diagnostic, outcome, status, response, unreadInboxAbsent })); } catch { /* Diagnostics must not change a write's outcome. */ }
+  };
   let url;
   const body = new FormData();
   if (action === 'undo') {
@@ -91,9 +98,17 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
     body.set('s_jr', JSON.stringify([null, [[null, null, null, [null, action === 'read' ? 3 : 9, id, id, 'l:all', [], [], []]], [null, null, null, null, null, null, [null, true, false]], [null, null, null, null, null, null, [null, true, false]]], 2, null, null, null, key]));
   }
   assertAuthorized();
-  const response = await request(url, { method: 'POST', credentials: 'include', body }, true);
+  let response;
+  try { response = await request(url, { method: 'POST', credentials: 'include', body }, true); }
+  catch (error) {
+    report(error.uncertain ? 'uncertain' : 'rejected', error.status, 'request-failed');
+    throw error;
+  }
   let text;
-  try { text = await response.text(); } catch { throw new MailActionError('check-mailbox', undefined, true); }
+  try { text = await response.text(); } catch {
+    report('uncertain', response.status, 'unreadable');
+    throw new MailActionError('check-mailbox', undefined, true);
+  }
   if (!/\[\s*"ar"\s*,\s*1\s*,/.test(text)) {
     const error = new MailActionError('check-mailbox', undefined, true);
     error.unreadInboxAbsent = false;
@@ -110,7 +125,10 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
           && !feed.entries.some(entry => entry.id.toLowerCase() === id.toLowerCase());
       } catch { /* Reconciliation failure must never replay the POST. */ }
     }
+    const challenge = text.length < 200 && /https:\/\/mail\.google\.com\/mail\/u\/\d+\/spreauth\b/.test(text);
+    report('uncertain', response.status, challenge ? 'sign-in-challenge' : 'unrecognized', error.unreadInboxAbsent);
     throw error;
   }
+  report('acknowledged', response.status, 'acknowledged');
   return { id };
 }
