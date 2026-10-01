@@ -664,3 +664,13 @@ test('Undo tray hides in Settings and returns with its collapse state intact', a
   assert.equal(tray.hidden,false);
   assert.equal(tray.hasAttribute('open'),false);
 });
+
+
+for (const code of ['unavailable','provider-error','pending','sign-in']) test(`mail action ${code} only requests sign-in for authentication failure`, async () => {
+  const {document}=await workspaceFixture();
+  chrome.runtime.sendMessage=async()=>({ok:false,code});
+  document.querySelector('[data-mail-action="read"]').click();await tick();
+  const text=document.getElementById('lifecycle-message').textContent;
+  if (code==='sign-in') assert.match(text,/sign.in.*Settings/i);
+  else assert.doesNotMatch(text,/sign.in|Settings/i);
+});

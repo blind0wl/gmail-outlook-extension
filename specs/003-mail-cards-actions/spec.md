@@ -138,3 +138,25 @@ New rows return the tray to the top unless an older Undo retains keyboard focus;
 countdown updates preserve tray scroll. Settings hides the tray and Back restores
 its disclosure state. Unconfirmed recovery stays grouped before the mail list.
 Fresh acceptance: docs/acceptance/2026-10-01-compact-undo-stack.md.
+
+
+## 2026-10-01 Undo burst confirmation candidate
+
+Owner reported roughly fifteen rapid Undos, unconfirmed/account-error feedback,
+then all messages present in Gmail Inbox after signing in again. That establishes
+restoration was observed, not why confirmation failed or that sign-in was needed.
+
+Gmail Undo now confirms with at most three exact-state reads, waiting 300ms then
+1000ms between unsuccessful checks. Account ownership and worker authorization
+are rechecked; the mailbox POST is never retried. Unknown/mixed state after the
+bounded reads retains the existing explicit recovery lock. The shared worker
+queue continues to serialize different messages.
+
+A missing/removed Undo record returns `undo-expired` before account lookup instead
+of claiming the account is signed out. Popup copy explains mail may already be
+restored. Only explicit authentication errors recommend Settings sign-in; transient
+session discovery and unclassified failures report service unavailability.
+
+Delayed state is a reproduced synthetic failure mode and candidate explanation,
+not a verified cause of the owner's Gmail incident. Fresh real-account acceptance
+is pending in docs/acceptance/2026-10-01-undo-burst-confirmation.md.

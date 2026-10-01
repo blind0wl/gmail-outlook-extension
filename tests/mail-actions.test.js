@@ -165,3 +165,16 @@ test('Gmail write diagnostics classify replies without logging mail or credentia
     assert.doesNotMatch(JSON.stringify(event),/Private|private|owner|abcdef|https|csrf/);
   }
 });
+
+test('Gmail session discovery distinguishes transient provider failures from missing login',async()=>{
+  const {gmailSession}=await import('../src/providers/mail-actions.js');
+  const originalFetch=globalThis.fetch;
+  try {
+    for(const status of [503,429,401]) {
+      globalThis.fetch=async()=>({ok:false,status});
+      await assert.rejects(gmailSession('owner@example.test'),e=>e.code===(status===401?'sign-in':'unavailable'));
+    }
+    globalThis.fetch=async()=>{throw Error('offline');};
+    await assert.rejects(gmailSession('owner@example.test'),e=>e.code==='unavailable');
+  } finally {globalThis.fetch=originalFetch;}
+});

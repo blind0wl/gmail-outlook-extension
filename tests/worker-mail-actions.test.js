@@ -223,3 +223,15 @@ test('repeated Gmail read stays isolated after one uncertain result and explicit
   assert.equal(calls.length,7,'explicit recovery clears only the lock');
   assert.equal(data.mailActions[foreign.key],undefined);
 });
+
+
+test('a stale Undo after successful restoration reports unavailable Undo, not sign-in', async () => {
+  await ready;
+  const data=fixture();
+  data.mailActions[key]={state:'undo',id:'one',folder:'inbox',item,expiresAt:Date.now()+60000};
+  let writes=0;
+  const options={...deps,mutate:async()=>{writes++;return {id:'one'};}};
+  assert.deepEqual(await handleMailboxAction({key,action:'undo'},options),{ok:true});
+  assert.deepEqual(await handleMailboxAction({key,action:'undo'},options),{ok:false,code:'undo-expired'});
+  assert.equal(writes,1);
+});

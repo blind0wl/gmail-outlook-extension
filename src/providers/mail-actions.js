@@ -51,6 +51,7 @@ export async function mutateOutlookMessage(token, id, action, folder = 'inbox', 
 // Gmail's private session protocol is deliberately isolated. Resolve slots
 // afresh on every operation; never use a cached slot across browser sign-ins.
 export async function gmailSession(account, forUndo = false) {
+  let unavailable = false;
   for (let slot = 0; slot < 10; slot++) {
     let feed;
     try {
@@ -58,6 +59,7 @@ export async function gmailSession(account, forUndo = false) {
       feed = parseFeed(await response.text(), slot);
     } catch (error) {
       if (error.status === 404) break;
+      if (![401, 403].includes(error.status)) unavailable = true;
       continue;
     }
     if (feed.account !== account.toLowerCase()) continue;
@@ -77,7 +79,7 @@ export async function gmailSession(account, forUndo = false) {
     if (!cookie?.value) throw new MailActionError('sign-in');
     return { base, csrf: cookie.value, key, ...(forUndo ? { appInfo } : {}) };
   }
-  throw new MailActionError('sign-in');
+  throw new MailActionError(unavailable ? 'unavailable' : 'sign-in');
 }
 
 export async function mutateGmailConversation(account, id, action, assertAuthorized = () => {}) {
@@ -92,11 +94,20 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
     await recordMailActionDiagnostic(event);
   };
   const confirmState = async status => {
-    assertAuthorized();
-    if (!await verifyGmailConversationState(account, session, id, action)) return null;
-    assertAuthorized();
-    await report('acknowledged', status, 'state-verified');
-    return { id };
+    // Undo can become visible after the write response. Retry only exact-state
+    // reads, never the mutation; each read still verifies account ownership.
+    const delays = action === 'undo' ? [0, 300, 1000] : [0];
+    for (const delay of delays) {
+      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+      assertAuthorized();
+      const verified = await verifyGmailConversationState(account, session, id, action);
+      assertAuthorized();
+      if (verified) {
+        await report('acknowledged', status, 'state-verified');
+        return { id };
+      }
+    }
+    return null;
   };
   let url, options;
   const body = new FormData();

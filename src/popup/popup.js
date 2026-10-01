@@ -277,8 +277,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var code = result?.code;
         mailErrors[key] = code === "check-mailbox" ? unconfirmedMessage
           : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
-          : code === "undo-expired" ? "Undo expired. Restore this mail in your mailbox."
-          : "Could not complete the action. Check the account’s sign-in in Settings, then try again.";
+          : code === "undo-expired" ? "Undo is no longer available here. Check your mailbox; the mail may already be restored. If it is still in Trash, restore it there."
+          : code === "sign-in" ? "Sign in to this account in Settings, then try again."
+          : code === "pending" ? "This action is already queued. Wait for it to finish."
+          : "Could not complete the action. The mailbox service is unavailable or rejected the request. Check your mailbox before trying again.";
         setStatus(mailErrors[key], "error");
       } else {
         if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;

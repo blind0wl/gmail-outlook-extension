@@ -454,6 +454,7 @@ export async function handleMailboxAction(msg, deps = {}) {
     const accounts = await loadAccounts();
     const journal = await mailJournal();
     const prior = journal[msg.key];
+    if (msg.action === "undo" && !prior) return { ok: false, code: "undo-expired" };
     if (!prior && Object.keys(journal).length >= 200) return { ok: false, code: "check-mailbox" };
     const item = ["undo", "acknowledge"].includes(msg.action) ? prior?.item : getInbox().find(i => i.key === msg.key);
     const acct = accounts.find(a => item && accountKey(a) === accountKey(item));
@@ -470,7 +471,7 @@ export async function handleMailboxAction(msg, deps = {}) {
       return { ok: true };
     }
     if (prior?.state === "pending" || prior?.state === "uncertain") return { ok: false, code: "check-mailbox" };
-    if (msg.action === "undo" && (!prior || prior.expiresAt < Date.now() || prior.state !== "undo")) return { ok: false, code: "undo-expired" };
+    if (msg.action === "undo" && (!prior || prior.expiresAt <= Date.now() || prior.state !== "undo")) return { ok: false, code: "undo-expired" };
     const generation = accountGeneration.get(accountKey(acct)) ?? 0;
     const current = () => generation === (accountGeneration.get(accountKey(acct)) ?? 0);
     const id = msg.action === "undo" ? prior.id : messageIdOf(item.key);
@@ -527,7 +528,7 @@ export async function handleMailboxAction(msg, deps = {}) {
           await badgeFor(accounts, deps);
         });
       }
-      return { ok: false, code: error.uncertain ? "check-mailbox" : error.code ?? "sign-in" };
+      return { ok: false, code: error.uncertain ? "check-mailbox" : error.code ?? "unavailable" };
     }
   });
   pollTail = run.catch(() => {});
