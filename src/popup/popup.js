@@ -63,8 +63,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
   }
 
-  var expanded = new Set();
   var pendingAccountActions = new Set();
+
+  function setStatus(text, state) {
+    var status = document.getElementById("lifecycle-message");
+    status.textContent = text;
+    if (state) status.dataset.state = state;
+    else status.removeAttribute("data-state");
+  }
 
   async function sendAction(message, button) {
     var actionKey = button?.dataset.action
@@ -79,13 +85,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (actionKey) button.setAttribute("aria-disabled", "true");
       else button.disabled = true;
     }
-    var status = document.getElementById("lifecycle-message");
     var isAdd = message.type === "add-account";
-    function setStatus(text, state) {
-      status.textContent = text;
-      if (state) status.dataset.state = state;
-      else status.removeAttribute("data-state");
-    }
     if (message.type === "refresh") setStatus("Checking mail\u2026", "progress");
     try {
       var result = await chrome.runtime.sendMessage(message);
@@ -187,7 +187,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function visibleItems() {
-    var sorted = items.slice().sort(function (a, b) { return b.date - a.date; });
+    var sorted = displayedItems().sort(function (a, b) { return b.date - a.date; });
     if (filter === "all") return sorted;
     return sorted.filter(function (item) { return item.provider === filter; });
   }
@@ -210,7 +210,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   function renderHeader() {
     var keys = new Set(configuredAccounts.map(accountKey));
-    var scoped = items.filter(function (item) { return keys.has(accountKey(item)); });
+    var scoped = displayedItems().filter(function (item) { return keys.has(accountKey(item)); });
     var el = document.getElementById("unread-count");
     el.textContent = providerUnread(scoped) > 0
       ? "(" + providerUnread(scoped) + ")" + (openedHereCount(scoped) > 0 ? " \u00B7 " + openedHereCount(scoped) + " opened" : "")
@@ -225,15 +225,111 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
   }
 
+  var pendingMailActions = new Set();
+  var mailActions = {};
+  // Project pending actions over authoritative cache; never write optimistic mail state.
+  var mailFeedback = new Map();
+  function settleMailFeedback() {
+    mailFeedback.forEach(function (feedback, key) {
+      if (feedback.confirmed && !items.some(function (item) { return item.key === key && item.unread !== false; }))
+        mailFeedback.delete(key);
+    });
+  }
+  function displayedItems() {
+    var projected = items.filter(function (item) {
+      var feedback = mailFeedback.get(item.key);
+      return feedback ? feedback.action === "read" && !feedback.confirmed : item.unread !== false;
+    }).map(function (item) {
+      return mailFeedback.has(item.key) ? { ...item, unread: false, localRead: false } : item;
+    });
+    // A storage event may arrive before the worker response. Keep pending read feedback visible.
+    mailFeedback.forEach(function (feedback, key) {
+      if (feedback.action === "read" && !feedback.confirmed && !projected.some(function (item) { return item.key === key; }))
+        projected.push({ ...feedback.item, unread: false, localRead: false });
+    });
+    return projected;
+  }
+  var mailErrors = {};
+  function actionIcon(kind) {
+    var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", kind === "read" ? "M3 8l9 6 9-6M3 8l9-5 9 5v12H3V8M8 17l2 2 4-4" : "M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7");
+    svg.appendChild(path);
+    return svg;
+  }
+  async function actOnMail(key, action) {
+    if (pendingMailActions.has(key)) return;
+    pendingMailActions.add(key);
+    delete mailErrors[key];
+    if (action === "read" || action === "trash") mailFeedback.set(key, { action: action, item: items.find(function (item) { return item.key === key; }), confirmed: false });
+    setStatus(action === "read" ? "Marking as read…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
+    renderHeader();
+    renderList();
+    renderUndo();
+    try {
+      var result = await chrome.runtime.sendMessage({ type: "mail-action", key: key, action: action });
+      if (!result?.ok) {
+        mailFeedback.delete(key);
+        var code = result?.code;
+        mailErrors[key] = code === "check-mailbox" ? "The result could not be confirmed. Check your mailbox before acting again."
+          : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
+          : code === "undo-expired" ? "Undo expired. Restore this mail in your mailbox."
+          : "Could not complete the action. Check the account’s sign-in in Settings, then try again.";
+        setStatus(mailErrors[key], "error");
+      } else {
+        if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;
+        if (action === "undo") mailFeedback.delete(key);
+        settleMailFeedback();
+        setStatus(action === "acknowledge" ? "Action lock cleared. Refresh to check your inbox." : action === "read" ? "Marked as read in your mailbox." : action === "trash" ? "Moved to Trash. Undo is available below." : "Restored to your inbox.", "ok");
+      }
+    } catch {
+      mailFeedback.delete(key);
+      mailErrors[key] = "The result could not be confirmed. Check your mailbox before acting again.";
+      setStatus(mailErrors[key], "error");
+    } finally {
+      pendingMailActions.delete(key);
+      renderHeader();
+      renderList();
+      renderUndo();
+    }
+  }
+  function renderUndo() {
+    var list = document.getElementById("mail-undo");
+    var focused = document.activeElement?.dataset.undoKey;
+    list.replaceChildren();
+    Object.entries(mailActions).forEach(function (entry) {
+      var key = entry[0], record = entry[1];
+      var uncertain = ["pending", "uncertain"].includes(record.state);
+      if (pendingMailActions.has(key) || (!uncertain && (record.state !== "undo" || record.expiresAt < Date.now())) || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
+      var row = document.createElement("li");
+      var text = document.createElement("span");
+      text.textContent = (uncertain ? "Check your mailbox before acting again · " : "Moved to Trash · ") + record.item.account;
+      var undo = document.createElement("button");
+      undo.type = "button";
+      undo.textContent = uncertain ? "I’ve checked" : "Undo";
+      undo.dataset.undoKey = key;
+      undo.setAttribute("aria-label", (uncertain ? "I checked my mailbox; allow further actions for " : "Restore ") + (record.item.subject || "mail") + " to Inbox for " + record.item.account);
+      undo.setAttribute("aria-disabled", String(pendingMailActions.has(key)));
+      undo.addEventListener("click", function () { void actOnMail(key, uncertain ? "acknowledge" : "undo"); });
+      row.append(text, undo);
+      list.appendChild(row);
+      if (focused === key) undo.focus();
+    });
+    list.hidden = !list.childElementCount;
+  }
+
   function renderList() {
     var list = document.getElementById("inbox-list");
     var empty = document.getElementById("inbox-empty");
     var active = document.activeElement;
     var focusedKey = active?.closest?.(".card")?.getAttribute("data-key");
-    var focusedOpen = active?.classList?.contains("card-open");
+    var focusedAction = active?.dataset.mailAction;
     var focusedRecovery = active?.closest?.(".status-signin")?.dataset.accountKey;
     var hadListFocus = list.contains(active);
     var recoveryFocus = null;
+    var index = 0;
     while (list.firstChild) list.removeChild(list.firstChild);
     var shown = visibleItems();
     var sections = configuredAccounts.filter(function (acct) { return filter === "all" || acct.provider === filter; });
@@ -241,7 +337,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     empty.textContent = configuredAccounts.length ? "No accounts match this filter." : "No accounts yet. Open Settings to connect Gmail or Outlook.";
     var setupCta = document.getElementById("empty-setup");
     if (setupCta) setupCta.hidden = configuredAccounts.length !== 0;
-    var index = 0;
     sections.forEach(function (acct) {
       var group = document.createElement("li");
       group.className = "account-section";
@@ -327,8 +422,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           card.appendChild(dot);
         }
 
-        // From and subject are static headings. Only the snippet area is
-        // the preview toggle that opens the cached body text.
+        // Mail content stays static until in-extension reading is implemented.
         var head = document.createElement("div");
         head.className = "card-head";
 
@@ -358,18 +452,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         head.appendChild(subject);
         card.appendChild(head);
 
-        var summary = document.createElement("button");
-        summary.type = "button";
-        summary.className = "card-summary";
-        var attentionSuffix = item.localRead === true ? ", opened here" : read ? "" : ", unread";
-        summary.setAttribute("aria-label", "Preview " + (item.subject || "(no subject)") + " from " + (item.from || "Unknown sender") + ", " + (formatTime(item.date) || "no date") + attentionSuffix + " for " + item.account + " (" + (item.provider === "outlook" ? "Outlook" : "Gmail") + ")");
-        summary.setAttribute("aria-expanded", String(expanded.has(item.key)));
-        summary.setAttribute("aria-controls", "mail-preview-" + index);
-
-        var snippet = document.createElement("span");
+        var snippet = document.createElement("div");
         snippet.className = "card-snippet";
         snippet.textContent = item.snippet || "";
-        summary.appendChild(snippet);
+        card.appendChild(snippet);
 
         var open = document.createElement("button");
         open.type = "button";
@@ -382,40 +468,36 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           markRead(item.key);
           openUrl(threadUrl(item));
         });
-        var cue = document.createElement("span");
-        cue.className = "preview-cue";
-        cue.setAttribute("aria-hidden", "true");
-        cue.textContent = expanded.has(item.key) ? "Preview \u25B4" : "Preview \u25BE";
-        summary.appendChild(cue);
-        // The toggle and Open share an explicit flex row. Implicit wrapping
-        // once stranded the zero-basis toggle on the heading's full line with
-        // zero width and no hit area, so the row is structural, not inferred.
         var actionsRow = document.createElement("div");
         actionsRow.className = "card-actions";
-        actionsRow.append(summary, open);
+        actionsRow.appendChild(open);
+        var quick = document.createElement("div");
+        quick.className = "card-quick-actions";
+        ["read", "trash"].forEach(function (action) {
+          var button = document.createElement("button");
+          button.type = "button";
+          button.className = "card-icon" + (action === "trash" ? " card-trash" : "");
+          button.dataset.mailAction = action;
+          var label = action === "read" ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + " as read" : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
+          button.title = label;
+          button.setAttribute("aria-label", label + ": " + (item.subject || "(no subject)") + " for " + item.account);
+          button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || (action === "read" && item.unread !== true)));
+          button.appendChild(actionIcon(action));
+          button.addEventListener("click", function () { if (button.getAttribute("aria-disabled") !== "true") void actOnMail(item.key, action); });
+          quick.appendChild(button);
+        });
+        actionsRow.appendChild(quick);
         card.appendChild(actionsRow);
 
-        var preview = document.createElement("div");
-        preview.className = "card-preview";
-        preview.id = "mail-preview-" + index++;
-        preview.hidden = !expanded.has(item.key);
-        // Headings stay visible above, so the opened area shows the
-        // cached body text only.
-        var fullSnippet = document.createElement("p");
-        fullSnippet.textContent = item.snippet || "";
-        preview.appendChild(fullSnippet);
-        card.appendChild(preview);
-        function selectCard() {
-          if (expanded.has(item.key)) expanded.delete(item.key);
-          else expanded.add(item.key);
-          preview.hidden = !expanded.has(item.key);
-          summary.setAttribute("aria-expanded", String(!preview.hidden));
-          cue.textContent = preview.hidden ? "Preview \u25BE" : "Preview \u25B4";
-        }
-        summary.addEventListener("click", selectCard);
-
         messageList.appendChild(card);
-        if (focusedKey === item.key) (focusedOpen ? open : summary).focus();
+        if (pendingMailActions.has(item.key)) card.setAttribute("aria-busy", "true");
+        if (mailErrors[item.key]) {
+          var error = document.createElement("p");
+          error.className = "card-error";
+          error.textContent = mailErrors[item.key];
+          card.appendChild(error);
+        }
+        if (focusedKey === item.key) (card.querySelector('[data-mail-action="' + focusedAction + '"]') || open).focus();
       });
     });
     if (recoveryFocus) recoveryFocus.focus();
@@ -496,6 +578,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     renderHeader();
     renderPills();
     renderList();
+    renderUndo();
     renderSound();
   }
 
@@ -519,6 +602,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function load() {
+    storageLocal()?.get("mailActions").then(function (data) {
+      mailActions = data.mailActions || {};
+      renderList();
+      renderUndo();
+    });
     var store = storageLocal();
     if (!store) {
       items = [];
@@ -710,10 +798,16 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
         if (area === "local" && changes) {
+          if (changes.mailActions) {
+            mailActions = changes.mailActions.newValue || {};
+            renderList();
+            renderUndo();
+          }
           if (changes[THEME_KEY] && !themeWrites) applyTheme(changes[THEME_KEY].newValue);
           if (changes[CACHE_KEY]) {
             var next = changes[CACHE_KEY].newValue;
             items = Array.isArray(next) ? next : [];
+            settleMailFeedback();
             render();
           }
           if (changes[SOUND_SETTINGS_KEY]) {

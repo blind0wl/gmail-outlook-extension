@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHTML } from "linkedom";
 const tick = () => new Promise((r) => setTimeout(r, 0));
-test("popup lifecycle controls send worker messages and preview preserves focus without writing cache", async () => {
+test("popup lifecycle controls send worker messages and static previews never write cache", async () => {
   const { window, document } = parseHTML(
     readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
   );
@@ -49,26 +49,17 @@ test("popup lifecycle controls send worker messages and preview preserves focus 
   await tick();
   await tick();
   const card = document.querySelector(".card");
-  const summary = card.querySelector("button.card-summary");
-  assert.ok(summary, "preview uses a native button distinct from Open");
-  assert.equal(card.hasAttribute("role"), false, "list item contains independent controls");
-  assert.equal(summary.querySelector("button"), null);
-  summary.focus();
-  summary.click();
-  await tick();
-  assert.equal(document.activeElement, summary);
-  assert.equal(summary.getAttribute("aria-expanded"), "true");
-  assert.equal(summary.getAttribute("aria-controls"), card.querySelector(".card-preview").id);
-  assert.ok(card.querySelector(".card-head .card-subject"), "subject is a static heading");
-  assert.equal(summary.querySelector(".card-subject"), null, "headings stay out of the toggle");
-  assert.equal(summary.querySelector(".card-sender"), null, "sender stays out of the toggle");
-  const previewText = card.querySelector(".card-preview").textContent;
-  assert.equal(previewText, cached.snippet, "preview opens the body text only");
+  assert.equal(card.querySelector(".card-summary"), null, "no preview toggle");
+  assert.equal(card.querySelector(".card-preview"), null, "no expanded content");
+  assert.equal(card.querySelector(".card-snippet").textContent, cached.snippet);
+  assert.ok(card.querySelector(".card-head .card-subject"));
+  assert.equal(card.querySelector("script"), null, "mail remains plain text");
   assert.equal(writes, 0);
-  assert.equal(messages.length, 0, "preview does not mark read");
+  assert.equal(messages.length, 0, "displaying preview never marks read");
+  const open = card.querySelector(".card-open");
+  open.focus();
   storageListener({ mailCache: { newValue: [cached] } }, "local");
-  assert.equal(document.activeElement, document.querySelector(".card-summary"));
-  assert.equal(document.activeElement.getAttribute("aria-expanded"), "true");
+  assert.equal(document.activeElement, document.querySelector(".card-open"));
   const chime = document.querySelector("#sound-accounts input");
   chime.focus();
   storageListener({ soundSettings: { newValue: {
@@ -281,12 +272,9 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
   assert.match(sections[3].textContent, /Paused/);
   assert.match(sections[3].textContent, /No messages/);
   assert.equal(document.querySelector('[data-key*="orphan"]'), null);
-  const preview = sections[0].querySelector(".card-summary");
-  preview.focus(); preview.click();
-  assert.equal(messages.length, 0, "expanding only displays cached text");
+  assert.ok(sections[0].querySelector(".card-snippet"));
+  assert.equal(messages.length, 0, "preview is visible without interaction");
   assert.equal(sections[0].querySelector(".account-count").textContent, "2 unread");
-  preview.click();
-  assert.equal(preview.getAttribute("aria-expanded"), "false");
   sections[0].querySelector(".card-open").click();
   await tick();
   assert.equal(messages.at(-1).type, "mark-read", "Open keeps existing local behavior");
@@ -302,7 +290,7 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
   assert.equal(messages.length, before, "Mail recovery navigates; Settings starts sign-in explicitly");
   document.getElementById("back-to-mail").click();
   document.querySelector('[data-filter="all"]').click();
-  const remaining = document.querySelector('.card-summary');
+  const remaining = document.querySelector('.card-open');
   remaining.focus();
   change({ mailCache: { newValue: [] } });
   assert.equal(document.activeElement, document.getElementById("refresh-mail"), "removed mail focus returns to Mail control");
@@ -395,32 +383,18 @@ test("opened mail keeps provider counts with an opened-here marker", async () =>
   change({ mailCache: { newValue: [mail("one", { localRead: true }), mail("two")] } });
   assert.equal(document.querySelector(".account-count").textContent, "2 unread \u00B7 1 opened here");
   assert.equal(document.querySelector(".opened-tag")?.textContent, "Opened here");
-  assert.match(document.querySelector(".card-summary").getAttribute("aria-label"), /opened here/);
+  assert.match(document.querySelector(".card-open").getAttribute("aria-label"), /opened here/);
 });
 
-test("preview cue names its collapse state", async () => {
-  const { document } = await workspaceFixture();
-  const summary = document.querySelector(".card-summary");
-  const cue = () => summary.querySelector(".preview-cue").textContent;
-  assert.equal(cue(), "Preview \u25BE");
-  summary.click();
-  assert.equal(cue(), "Preview \u25B4");
-  assert.equal(summary.getAttribute("aria-expanded"), "true");
-});
-
-test("toggle and open share an explicit actions row with a real hit area", async () => {
-  // Guards the zero-area toggle regression: the snippet toggle once rode
-  // the heading's full flex line with zero width and no hit area while its
-  // text still painted, so clicks landed on the card and did nothing.
-  const { document } = await workspaceFixture();
+test("cards show automatic plain-text previews without expansion or content click actions", async () => {
+  const { document, messages, tabs } = await workspaceFixture();
   const card = document.querySelector(".card");
-  const row = card.querySelector(".card-actions");
-  assert.ok(row, "actions row exists");
-  assert.equal(row.parentElement, card, "row is a direct card child");
-  assert.ok(row.querySelector("button.card-summary"), "toggle lives in the row");
-  assert.ok(row.querySelector("button.card-open"), "open lives in the same row");
-  assert.equal(card.querySelector(".card-head")?.nextElementSibling, row, "row follows headings");
-  assert.equal(row.nextElementSibling?.className, "card-preview", "preview follows the row");
+  assert.ok(card.querySelector(".card-snippet"));
+  assert.equal(card.querySelector(".preview-cue"), null);
+  assert.equal(card.querySelector("[aria-expanded]"), null);
+  card.click();
+  assert.equal(messages.length, 0);
+  assert.equal(tabs.length, 0, "in-extension reading is deferred");
 });
 
 test("settings leads with accounts before themes", async () => {
@@ -463,4 +437,76 @@ test("cancelled outlook add names the cancelled step instead of blaming the addr
   const err = document.getElementById("add-account-error");
   assert.equal(err.hidden, false);
   assert.match(err.textContent, /cancelled/);
+});
+
+test('hover actions use provider-specific labels and resist duplicate clicks', async () => {
+  const { document, messages, change } = await workspaceFixture();
+  const read = document.querySelector('[data-mail-action="read"]');
+  assert.match(read.getAttribute('aria-label'),/conversation as read/);
+  assert.match(document.querySelector('[data-mail-action="trash"]').getAttribute('aria-label'),/conversation to Trash/);
+  let finish;
+  chrome.runtime.sendMessage=async msg=>{messages.push(msg);await new Promise(r=>finish=r);return {ok:true};};
+  read.focus();read.click();
+  const pending=document.querySelector('[data-mail-action="read"]');
+  assert.equal(pending.getAttribute('aria-disabled'),'true');
+  pending.click();assert.equal(messages.length,1);
+  assert.equal(messages[0].type,'mail-action');assert.equal(messages[0].action,'read');
+  finish();await tick();
+  change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com',subject:'Test'}}}}});
+  assert.equal(document.getElementById('mail-undo').hidden,false);
+  assert.match(document.querySelector('[data-undo-key]').getAttribute('aria-label'),/Restore Test/);
+});
+
+test('mailbox feedback is immediate while worker is pending and rolls back a failed action',async()=>{
+  const {document,change}=await workspaceFixture();
+  const key=document.querySelector('.card').dataset.key;
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.ok(document.querySelector('.card').classList.contains('read'),'read style changes before worker response');
+  change({mailCache:{newValue:[{key,provider:'gmail',account:'work@example.com',subject:'new cache text',snippet:'text',date:Date.now(),unread:true}]}});
+  assert.ok(document.querySelector('.card').classList.contains('read'),'stale cache cannot restore unread while pending');
+  finish({ok:false,code:'provider-error'});await tick();
+  assert.equal(document.querySelector('.card').classList.contains('read'),false,'failure restores unread card');
+  document.querySelector('[data-mail-action="trash"]').click();
+  assert.equal(document.querySelector('.card'),null,'Trash hides card before worker response');
+  finish({ok:false,code:'provider-error'});await tick();
+  assert.ok(document.querySelector('.card'),'failed Trash restores card');
+});
+
+test('provider-read cards are filtered out',async()=>{
+  const {document,change}=await workspaceFixture();
+  const key=document.querySelector('.card').dataset.key;
+  change({mailCache:{newValue:[{key,provider:'gmail',account:'work@example.com',date:Date.now(),unread:false}]}});
+  assert.equal(document.querySelector('.card'),null,'server-read mail is no longer needed in popup');
+});
+
+
+test('confirmed read feedback resists stale unread cache until reconciliation, then allows new unread mail',async()=>{
+  const {document,change,data}=await workspaceFixture();
+  const cached=data.mailCache[0];
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  finish({ok:true});await tick();
+  assert.equal(document.querySelector('.card'),null);
+  change({mailCache:{newValue:[cached]}});
+  assert.equal(document.querySelector('.card'),null,'stale unread snapshot cannot undo confirmed feedback');
+  change({mailCache:{newValue:[{...cached,unread:false}]}});
+  change({mailCache:{newValue:[{...cached,date:Date.now()+1000}]}});
+  assert.ok(document.querySelector('.card'),'a later unread reply in the same conversation can appear');
+});
+
+test('read cache arriving before action response settles feedback and allows later unread mail',async()=>{
+  const {document,change,data}=await workspaceFixture();
+  const cached=data.mailCache[0];
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  change({mailCache:{newValue:[{...cached,unread:false}]}});
+  assert.ok(document.querySelector('.card.read'),'pending feedback stays visible through storage event');
+  finish({ok:true});await tick();
+  assert.equal(document.querySelector('.card'),null);
+  change({mailCache:{newValue:[cached]}});
+  assert.ok(document.querySelector('.card'),'future unread state can appear after cache/response handoff');
 });

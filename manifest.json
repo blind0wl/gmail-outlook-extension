@@ -9,7 +9,8 @@
     "notifications",
     "storage",
     "offscreen",
-    "tabs"
+    "tabs",
+    "cookies"
   ],
   "host_permissions": [
     "https://mail.google.com/*",

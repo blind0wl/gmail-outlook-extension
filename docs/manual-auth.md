@@ -6,7 +6,7 @@ Ordinary use requires no DevTools, no storage edits, and no IDs of any kind. Loa
 
 ### Gmail: none needed
 
-Gmail reads the browser session you already have. Log into Gmail in any tab, click Add Gmail, enter the address, and the account appears. There is no Google Cloud project, no OAuth client, no consent screen, and no token stored anywhere. The extension fetches the unread feed with your session cookie and nothing else. If the session lapses, the account shows Sign in, which opens the Gmail login tab.
+Gmail reads the browser session you already have. Log into Gmail in any tab, click Add Gmail, enter the address, and the account appears. There is no Google Cloud project, no OAuth client, no consent screen, and no token stored anywhere. The extension fetches the unread feed and performs owner-approved conversation actions with your browser session. Session values stay in the worker and are never logged. If the session lapses, the account shows Sign in, which opens the Gmail login tab.
 
 ### Outlook.com: one developer registration
 
@@ -17,7 +17,7 @@ Create an Entra registration for **Personal Microsoft accounts only**: open [Ent
 - This checkout's pinned redirect is `https://jholbbifabgjdjiiebpghejakkejdpdf.chromiumapp.org/`.
   Run `npm run identity` to verify it. Follow [stable identity setup](extension-identity.md)
   when upgrading an earlier unpinned install; account/settings storage may change once.
-- Enable public client flows. Use delegated `User.Read`, `Mail.Read`, and `offline_access`. No secret is used. Put the public application client ID into `ENTRA_APP_ID` in `src/auth/microsoft.js` (it is a public identifier, safe to commit). Users then click Add Outlook, enter their address, and accept the consent screen. The extension uses the consumers authority and PKCE.
+- Enable public client flows. Use delegated `User.Read`, `Mail.ReadWrite`, and `offline_access`. No secret is used. Put the public application client ID into `ENTRA_APP_ID` in `src/auth/microsoft.js` (it is a public identifier, safe to commit). Users then click Add Outlook, enter their address, and accept the consent screen. The extension uses the consumers authority and PKCE.
 
 Sign-in failures surface a short code in the popup (e.g. `token-exchange/invalid_client/AADSTS70011`): fixed identifiers from the endpoint, never mail content.
 
@@ -55,3 +55,14 @@ Chrome's [notifications API](https://developer.chrome.com/docs/extensions/refere
 - [ ] Refresh, baseline, focused-tab suppression, master mute, chime, and badge verified in Chrome.
 
 These boxes require live accounts. Automated fixtures and DOM tests do not mark them complete.
+
+## Mailbox action consent update — 2026-10-01
+
+The action candidate requests delegated Mail.ReadWrite in place of Mail.Read.
+For existing Outlook records, sign out then sign in through Settings to discard
+older cached grants and receive the new consent screen. The extension remains
+personal-account only and never sends mail or permanently deletes it. Gmail
+keeps browser-session login and requires no OAuth registration; its session
+CSRF cookie is accessed under the added cookies permission. Follow the fresh
+[mailbox acceptance record](acceptance/2026-10-01-mail-cards-actions.md), especially
+wrong-account isolation and private Gmail session/Undo compatibility.

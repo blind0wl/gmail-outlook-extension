@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-30T11:38:15.170943+00:00",
+  "generatedAt": "2026-10-01T00:00:00Z",
   "title": "Design System: Gmail plus Outlook",
   "extensions": {
     "colorMeta": {
@@ -590,12 +590,12 @@
       "css": ".ds-account { font: 13px/1.5 system-ui, sans-serif; background: var(--panel); color: var(--text); border-radius: 12px; overflow: hidden; } .ds-account-header { padding: 12px 14px; background: var(--header); } .ds-account-header h2 { margin: 6px 0 0; font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; } .ds-account-badge { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--tag); } .ds-account-empty { margin: 0; padding: 12px 14px; color: var(--muted); overflow-wrap: anywhere; }"
     },
     {
-      "name": "Mail row",
+      "name": "Mail card",
       "kind": "custom",
       "refersTo": "mail-row",
-      "description": "Flat cached message with preview control and sibling Open.",
-      "html": "<article class=\"ds-row\"><span class=\"ds-dot\" role=\"img\" aria-label=\"Unread\"></span><button class=\"ds-summary\" aria-expanded=\"false\"><span class=\"ds-top\"><span class=\"ds-sender\">Project team</span><time class=\"ds-time\">10:42</time></span><span class=\"ds-subject\">Weekly review</span><span class=\"ds-snippet\">The updated notes are ready.</span></button><button class=\"ds-row-open\">Open</button></article>",
-      "css": ".ds-row { position: relative; font: 13px/1.5 system-ui, sans-serif; padding: 12px 14px 10px 20px; background: var(--panel); color: var(--text); } .ds-dot { position: absolute; left: 8px; top: 20px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); } .ds-summary { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font-weight: 400; text-align: left; } .ds-summary:hover { background: var(--hover); } .ds-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; } .ds-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; } .ds-subject, .ds-snippet { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-subject { font-size: 14px; font-weight: 600; } .ds-snippet { color: var(--muted); margin-top: 3px; } .ds-row-open { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; margin-top: 8px; margin-left: -8px; } .ds-row-open:hover:not(:disabled) { background: var(--hover); } .ds-row-open:active:not(:disabled) { border-color: var(--accent); } .ds-row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-row-open:disabled { color: var(--muted); cursor: default; }"
+      "description": "Separate rounded email card with bold headings, a three-line preview and hover/focus actions.",
+      "html": "<article class=\"ds-row\"><strong>Reading room</strong><strong>Your weekly reading list</strong><p>A few details to catch up on for the week ahead.</p><button>Open</button></article>",
+      "css": ".ds-row { position: relative; font: 13px/1.5 system-ui, sans-serif; padding: 12px 14px 10px 20px; background: var(--panel); color: var(--text); } .ds-dot { position: absolute; left: 8px; top: 20px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); } .ds-summary { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: var(--panel); color: inherit; font-weight: 400; text-align: left; } .ds-summary:hover { background: var(--hover); } .ds-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; } .ds-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; } .ds-subject, .ds-snippet { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-subject { font-size: 14px; font-weight: 600; } .ds-snippet { color: var(--muted); margin-top: 3px; } .ds-row-open { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: var(--panel); color: var(--accent); border-color: transparent; padding: 4px 8px; margin-top: 8px; margin-left: -8px; } .ds-row-open:hover:not(:disabled) { background: var(--hover); } .ds-row-open:active:not(:disabled) { border-color: var(--accent); } .ds-row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-row-open:disabled { color: var(--muted); cursor: default; } .ds-row { border: 1px solid var(--line); border-radius: 12px; } .ds-row strong { display: block; font-weight: 600; } .ds-row p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }"
     },
     {
       "name": "Email field",
@@ -619,7 +619,7 @@
     "overview": "The approved world is a compact, calm desk for checking personal mail. Blue-grey\nsurfaces and a pale teal accent make Midnight the default; Slate workspace and\nSignal panel apply the same component grammar through their own palettes.\nNormal-case native typography and crisp authored icons keep the interface direct.\n\nThis is the implementation record extracted on 2026-09-30 from\n`src/popup/popup.css`, `popup.html`, `popup.js` and `themes.js`. It replaces the\nformer white A v5 world. Historical screenshots and reproduction provenance stay\nin `docs/ui-baseline/`; they are historical evidence, not current tokens.\nCurrent synthetic verification is in `docs/ui-workspace/`; real-account owner\nacceptance of this candidate remains pending.",
     "keyCharacteristics": [
       "Three complete palettes with Midnight as the remembered-preference fallback.",
-      "Flat mail rows inside separate account panels.",
+      "Separate rounded message cards beneath account headers.",
       "Normal-case system typography and authored SVG toolbar icons.",
       "Immediate state changes without ambient or theme-transition motion."
     ],
@@ -651,6 +651,7 @@
       "Don't introduce uppercase tracked labels, glyph toolbar icons or ambient motion.",
       "Don't add later-stage mailbox write controls to the Stage 1 component set.",
       "Don't treat synthetic screenshots as real-account acceptance."
-    ]
+    ],
+    "cardActionsUpdate": "2026-10-01: 480px popup, three-line static preview, 600-weight unread headings and 400 pending-read headings. Immediate read/Trash feedback with rollback; provider-read mail omitted. Unknown Gmail responses reconcile complete owning unread feed while preserving write uncertainty. Real-account bug-candidate retest pending."
   }
 }

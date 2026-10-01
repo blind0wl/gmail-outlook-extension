@@ -1,3 +1,8 @@
+> Historical checked results below belong to earlier candidates. For the
+> 2026-10-01 card/action candidate, use the new unchecked procedure in
+> [the dated acceptance record](../docs/acceptance/2026-10-01-mail-cards-actions.md).
+> Preview expansion and the old absence of mailbox controls are superseded.
+
 # Popup workspace acceptance
 
 Run against the candidate PR revision in an unpacked extension with two Gmail

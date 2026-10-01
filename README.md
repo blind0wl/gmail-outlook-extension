@@ -5,12 +5,19 @@ mail in one popup, with an unread badge, desktop notifications, and an optional
 chime. There is no backend or analytics. Mail and credentials stay in your
 browser profile and are exchanged only with the providers.
 
-The popup groups cached mail under each account. Expanding a preview displays
-the cached subject and snippet without marking it read. **Open** opens the
-provider message and retains the extension’s existing local read flag; server
-mail remains unchanged.
-Compose/send, archive/delete, search, and Microsoft work/school accounts are
-outside v1.
+The popup groups cached mail under each account in separate rounded cards, with
+bold sender/subject and an automatic preview capped at three lines. Hover or
+keyboard focus reveals mark-as-read and Trash actions. Gmail uses the existing
+browser login and acts on **whole conversations**; Outlook acts on individual
+messages through Graph. Trash is recoverable through Undo for ten minutes.
+**Open** still opens the provider and retains the extension’s local read flag.
+Full-message reading inside the extension, compose/send, archive and search
+remain outside this change.
+
+Mailbox actions are an implementation candidate: real-account acceptance is
+pending, especially Gmail’s private session protocol and legacy Undo endpoint.
+Unrecognized responses never report success; check your mailbox, then use
+**I’ve checked** to unlock further actions. No automatic mutation retry occurs.
 
 ## Setup
 
@@ -71,7 +78,7 @@ framework, bundler, or production npm dependencies.
 | --- | --- |
 | `manifest.json` | Extension version, permissions, popup, and worker entry. |
 | `src/background/service-worker.js` | Alarms, serialized polling/writes, account lifecycle, badge, and toast dispatch. |
-| `src/providers/` | Gmail session-cookie Atom feeds and read-only Microsoft Graph mailbox queries. |
+| `src/providers/` | Gmail session-cookie Atom feeds and Microsoft Graph mailbox queries and message actions. |
 | `src/auth/` | Personal Microsoft OAuth/PKCE, renewal, and session invalidation. |
 | `src/store/` | Account normalization and the bounded mail cache. |
 | `src/popup/` | Cache-only rendering, provider links, and actions sent to the worker. |
@@ -81,7 +88,7 @@ framework, bundler, or production npm dependencies.
 
 The worker fetches provider data, normalizes it, and writes to
 `chrome.storage.local`. The popup reads that cache and sends account/refresh/
-local-read messages to the worker; it never calls provider APIs. One failed
+local-read/mailbox-action messages to the worker; it never calls provider APIs. One failed
 account leaves the other accounts usable. Poll cycles and storage commits are
 serialized to protect newer mail and sign-out decisions.
 
@@ -105,7 +112,7 @@ session storage and are cleared on reload/restart; cached mail remains visible.
 Being signed into Outlook in a browser tab does not restore the extension's
 Graph credentials.
 
-Verify account grouping, Mail/Settings navigation, preview-only expansion,
+Verify account grouping, Mail/Settings navigation, three-line previews and hover/focus actions,
 keyboard use, theme persistence, local Open/read behavior and focus preservation,
 provider links, sign-in/out/removal, worker restart, badge, automatic alerts,
 silent refresh, master/per-account mute, and offline/error recovery. Inspect
@@ -128,8 +135,10 @@ workspace** or **Signal panel** under Settings → Themes; the `popupTheme` loca
 preference survives reopen and extension reload. Existing mail, accounts and
 sound preferences need no migration.
 
-Real mailbox read/unread, Trash and Undo actions are approved follow-up work
-after the Gmail API authorization stage; this stage exposes Preview and Open.
+The owner superseded the earlier Gmail OAuth staging on 2026-10-01: Gmail
+conversation actions use the existing session. Outlook now requests Mail.ReadWrite.
+Reload the extension to grant its new cookies permission, then sign out/sign in
+Outlook in Settings to renew Microsoft consent. Gmail needs no Google Cloud setup.
 The [workspace specification](specs/002-popup-workspace/spec.md) records scope,
 and [synthetic browser verification](docs/ui-workspace/README.md) records checks.
 
@@ -152,7 +161,7 @@ and [synthetic browser verification](docs/ui-workspace/README.md) records checks
 - Focused-provider alert suppression is opt-in and defaults off.
 
 Keep changes scoped, use short-lived branches and reviewed PRs, and run
-verification before submission. Do not add send/write scopes, a backend,
+verification before submission. Do not add send scopes, permanent deletion, a backend,
 analytics, or popup provider requests without an approved scope change.
 Diagnostics must exclude mail content, credentials, and raw provider errors.
 

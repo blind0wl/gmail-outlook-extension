@@ -36,9 +36,9 @@ test("microsoft authority is consumers only", () => {
 });
 
 test("microsoft scopes are least privilege", () => {
-  assert.deepEqual([...MS_SCOPES].sort(), ["Mail.Read", "User.Read", "offline_access"].sort());
-  assert.equal(scopeString(), "User.Read Mail.Read offline_access");
-  for (const banned of ["Mail.Read.Shared", "Mail.Send", "Mail.ReadWrite"]) {
+  assert.deepEqual([...MS_SCOPES].sort(), ["Mail.ReadWrite", "User.Read", "offline_access"].sort());
+  assert.equal(scopeString(), "User.Read Mail.ReadWrite offline_access");
+  for (const banned of ["Mail.Read.Shared", "Mail.Send"]) {
     assert.ok(!MS_SCOPES.includes(banned), `must not request ${banned}`);
   }
 });
@@ -119,7 +119,7 @@ test("bundle posture: public client, no secrets, no overbroad scopes", () => {
   }
   assert.ok(!/gmail\.googleapis\.com/i.test(bundle), "no gmail api host");
   assert.ok(!/getAuthToken|removeCachedAuthToken/i.test(gmailSrc), "gmail uses session cookie, no identity tokens");
-  assert.ok(!/Mail\.Send|Mail\.ReadWrite/i.test(bundle), "no graph write scope");
+  assert.ok(!/Mail\.Send/i.test(bundle), "no graph send scope");
   assert.ok(msSrc.includes("launchWebAuthFlow"), "microsoft uses launchWebAuthFlow");
   assert.ok(msSrc.includes("getRedirectURL"), "redirect from chrome.identity");
   assert.ok(msSrc.includes("code_challenge_method"), "PKCE challenge method present");

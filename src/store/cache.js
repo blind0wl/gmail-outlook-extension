@@ -59,3 +59,16 @@ export function reconcileAccount(acct, items, complete = true) {
   }
   return mergeMessages(items);
 }
+
+// Provider-confirmed changes; the worker owns serialization with polling.
+export function applyMailboxChange(key, action, replacement) {
+  const item = byKey.get(key);
+  if (action === "read" && item) {
+    item.unread = false;
+    item.localRead = false;
+  } else if (action === "trash") {
+    byKey.delete(key);
+  } else if (action === "undo" && replacement) {
+    mergeMessages([replacement]);
+  }
+}

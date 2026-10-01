@@ -1,3 +1,5 @@
+import { mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
+import { messageIdOf } from "../popup/links.js";
 // Service worker entry. Owns polling, cache writes, badge, and toasts.
 // Popup reads the cache from chrome.storage.local only (Task 7).
 //
@@ -29,6 +31,7 @@ import {
   pruneCache,
   reconcileAccount,
   setLocalRead,
+  applyMailboxChange,
 } from "../store/cache.js";
 import {
   unreadCount,
@@ -375,8 +378,131 @@ export async function handleMarkRead(key, accounts, deps = {}) {
   });
 }
 
+// Durable pending records stop a worker restart from replaying an uncertain
+// move. The same poll queue orders provider reads and writes; sign-out epochs
+// are bumped immediately and checked again before cache commits.
+const pendingMail = new Set();
+export const MAIL_ACTIONS_KEY = "mailActions";
+const UNDO_MS = 10 * 60000;
+async function mailJournal() {
+  const stored = await globalThis.chrome?.storage?.local?.get(MAIL_ACTIONS_KEY);
+  const records = stored?.[MAIL_ACTIONS_KEY];
+  return records && typeof records === "object" && !Array.isArray(records) ? records : {};
+}
+async function saveJournal(journal) {
+  await globalThis.chrome?.storage?.local?.set({ [MAIL_ACTIONS_KEY]: journal });
+}
+
+function lockItem(item) {
+  return { key: item.key, provider: item.provider, account: item.account };
+}
+export async function pruneMailActions(now = Date.now()) {
+  return write(async () => {
+    const journal = await mailJournal();
+    for (const [key, record] of Object.entries(journal)) {
+      if (record.state === "undo" && record.expiresAt <= now) delete journal[key];
+      else if (["pending", "uncertain"].includes(record.state) && !pendingMail.has(key)) record.item = lockItem(record.item);
+    }
+    await saveJournal(journal);
+  });
+}
+async function patchMailAction(key, record, current = () => true) {
+  return write(async () => {
+    if (!current()) return;
+    const journal = await mailJournal();
+    if (!current()) return;
+    if (record) journal[key] = record;
+    else delete journal[key];
+    await saveJournal(journal);
+  });
+}
+
+export async function handleMailboxAction(msg, deps = {}) {
+  if (!msg || !["read", "trash", "undo", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
+  if (pendingMail.has(msg.key)) return { ok: false, code: "pending" };
+  pendingMail.add(msg.key);
+  const run = pollTail.then(async () => {
+    await ready;
+    const accounts = await loadAccounts();
+    const journal = await mailJournal();
+    const prior = journal[msg.key];
+    if (!prior && Object.keys(journal).length >= 200) return { ok: false, code: "check-mailbox" };
+    const item = ["undo", "acknowledge"].includes(msg.action) ? prior?.item : getInbox().find(i => i.key === msg.key);
+    const acct = accounts.find(a => item && accountKey(a) === accountKey(item));
+    if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct))) return { ok: false, code: "sign-in" };
+    if (msg.action === "acknowledge") {
+      if (!prior || pendingMail.size > 1) return { ok: false, code: "pending" };
+      await patchMailAction(msg.key, null);
+      return { ok: true };
+    }
+    if (prior?.state === "pending" || prior?.state === "uncertain") return { ok: false, code: "check-mailbox" };
+    if (msg.action === "undo" && (!prior || prior.expiresAt < Date.now() || prior.state !== "undo")) return { ok: false, code: "undo-expired" };
+    const generation = accountGeneration.get(accountKey(acct)) ?? 0;
+    const current = () => generation === (accountGeneration.get(accountKey(acct)) ?? 0);
+    const id = msg.action === "undo" ? prior.id : messageIdOf(item.key);
+    let token;
+    let confirmed = false;
+    let folder = prior?.folder ?? "inbox";
+    try {
+      token = await (deps.getToken ?? buildTokenProvider(accounts).getToken)(acct);
+      if (acct.provider === "outlook" && msg.action === "trash") {
+        const metadata = await (deps.inspect ?? inspectOutlookMessage)(token, id);
+        if (!metadata?.parentFolderId) return { ok: false, code: "unavailable" };
+        folder = metadata.parentFolderId;
+      }
+      if (!current()) return { ok: false, code: "sign-in" };
+      journal[msg.key] = { state: "pending", action: msg.action, id, folder, item, expiresAt: Date.now() + UNDO_MS };
+      await patchMailAction(msg.key, journal[msg.key], current);
+      if (!current()) return { ok: false, code: "sign-in" };
+      const mutate = deps.mutate ?? ((a, targetId, action, originalFolder) => a.provider === "gmail"
+        ? mutateGmailConversation(a.account, targetId, action, () => { if (!current()) throw Error("superseded"); })
+        : mutateOutlookMessage(token, targetId, action, originalFolder, () => { if (!current()) throw Error("superseded"); }));
+      const result = await mutate(acct, id, msg.action, folder);
+      confirmed = true;
+      if (!current()) return { ok: false, code: "check-mailbox" };
+      await write(async () => {
+        if (!current()) return;
+        const latest = await mailJournal();
+        if (!current()) return;
+        if (msg.action === "trash") latest[msg.key] = { ...journal[msg.key], state: "undo", id: result.id };
+        else delete latest[msg.key];
+        const replacement = { ...item, key: item.provider + ":" + encodeURIComponent(item.account) + ":" + result.id };
+        if (msg.action === "undo") delete replacement.webLink;
+        applyMailboxChange(msg.key, msg.action, replacement);
+        await persistCache(getInbox());
+        await saveJournal(latest);
+        await badgeFor(accounts, deps);
+      });
+      return current() ? { ok: true } : { ok: false, code: "check-mailbox" };
+    } catch (error) {
+      if (confirmed) error.uncertain = true;
+      if (!current()) return { ok: false, code: "check-mailbox" };
+      if (journal[msg.key]?.state === "pending") {
+        if (error.uncertain) journal[msg.key] = { ...journal[msg.key], state: "uncertain", item: lockItem(item) };
+        else if (msg.action === "undo") journal[msg.key] = prior;
+        else delete journal[msg.key];
+        await patchMailAction(msg.key, journal[msg.key], current);
+      }
+      if (acct.provider === "gmail" && error.uncertain && error.unreadInboxAbsent && msg.action !== "undo") {
+        await write(async () => {
+          if (!current()) return;
+          // Remove only the verified absent card; keep the journal lock since
+          // unread-feed absence does not establish a successful Trash move.
+          applyMailboxChange(msg.key, "trash");
+          await persistCache(getInbox());
+          await badgeFor(accounts, deps);
+        });
+      }
+      return { ok: false, code: error.uncertain ? "check-mailbox" : error.code ?? "sign-in" };
+    }
+  });
+  pollTail = run.catch(() => {});
+  try { return await run; } finally { pendingMail.delete(msg.key); }
+}
+
 async function runPoll(accounts, deps) {
   const now = deps.now ?? Date.now();
+  await pruneMailActions(now);
   const newIds = [];
   let badge = 0;
   const settled = await Promise.all(
@@ -641,6 +767,7 @@ async function ensureAlarm() {
 async function init() {
   await hydrateCache();
   await hydrateAccountState();
+  await pruneMailActions();
   await ensureAlarm();
 }
 
@@ -815,6 +942,7 @@ export async function handleMessage(msg, deps = {}) {
       },
     };
   }
+  if (msg.type === "mail-action") return handleMailboxAction(msg, deps);
   if (msg.type === "mark-read")
     return handleMarkRead(msg.key, await loadAccounts(), deps);
   if (
@@ -878,6 +1006,9 @@ export async function handleMessage(msg, deps = {}) {
       const state = await readAccountState();
       delete state[key];
       await persistAccountState(state);
+      const journal = await mailJournal();
+      for (const [id, record] of Object.entries(journal)) if (accountKey(record.item) === key) delete journal[id];
+      await saveJournal(journal);
       baselineByKey.delete(key);
       seenByKey.delete(key);
     }
@@ -898,6 +1029,7 @@ if (typeof chrome !== "undefined") {
       ![
         "refresh",
         "mark-read",
+        "mail-action",
         "add-account",
         "sign-in",
         "sign-out",
