@@ -14,7 +14,7 @@ function fixture() {
 }
 const deps={getToken:async()=> 'token',inspect:async()=>({id:'one',isRead:false,parentFolderId:'original'}),setBadge:async()=>{}};
 
-test('Gmail Trash is blocked before provider access and preserves mail and recovery records',async()=>{
+test('Gmail Trash preserves uncertainty locks and supports Trash and Undo after acknowledgement',async()=>{
   await ready;
   const data=fixture();
   const gmail={provider:'gmail',account:'blocked@example.test'};
@@ -26,7 +26,7 @@ test('Gmail Trash is blocked before provider access and preserves mail and recov
   let accesses=0;
   const noAccess={...deps,getToken:async()=>{accesses++;},mutate:async()=>{accesses++;}};
   for(let i=0;i<2;i++) {
-    assert.deepEqual(await handleMailboxAction({key:gmailItem.key,action:'trash'},noAccess),{ok:false,code:'gmail-trash-unavailable'});
+    assert.deepEqual(await handleMailboxAction({key:gmailItem.key,action:'trash'},noAccess),{ok:false,code:'check-mailbox'});
   }
   assert.equal(accesses,0);
   assert.deepEqual(data.mailActions[gmailItem.key],lock);
@@ -34,10 +34,16 @@ test('Gmail Trash is blocked before provider access and preserves mail and recov
   assert.equal((await handleMailboxAction({key:gmailItem.key,action:'acknowledge',expectedExpiresAt:1234},noAccess)).ok,true);
   assert.equal(accesses,0);
   assert.equal(data.mailActions[gmailItem.key],undefined);
-  assert.deepEqual(await handleMailboxAction({key:gmailItem.key,action:'trash'},noAccess),{ok:false,code:'gmail-trash-unavailable'});
-  assert.equal(accesses,0);
-  assert.equal((await handleMailboxAction({key:gmailItem.key,action:'read'},{...deps,mutate:async()=>({id:'abcdef'})})).ok,true);
+  const actions=[];
+  const enabled={...deps,mutate:async(a,id,action)=>{actions.push({account:a.account,id,action});return {id};}};
+  assert.equal((await handleMailboxAction({key:gmailItem.key,action:'trash'},enabled)).ok,true);
+  assert.equal(data.mailActions[gmailItem.key].state,'undo');
+  assert.equal(getInbox().some(i=>i.key===gmailItem.key),false);
+  assert.equal((await handleMailboxAction({key:gmailItem.key,action:'undo'},enabled)).ok,true);
+  assert.ok(getInbox().some(i=>i.key===gmailItem.key&&i.unread));
+  assert.deepEqual(actions,[{account:gmail.account,id:'abcdef',action:'trash'},{account:gmail.account,id:'abcdef',action:'undo'}]);
   assert.equal((await handleMailboxAction({key,action:'trash'},{...deps,mutate:async()=>({id:'moved'})})).ok,true);
+
 });
 
 test('mailbox Trash persists Undo with returned move ID and restores original folder',async()=>{

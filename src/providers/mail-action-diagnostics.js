@@ -10,7 +10,7 @@ function safeEvent(event) {
     || !['read', 'trash', 'undo'].includes(event.action)
     || !Number.isInteger(event.slot) || event.slot < 0 || event.slot > 9
     || !['acknowledged', 'uncertain', 'rejected'].includes(event.outcome)
-    || !['acknowledged', 'sign-in-challenge', 'unrecognized', 'unreadable', 'request-failed'].includes(event.response)) return null;
+    || !['acknowledged', 'state-verified', 'sign-in-challenge', 'unrecognized', 'unreadable', 'request-failed'].includes(event.response)) return null;
   return {
     event: 'gmail-mail-action', entryPoint: 'popup-mail-action',
     requestId: event.requestId, action: event.action, slot: event.slot,

@@ -1,4 +1,5 @@
 import { mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
+import { inspectGmailTrash } from "../providers/gmail-trash-verification.js";
 import { messageIdOf } from "../popup/links.js";
 // Service worker entry. Owns polling, cache writes, badge, and toasts.
 // Popup reads the cache from chrome.storage.local only (Task 7).
@@ -417,6 +418,33 @@ async function patchMailAction(key, record, current = () => true) {
   });
 }
 
+// Explicit worker-console diagnostic. Static imports are required in MV3;
+// no runtime message, mailbox mutation or acknowledgement is introduced.
+export async function inspectSavedGmailTrash(deps = {}) {
+  const run = pollTail.then(async () => {
+    await ready;
+    const journal = await mailJournal();
+    const target = Object.values(journal).find(record => record?.item?.provider === "gmail"
+      && record.action === "trash" && ["pending", "uncertain"].includes(record.state));
+    if (!target) return { ok: false, code: "no-saved-target" };
+    const accounts = await loadAccounts();
+    const acct = accounts.find(account => accountKey(account) === accountKey(target.item));
+    if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct)))
+      return { ok: false, code: "account-unavailable" };
+    const generation = accountGeneration.get(accountKey(acct)) ?? 0;
+    const id = target.id || messageIdOf(target.item.key);
+    const result = await (deps.inspect ?? inspectGmailTrash)(acct.account, [id]);
+    if (generation !== (accountGeneration.get(accountKey(acct)) ?? 0))
+      return { ok: false, code: "account-changed", results: ["not-confirmed"] };
+    return result;
+  });
+  pollTail = run.catch(() => {});
+  try { return await run; }
+  catch { return { ok: false, code: "verification-unavailable", results: ["not-confirmed"] }; }
+}
+
+globalThis.inspectSavedGmailTrash = () => inspectSavedGmailTrash();
+
 export async function handleMailboxAction(msg, deps = {}) {
   if (!msg || !["read", "trash", "undo", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
   if (pendingMail.has(msg.key)) return { ok: false, code: "pending" };
@@ -430,10 +458,6 @@ export async function handleMailboxAction(msg, deps = {}) {
     const item = ["undo", "acknowledge"].includes(msg.action) ? prior?.item : getInbox().find(i => i.key === msg.key);
     const acct = accounts.find(a => item && accountKey(a) === accountKey(item));
     if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct))) return { ok: false, code: "sign-in" };
-    // Owner reproduction: Gmail Trash can make previously searchable mail
-    // disappear without verified Trash presence. Block before any provider
-    // access or journal/cache mutation until this transport is validated.
-    if (acct.provider === "gmail" && msg.action === "trash") return { ok: false, code: "gmail-trash-unavailable" };
     if (msg.action === "acknowledge") {
       // The poll queue serializes journal changes. Unrelated queued actions
       // must not prevent the user from releasing this conversation's lock.

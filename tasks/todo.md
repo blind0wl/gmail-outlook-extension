@@ -1,5 +1,11 @@
 # Gmail follow-ups
 
+Current execution instructions: follow `tasks/plan.md`'s current investigation
+contract. Older unchecked write-retest tasks below are historical, superseded by
+Gmail Trash containment. Do not act on disputed mail or clear preserved locks.
+The owner requested agent-run E2E on 2026-10-01; authenticated disposable test
+mail is required before fresh write/Undo acceptance can be completed.
+
 ## #16 — uncertainty recovery
 - [x] Acknowledgement succeeds alongside an unrelated queued mailbox action.
 - [x] Recovery is shown before mail, with explicit check/acknowledge guidance.
@@ -67,3 +73,29 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [x] RED containment regressions, 215-test verification, synthetic browser and independent review complete.
 - [ ] Owner reloads and confirms disabled controls, without any new real-mail write.
 - [ ] Diagnose actual provider outcome using preserved evidence; missing mail is not established as permanently deleted.
+
+## Post-merge #16 investigation
+- [x] Compare request identifiers and response recognition against the reference client.
+- [x] Owner's exact-target link opens the deleted conversation with a restore option.
+- [x] Add a diagnostic-only fixed Trash query, positive exact-ID matching and fail-closed parsing.
+- [x] Node 24 verification passes 219 tests; independent review and fresh acceptance instructions complete.
+- [x] Owner validates the query against one existing lock without further Trash writes: verified-trash, 80 returned.
+- [x] Review exact Trash-membership fallback; reject it because mixed-folder conversations can match before a move.
+- [ ] Establish trustworthy acknowledgement or complete exact per-message state before implementing confirmation; Trash plus Inbox exclusion does not exclude archived members. Containment remains active.
+- [ ] Fresh controlled real-account write/Undo acceptance before restoring Gmail Trash.
+- [x] Correct unsupported dynamic import with static worker wiring and a one-line console helper; 222 tests and a real module-worker browser check pass.
+
+## Exact state and Undo candidate — agent investigation
+- [x] Reproduce HTTP-success/legacy-ack false negative with approved disposable mail.
+- [x] Confirm complete exact conversation membership and labels, failing closed.
+- [x] Replace retired HTML Undo with fresh-session modern Sync restore.
+- [x] RED regressions, Node 24 verification (253 tests), three real popup cycles and worker-restart Undo.
+- [x] Stop extended automation at owner usage request and restore remaining journaled test targets.
+- [x] Owner runs repeated cycles on the clean isolated manual-test candidate: five-cycle checklist reported passed on 2026-10-01 for `4d13c20`.
+- [x] Diagnose saved three-member Trash false negative: member target differs from conversation ID. Add RED regressions, resolve exact membership and canonical Undo target; 255 tests and read-only real-target verification pass.
+- [x] Owner retests one three-message Trash → Undo cycle on corrected candidate `653b56a`: reported passed on 2026-10-01, including Inbox return and unread status.
+- [x] Second-Gmail-account Trash → Undo acceptance reported passed on 2026-10-01, including unread Inbox return and first-account isolation.
+- [x] Real mixed-folder Trash → Undo: owner confirmed all three messages return on 2026-10-01 after marking the fixture unread to restore extension visibility.
+- [x] Restore repository popup/worker Trash controls after owner acceptance; Node 24 clean install and 255 tests pass, actual repository Chrome controls available, README updated and final integration evidence recorded.
+
+Evidence: `docs/acceptance/2026-10-01-gmail-exact-state-undo.md`.

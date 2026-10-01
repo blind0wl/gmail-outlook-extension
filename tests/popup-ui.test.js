@@ -439,16 +439,16 @@ test("cancelled outlook add names the cancelled step instead of blaming the addr
   assert.match(err.textContent, /cancelled/);
 });
 
-test('Gmail Trash is visibly unavailable and cannot send actions',async()=>{
+test('Gmail Trash is available and sends the scoped action',async()=>{
   const {document,messages}=await workspaceFixture();
   const trash=document.querySelector('[data-mail-action="trash"]');
-  assert.equal(trash.getAttribute('aria-disabled'),'true');
-  assert.match(trash.title,/temporarily unavailable.*Gmail/i);
-  assert.match(document.querySelector('.account-note').textContent,/Gmail Trash is temporarily unavailable/);
+  assert.equal(trash.getAttribute('aria-disabled'),'false');
+  assert.match(trash.title,/conversation to Trash/);
+  assert.doesNotMatch(document.body.textContent,/Gmail Trash is temporarily unavailable/);
   trash.click();await tick();
-  assert.equal(messages.length,0);
-  assert.ok(document.querySelector('.card'),'blocked click leaves mail visible');
-  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-disabled'),'false');
+  assert.equal(messages.length,1);
+  assert.equal(messages[0].action,'trash');
+  assert.equal(messages[0].type,'mail-action');
 });
 
 test('hover actions use provider-specific labels and resist duplicate clicks', async () => {

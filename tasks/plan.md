@@ -8,10 +8,13 @@ the approved read/Trash/Undo contract in specs/003-mail-cards-actions/spec.md.
 
 - The worker journals uncertainty by conversation key. Gmail's reported
   two-to-three-delete threshold has not been reproduced with a real account.
-- During this follow-up the owner confirmed that Trash on the second Gmail
-  account left conversations in Inbox after refreshing Gmail, despite cards
-  disappearing from the extension, with repeated unconfirmed-result warnings.
-  This is an actual provider-state failure, not only an open-page styling issue.
+- Initial owner reports described second-account conversations remaining in
+  Inbox. Later refreshed Gmail checks confirmed five earlier moves and four
+  new moves reached Trash despite uncertain extension results. Those cases
+  establish false-negative confirmation; the later disappearance report remains
+  distinct. Permanent deletion is not established. See the dated acceptance
+  records for the observation sequence rather than treating the initial report
+  as the current diagnosis.
 - Acknowledgement incorrectly checks the global pending-action count even
   though the worker serializes operations. Test acknowledgement alongside an
   unrelated queued action, then remove that cross-conversation restriction.
@@ -56,9 +59,25 @@ tests; inspect 480px and 320px, then record a new candidate acceptance result.
 
 ## Acceptance still requiring the owner
 
-Test beyond three Trash actions with two signed-in Gmail accounts; confirm
-unrelated conversations/accounts remain usable after uncertainty, check the
-mailbox and use “I’ve checked”, then continue. Check popup reopen and worker
-restart. For #15, keep Gmail's inbox open and confirm the guidance and actual
-read state after refreshing Gmail. Record candidate, Chrome version, OS and date
-without mail content, credentials or raw provider replies.
+The original repeated-write instructions are superseded by containment. Do not
+repeat writes on disputed conversations or clear their saved locks. Gmail Trash
+remains disabled while the exact provider confirmation contract is investigated.
+The owner has now requested agent-run E2E testing; this requires an authenticated
+test browser and explicitly identified disposable conversations. Record each new
+candidate and runtime result separately from historical synthetic checks.
+
+## Current investigation contract
+
+1. Preserve existing uncertain targets. Confirm account-pinned provider state
+   without replaying their mutations.
+2. Establish either a trustworthy action acknowledgement or complete per-message
+   state for the exact conversation. Trash membership plus Inbox exclusion alone
+   is insufficient: a conversation can contain a trashed and an archived member.
+   A bounded search's missing target, short result list or unverified row labels
+   cannot establish the complete state.
+3. Reproduce the observed acknowledgement failure using disposable conversations
+   in the authenticated test session. Add a failing regression grounded in that
+   observed reply/state contract before changing confirmation behavior.
+4. Verify repeated Trash beyond three actions, Undo, mixed-folder conversations,
+   uncertain responses, worker restart and account isolation. Restore the popup
+   and worker Trash controls only after fresh real-account acceptance succeeds.
