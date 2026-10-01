@@ -44,10 +44,15 @@ export function buildToast(group) {
   };
 }
 
+// Stable silent-auth failure reasons (#20). Fixed set only; anything else
+// is dropped rather than persisted or displayed.
+const ERROR_REASONS = new Set(["signed-out", "missing-record", "refresh-failed"]);
+
 // Boundary sanitizer for poll errors. Provider adapters already throw
 // sanitized errors, but token callbacks and test fakes can throw anything
 // (including mail content). Keep only permitted identifiers: HTTP status,
-// account address, and a timestamp. Free-text messages are dropped.
+// allowlisted endpoint code and reason, account address, and a timestamp.
+// Free-text messages are dropped.
 export function sanitizeError(err, acct) {
   const status = typeof err?.status === "number" ? err.status : undefined;
   const clean = new Error(
@@ -55,6 +60,13 @@ export function sanitizeError(err, acct) {
   );
   clean.name = "PollError";
   if (status !== undefined) clean.status = status;
+  if (typeof err?.code === "string") {
+    const code = err.code.replace(/[^a-zA-Z0-9/_-]/g, "").slice(0, 64);
+    if (code) clean.code = code;
+  }
+  if (typeof err?.reason === "string" && ERROR_REASONS.has(err.reason)) {
+    clean.reason = err.reason;
+  }
   if (acct?.account) clean.account = acct.account;
   clean.at = new Date().toISOString();
   return clean;
@@ -82,7 +94,16 @@ export function accountStatusLabel(acct, state = {}) {
     if (acct?.provider === "gmail") {
       return `${address} — log into Gmail in the opened tab, then press Refresh`;
     }
-    return `${address} — needs sign in`;
+    // Outlook cause hint (#20): sanitized code/reason only, never raw text.
+    // Missing suffix means the cause predates cause tracking — re-poll once.
+    const cause = state.code
+      ? ` (${state.code})`
+      : state.reason === "missing-record"
+        ? " (session ended)"
+        : state.reason === "refresh-failed"
+          ? " (renewal failed)"
+          : "";
+    return `${address} — needs sign in${cause}`;
   }
   if (state.offline) return `${address} — offline, showing saved mail`;
   if (state.backedOff) {

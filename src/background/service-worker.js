@@ -670,6 +670,15 @@ function stateEntry(acct, result, now) {
     ...(typeof result?.error?.status === "number"
       ? { status: result.error.status }
       : {}),
+    // Sanitized cause identifiers only (see sanitizeError): endpoint code
+    // and stable reason, so the next needs-sign-in row can say why without
+    // carrying tokens, mail, or free text.
+    ...(typeof result?.error?.code === "string" && result.error.code
+      ? { code: result.error.code }
+      : {}),
+    ...(typeof result?.error?.reason === "string" && result.error.reason
+      ? { reason: result.error.reason }
+      : {}),
   };
 }
 
