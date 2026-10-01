@@ -1,7 +1,9 @@
 # Mail action feedback correction — 2026-10-01
 
 Candidate: feature/mail-cards-actions, follow-up to fd60470.
-Real-account retest of this candidate: **pending**.
+Real-account retest of candidate `d1a5186`: **partial pass**, owner-reported
+2026-10-01. Immediate read/Trash card feedback passed; provider behavior
+follow-ups are tracked separately below.
 
 Owner observation on the prior candidate: Gmail Trash removed mail from Gmail
 but left its extension card. Gmail mark-read worked but popup feedback lagged.
@@ -34,7 +36,7 @@ Independent review: reported projection-lifetime issue corrected and re-reviewed
 ## Real-account retest
 
 - [ ] Reload the unpacked extension; test Gmail read/Trash without pressing Refresh.
-- [ ] Confirm regular text appears on read click, then card clears.
+- [x] Owner confirmed bold styling is removed on read click, then the card clears.
 - [ ] Confirm Trash card clears immediately and stays gone after reopening popup.
 - [ ] If response is unrecognized, confirm mailbox state and use “I’ve checked”
   to release the uncertainty lock; do not interpret feed absence as verified Trash.
@@ -42,4 +44,21 @@ Independent review: reported projection-lifetime issue corrected and re-reviewed
 - [ ] Verify new unread replies in the same conversation can reappear.
 - [ ] Outlook read/Trash/Undo and keyboard focus remain usable.
 
-Browser/version, OS, tested commit and owner retest result: pending.
+## Owner-reported results and follow-ups
+
+- Trash hides the card immediately and removes the conversation from Gmail's
+  inbox. Reopening the popup was not explicitly tested in this report.
+- Mark-as-read removes bold styling and clears the card. Gmail's open inbox
+  continues to display unread until refreshed. Tracked separately in
+  [issue #15](https://github.com/blind0wl/gmail-outlook-extension/issues/15).
+  The report does not establish whether the delay is Gmail display state or
+  the underlying provider write.
+- On one Gmail account, two or three deletes worked before the unconfirmed-result
+  warning appeared and prevented further deletes. Tracked separately in
+  [issue #16](https://github.com/blind0wl/gmail-outlook-extension/issues/16).
+  The extent of the lock and the outcome of the warned write remain unverified.
+
+These provider issues are deferred outside the current mail-card design change
+at the owner's request. The remaining unchecked acceptance items remain open.
+Browser version and OS were not supplied; tested candidate is `d1a5186` based
+on the handoff preceding the report.
