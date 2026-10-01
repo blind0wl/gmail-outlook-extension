@@ -227,6 +227,17 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   var pendingMailActions = new Set();
   var mailActions = {};
+  var mailActionsRevision = 0;
+  async function syncMailActions() {
+    var revision = ++mailActionsRevision;
+    try {
+      var data = await storageLocal()?.get("mailActions");
+      if (revision !== mailActionsRevision) return;
+      mailActions = data?.mailActions || {};
+      renderList();
+      renderUndo();
+    } catch { /* Keep the saved recovery view if local storage is unavailable. */ }
+  }
   // Project pending actions over authoritative cache; never write optimistic mail state.
   var mailFeedback = new Map();
   function settleMailFeedback() {
@@ -277,8 +288,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var code = result?.code;
         mailErrors[key] = code === "check-mailbox" ? unconfirmedMessage
           : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
-          : code === "undo-expired" ? "Undo expired. Restore this mail in your mailbox."
-          : "Could not complete the action. Check the account’s sign-in in Settings, then try again.";
+          : code === "undo-expired" ? "Undo is no longer available here. Check your mailbox; the mail may already be restored. If it is still in Trash, restore it there."
+          : code === "sign-in" ? "Sign in to this account in Settings, then try again."
+          : code === "pending" ? "This action is already queued. Wait for it to finish."
+          : "Could not complete the action. The mailbox service is unavailable or rejected the request. Check your mailbox before trying again.";
         setStatus(mailErrors[key], "error");
       } else {
         if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;
@@ -287,13 +300,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var readMessage = actionItem?.provider === "gmail"
           ? "Marked as read in Gmail. If an open Gmail page still shows unread, refresh that page."
           : "Marked as read in your mailbox.";
-        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash. Undo is available in Mailbox recovery." : "Restored to your inbox.", "ok");
+        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash. Undo is available above the mail list." : "Restored to your inbox.", "ok");
       }
     } catch {
       mailFeedback.delete(key);
       mailErrors[key] = unconfirmedMessage;
       setStatus(mailErrors[key], "error");
     } finally {
+      await syncMailActions();
       pendingMailActions.delete(key);
       renderHeader();
       renderList();
@@ -329,7 +343,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       renderUndo();
     }
   }
+  var undoTimer;
+  var newestUndo;
   function renderUndo() {
+    clearTimeout(undoTimer);
     var list = document.getElementById("mail-undo");
     var focused = document.activeElement?.dataset.undoKey;
     var focusedAccount = document.activeElement?.dataset.recoveryAccount;
@@ -359,12 +376,21 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       list.appendChild(row);
       if (focusedAccount === acctKey) button.focus();
     });
-    Object.entries(mailActions).forEach(function (entry) {
+    list.hidden = !list.childElementCount;
+    var tray = document.getElementById("undo-tray");
+    list = document.getElementById("undo-list");
+    var scroll = list.scrollTop;
+    list.replaceChildren();
+    var now = Date.now();
+    var nextUpdate = 60000;
+    Object.entries(mailActions).sort(function (a, b) { return b[1].expiresAt - a[1].expiresAt; }).forEach(function (entry) {
       var key = entry[0], record = entry[1];
-      if (pendingMailActions.has(key) || record.state !== "undo" || record.expiresAt < Date.now() || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
+      if (pendingMailActions.has(key) || record.state !== "undo" || record.expiresAt <= now || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
       var row = document.createElement("li");
       var text = document.createElement("span");
-      text.textContent = "Moved to Trash · " + record.item.account;
+      var remaining = record.expiresAt - now;
+      nextUpdate = Math.min(nextUpdate, remaining % 60000 || 60000);
+      text.textContent = (record.item.subject || "Mail") + " · " + record.item.account + " · " + Math.ceil(remaining / 60000) + " min left";
       var undo = document.createElement("button");
       undo.type = "button";
       undo.textContent = "Undo";
@@ -376,7 +402,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       list.appendChild(row);
       if (focused === key) undo.focus();
     });
-    list.hidden = !list.childElementCount;
+    document.getElementById("undo-summary").textContent = list.childElementCount + " moved to Trash · Undo for 10 minutes";
+    tray.hidden = !list.childElementCount || document.getElementById("mail-view").hidden;
+    var firstKey = list.querySelector("[data-undo-key]")?.dataset.undoKey;
+    if (focused || firstKey === newestUndo) list.scrollTop = scroll;
+    newestUndo = firstKey;
+    if (list.childElementCount) {
+      undoTimer = setTimeout(renderUndo, nextUpdate);
+      undoTimer?.unref?.();
+    }
   }
 
   function renderList() {
@@ -661,11 +695,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function load() {
-    storageLocal()?.get("mailActions").then(function (data) {
-      mailActions = data.mailActions || {};
-      renderList();
-      renderUndo();
-    });
+    void syncMailActions();
     var store = storageLocal();
     if (!store) {
       items = [];
@@ -687,6 +717,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (settings && !mail.hidden) mailScroll = mail.scrollTop;
     mail.hidden = settings;
     view.hidden = !settings;
+    renderUndo();
     document.getElementById("mail-tools").hidden = settings;
     document.getElementById("settings-tools").hidden = !settings;
     document.getElementById("workspace-title").textContent = settings ? "Settings" : "Inbox";
@@ -858,6 +889,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       chrome.storage.onChanged.addListener(function (changes, area) {
         if (area === "local" && changes) {
           if (changes.mailActions) {
+            mailActionsRevision++;
             mailActions = changes.mailActions.newValue || {};
             renderList();
             renderUndo();

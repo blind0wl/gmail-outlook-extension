@@ -146,3 +146,11 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 @media (forced-colors: active) { .card { border-color: CanvasText; } }
 
 .card.read .card-sender, .card.read .card-subject { font-weight: 400; }
+
+/* Keep Undo above Mail without growing as more messages are deleted. */
+#undo-tray { flex-shrink: 0; margin: 0 12px 8px; background: var(--panel); border-radius: 12px; }
+#undo-tray summary { padding: 8px 12px; cursor: pointer; font-weight: 600; }
+#undo-list { height: 112px; overflow-y: auto; list-style: none; margin: 0; padding: 0 12px 8px; scrollbar-color: var(--muted) var(--panel); scrollbar-width: thin; }
+#undo-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+#undo-list span { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+#undo-list button { flex-shrink: 0; }

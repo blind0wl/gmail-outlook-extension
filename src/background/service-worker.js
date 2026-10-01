@@ -383,6 +383,7 @@ export async function handleMarkRead(key, accounts, deps = {}) {
 // move. The same poll queue orders provider reads and writes; sign-out epochs
 // are bumped immediately and checked again before cache commits.
 const pendingMail = new Set();
+const pendingUndos = new Map();
 export const MAIL_ACTIONS_KEY = "mailActions";
 const UNDO_MS = 10 * 60000;
 async function mailJournal() {
@@ -447,6 +448,7 @@ globalThis.inspectSavedGmailTrash = () => inspectSavedGmailTrash();
 
 export async function handleMailboxAction(msg, deps = {}) {
   if (!msg || !["read", "trash", "undo", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
+  if (msg.action === "undo" && pendingUndos.has(msg.key)) return pendingUndos.get(msg.key);
   if (pendingMail.has(msg.key)) return { ok: false, code: "pending" };
   pendingMail.add(msg.key);
   const run = pollTail.then(async () => {
@@ -454,6 +456,7 @@ export async function handleMailboxAction(msg, deps = {}) {
     const accounts = await loadAccounts();
     const journal = await mailJournal();
     const prior = journal[msg.key];
+    if (msg.action === "undo" && !prior) return { ok: false, code: "undo-expired" };
     if (!prior && Object.keys(journal).length >= 200) return { ok: false, code: "check-mailbox" };
     const item = ["undo", "acknowledge"].includes(msg.action) ? prior?.item : getInbox().find(i => i.key === msg.key);
     const acct = accounts.find(a => item && accountKey(a) === accountKey(item));
@@ -470,7 +473,7 @@ export async function handleMailboxAction(msg, deps = {}) {
       return { ok: true };
     }
     if (prior?.state === "pending" || prior?.state === "uncertain") return { ok: false, code: "check-mailbox" };
-    if (msg.action === "undo" && (!prior || prior.expiresAt < Date.now() || prior.state !== "undo")) return { ok: false, code: "undo-expired" };
+    if (msg.action === "undo" && (!prior || prior.expiresAt <= Date.now() || prior.state !== "undo")) return { ok: false, code: "undo-expired" };
     const generation = accountGeneration.get(accountKey(acct)) ?? 0;
     const current = () => generation === (accountGeneration.get(accountKey(acct)) ?? 0);
     const id = msg.action === "undo" ? prior.id : messageIdOf(item.key);
@@ -527,11 +530,16 @@ export async function handleMailboxAction(msg, deps = {}) {
           await badgeFor(accounts, deps);
         });
       }
-      return { ok: false, code: error.uncertain ? "check-mailbox" : error.code ?? "sign-in" };
+      return { ok: false, code: error.uncertain ? "check-mailbox" : error.code ?? "unavailable" };
     }
   });
   pollTail = run.catch(() => {});
-  try { return await run; } finally { pendingMail.delete(msg.key); }
+  const completion = run.finally(() => {
+    pendingMail.delete(msg.key);
+    pendingUndos.delete(msg.key);
+  });
+  if (msg.action === "undo") pendingUndos.set(msg.key, completion);
+  return completion;
 }
 
 async function runPoll(accounts, deps) {

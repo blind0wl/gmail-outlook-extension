@@ -9,7 +9,7 @@ function exact(labels, missing = false) {
   return JSON.stringify([[cs, ...ms], 'synthetic-trailer']);
 }
 
-for (const scenario of ['success', 'member-target', 'missing-member', 'mixed-before', 'bad-token', 'changed-owner', 'revoked', 'lost-response', 'mixed-after', 'already-restored']) {
+for (const scenario of ['success', 'member-target', 'missing-member', 'mixed-before', 'bad-token', 'changed-owner', 'revoked', 'lost-response', 'mixed-after', 'already-restored', 'delayed-state', 'last-attempt-state']) {
   test(`modern Gmail Undo: ${scenario}`, async () => {
     const originalFetch = globalThis.fetch, originalChrome = globalThis.chrome;
     globalThis.chrome = { cookies: { get: async () => ({ value: 'synthetic-cookie' }) } };
@@ -32,7 +32,7 @@ for (const scenario of ['success', 'member-target', 'missing-member', 'mixed-bef
       }
       if (new URL(url).searchParams.get('view') === 'cv') {
         stateReads++; revoked = scenario === 'revoked';
-        return { ok: true, text: async () => exact(mailboxPosts || scenario === 'already-restored'
+        return { ok: true, text: async () => exact((mailboxPosts && !(['delayed-state', 'last-attempt-state'].includes(scenario) && stateReads <= (scenario === 'last-attempt-state' ? 3 : 2))) || scenario === 'already-restored'
           ? [['^i', '^u'], scenario === 'mixed-after' ? ['^k'] : ['^i']]
           : [['^k', '^u'], scenario === 'mixed-before' ? [] : ['^k']], scenario === 'missing-member') };
       }
@@ -42,10 +42,11 @@ for (const scenario of ['success', 'member-target', 'missing-member', 'mixed-bef
     };
     try {
       const promise = mutateGmailConversation('owner@example.test', scenario === 'member-target' ? 'aa02' : 'abcdef', 'undo', () => { if (revoked) throw Error('superseded'); });
-      if (['success', 'member-target', 'lost-response', 'already-restored'].includes(scenario)) assert.deepEqual(await promise, { id: scenario === 'member-target' ? 'aa02' : 'abcdef' });
+      if (['success', 'member-target', 'lost-response', 'already-restored', 'delayed-state', 'last-attempt-state'].includes(scenario)) assert.deepEqual(await promise, { id: scenario === 'member-target' ? 'aa02' : 'abcdef' });
       else await assert.rejects(promise);
-      const wrote = ['success', 'member-target', 'lost-response', 'mixed-after'].includes(scenario);
+      const wrote = ['success', 'member-target', 'lost-response', 'mixed-after', 'delayed-state', 'last-attempt-state'].includes(scenario);
       assert.equal(mailboxPosts, wrote ? 1 : 0, 'only one scoped mailbox write; invalid prerequisites stop before writing');
+      if (scenario === 'mixed-after') assert.equal(stateReads,4,'preflight plus three bounded confirmation reads');
       assert.equal(tokenPosts, wrote || scenario === 'bad-token' ? 1 : 0);
     } finally { globalThis.fetch = originalFetch; globalThis.chrome = originalChrome; }
   });

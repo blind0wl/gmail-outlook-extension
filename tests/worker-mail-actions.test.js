@@ -223,3 +223,50 @@ test('repeated Gmail read stays isolated after one uncertain result and explicit
   assert.equal(calls.length,7,'explicit recovery clears only the lock');
   assert.equal(data.mailActions[foreign.key],undefined);
 });
+
+
+test('a stale Undo after successful restoration reports unavailable Undo, not sign-in', async () => {
+  await ready;
+  const data=fixture();
+  data.mailActions[key]={state:'undo',id:'one',folder:'inbox',item,expiresAt:Date.now()+60000};
+  let writes=0;
+  const options={...deps,mutate:async()=>{writes++;return {id:'one'};}};
+  assert.deepEqual(await handleMailboxAction({key,action:'undo'},options),{ok:true});
+  assert.deepEqual(await handleMailboxAction({key,action:'undo'},options),{ok:false,code:'undo-expired'});
+  assert.equal(writes,1);
+});
+
+test('duplicate Undo waits for the original result and never starts another restore',async()=>{
+  const data=fixture();
+  data.mailActions[key]={state:'undo',id:'one',folder:'inbox',item,expiresAt:Date.now()+60000};
+  let finish,calls=0;
+  const options={...deps,mutate:async()=>{calls++;await new Promise(resolve=>finish=resolve);return {id:'one'};}};
+  const first=handleMailboxAction({key,action:'undo'},options);
+  await new Promise(resolve=>setTimeout(resolve,0));
+  let resolved=false;
+  const duplicate=handleMailboxAction({key,action:'undo'},options).then(result=>{resolved=true;return result;});
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(resolved,false,'a duplicate Undo must follow the running request, not return a stuck queued error');
+  assert.equal(calls,1);
+  finish();
+  assert.deepEqual(await first,{ok:true});
+  assert.deepEqual(await duplicate,{ok:true});
+  assert.equal(calls,1);
+  assert.deepEqual(data.mailActions,{});
+});
+
+test('duplicate Undo shares an uncertain result and preserves the recovery lock',async()=>{
+  const data=fixture();
+  data.mailActions[key]={state:'undo',id:'one',folder:'inbox',item,expiresAt:Date.now()+60000};
+  let finish,calls=0;
+  const options={...deps,mutate:async()=>{calls++;await new Promise(resolve=>finish=resolve);throw Object.assign(Error(),{uncertain:true});}};
+  const first=handleMailboxAction({key,action:'undo'},options);
+  await new Promise(resolve=>setTimeout(resolve,0));
+  const duplicate=handleMailboxAction({key,action:'undo'},options);
+  finish();
+  assert.deepEqual(await first,{ok:false,code:'check-mailbox'});
+  assert.deepEqual(await duplicate,{ok:false,code:'check-mailbox'});
+  assert.equal(data.mailActions[key].state,'uncertain');
+  assert.deepEqual(await handleMailboxAction({key,action:'undo'},options),{ok:false,code:'check-mailbox'});
+  assert.equal(calls,1);
+});

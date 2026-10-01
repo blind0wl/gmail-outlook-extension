@@ -215,7 +215,10 @@ async function workspaceFixture(overrides = {}) {
   await import(`../src/popup/popup.js?workspace=${++popupFixtureId}`);
   await tick(); await tick();
   return { document, window, data, messages, tabs,
-    change: changes => listener(changes, "local") };
+    change: changes => {
+      if (changes.mailActions) data.mailActions = changes.mailActions.newValue;
+      listener(changes, "local");
+    } };
 }
 
 test("workspace Settings isolates configuration and preserves Mail position and account drafts", async () => {
@@ -465,7 +468,7 @@ test('hover actions use provider-specific labels and resist duplicate clicks', a
   assert.equal(messages[0].type,'mail-action');assert.equal(messages[0].action,'read');
   finish();await tick();
   change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com',subject:'Test'}}}}});
-  assert.equal(document.getElementById('mail-undo').hidden,false);
+  assert.equal(document.getElementById('undo-tray').hidden,false);
   assert.match(document.querySelector('[data-undo-key]').getAttribute('aria-label'),/Restore Test/);
 });
 
@@ -584,7 +587,7 @@ test('thirty uncertain actions use one account recovery button and acknowledgeme
   const recovery=document.querySelector(`[data-recovery-account="gmail:${account.account}"]`);
   assert.ok(recovery);
   assert.equal(document.querySelectorAll('[data-recovery-account]').length,2);
-  assert.equal(document.getElementById('mail-undo').children.length,3,'two account recoveries plus individual Undo');
+  assert.equal(document.getElementById('mail-undo').children.length,2,'two account recoveries; Undo has its own tray');
   assert.match(recovery.closest('li').textContent,/30 unconfirmed actions/);
   assert.match(recovery.getAttribute('aria-label'),/all 30 actions/);
   recovery.click();await tick();
@@ -619,4 +622,115 @@ test('account recovery resists duplicate clicks, keeps failures and leaves new u
   assert.match(document.querySelector('[data-recovery-account]').closest('li').textContent,/2 unconfirmed actions/);
   assert.equal(document.querySelector('[data-recovery-account]').getAttribute('aria-disabled'),'false');
   assert.match(document.getElementById('lifecycle-message').textContent,/1.*unlocked.*could not.*unlock/i);
+});
+
+
+test('Undo stays in a bounded tray, newest first, preserving older actions and focus', async () => {
+  const {document,change,messages}=await workspaceFixture();
+  const now=Date.now();
+  const item={provider:'gmail',account:'work@example.com',subject:'Older message'};
+  const older={state:'undo',expiresAt:now+120000,item};
+  const newer={state:'undo',expiresAt:now+600000,item:{...item,subject:'Newer message'}};
+  change({mailActions:{newValue:{older,newer,expired:{...older,expiresAt:now},foreign:{...newer,item:{...item,account:'other@example.com'}}}}});
+  const tray=document.getElementById('undo-tray');
+  assert.equal(tray.hidden,false);
+  assert.equal(tray.closest('#mail-view'),null,'new Undo cannot shift the scrollable mail list');
+  assert.deepEqual([...document.querySelectorAll('[data-undo-key]')].map(b=>b.dataset.undoKey),['newer','older']);
+  assert.match(document.getElementById('undo-summary').textContent,/2.*10 minutes/);
+  assert.match(document.getElementById('undo-list').textContent,/Newer message.*10 min left/);
+  document.querySelector('[data-undo-key="older"]').focus();
+  change({mailActions:{newValue:{older,newer}}});
+  assert.equal(document.activeElement.dataset.undoKey,'older');
+  document.activeElement.click();await tick();
+  assert.deepEqual(messages.at(-1),{type:'mail-action',key:'older',action:'undo'});
+});
+
+test('an open popup removes Undo at its deadline without a storage event', async t => {
+  const {document,change}=await workspaceFixture();
+  t.mock.timers.enable({apis:['setTimeout','Date'],now:Date.now()});
+  change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+1000,item:{provider:'gmail',account:'work@example.com',subject:'Expiring'}}}}});
+  assert.equal(document.getElementById('undo-tray').hidden,false);
+  t.mock.timers.tick(1000);
+  assert.equal(document.getElementById('undo-tray').hidden,true);
+  assert.equal(document.querySelector('[data-undo-key]'),null);
+});
+
+
+test('Undo tray hides in Settings and returns with its collapse state intact', async () => {
+  const {document,change}=await workspaceFixture();
+  change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com'}}}}});
+  const tray=document.getElementById('undo-tray');
+  tray.removeAttribute('open');
+  document.getElementById('open-settings').click();
+  assert.equal(tray.hidden,true);
+  document.getElementById('back-to-mail').click();
+  assert.equal(tray.hidden,false);
+  assert.equal(tray.hasAttribute('open'),false);
+});
+
+
+for (const code of ['unavailable','provider-error','pending','sign-in']) test(`mail action ${code} only requests sign-in for authentication failure`, async () => {
+  const {document}=await workspaceFixture();
+  chrome.runtime.sendMessage=async()=>({ok:false,code});
+  document.querySelector('[data-mail-action="read"]').click();await tick();
+  const text=document.getElementById('lifecycle-message').textContent;
+  if (code==='sign-in') assert.match(text,/sign.in.*Settings/i);
+  else assert.doesNotMatch(text,/sign.in|Settings/i);
+});
+
+test('completed Undos clear the open popup even when journal storage events are missed',async()=>{
+  const item={provider:'gmail',account:'work@example.com',subject:'Restored mail'};
+  const records=Object.fromEntries(Array.from({length:15},(_,i)=>['undo-'+i,{state:'undo',id:String(i),item,expiresAt:Date.now()+60000+i}]));
+  const {document,data,messages}=await workspaceFixture({mailActions:records});
+  chrome.runtime.sendMessage=async msg=>{
+    messages.push(msg);
+    data.mailActions={...data.mailActions};delete data.mailActions[msg.key];
+    return {ok:true};
+  };
+  for(let i=0;i<15;i++) {
+    const button=document.querySelector('[data-undo-key]');
+    assert.ok(button,'next Undo remains usable');
+    button.click();await tick();await tick();
+    assert.equal(document.querySelectorAll('[data-undo-key]').length,14-i,'completed entry is removed without reopening');
+  }
+  assert.equal(messages.length,15);
+  assert.equal(new Set(messages.map(msg=>msg.key)).size,15);
+  assert.equal(document.getElementById('undo-tray').hidden,true);
+});
+
+test('fifteen rapid Undos stay responsive after all responses without storage events',async()=>{
+  const item={provider:'gmail',account:'work@example.com',subject:'Restored mail'};
+  const records=Object.fromEntries(Array.from({length:15},(_,i)=>['undo-'+i,{state:'undo',id:String(i),item,expiresAt:Date.now()+60000+i}]));
+  const {document,data,messages}=await workspaceFixture({mailActions:records});
+  const finishes=[];
+  chrome.runtime.sendMessage=msg=>{
+    messages.push(msg);
+    return new Promise(resolve=>finishes.push(()=>{
+      data.mailActions={...data.mailActions};delete data.mailActions[msg.key];resolve({ok:true});
+    }));
+  };
+  const buttons=[...document.querySelectorAll('[data-undo-key]')];
+  for(const button of buttons) {button.click();button.click();}
+  assert.equal(messages.length,15,'same popup suppresses duplicate clicks');
+  finishes.forEach(finish=>finish());await tick();await tick();
+  assert.equal(document.querySelector('[data-undo-key]'),null);
+  assert.equal(document.getElementById('undo-tray').hidden,true);
+  assert.match(document.getElementById('lifecycle-message').textContent,/Restored/);
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(messages.length,16,'mail remains actionable without reopening');
+  finishes.at(-1)();await tick();
+});
+
+test('a stale action-state reread cannot replace a newer storage event',async()=>{
+  const item={provider:'gmail',account:'work@example.com',subject:'Undo mail'};
+  const record={state:'undo',id:'one',item,expiresAt:Date.now()+60000};
+  const {document,change}=await workspaceFixture({mailActions:{one:record}});
+  const get=chrome.storage.local.get;
+  let finish;
+  chrome.storage.local.get=key=>key==='mailActions'?new Promise(resolve=>finish=resolve):get(key);
+  document.querySelector('[data-undo-key="one"]').click();await tick();
+  change({mailActions:{newValue:{newer:{...record,id:'newer'}}}});
+  finish({mailActions:{one:record}});await tick();
+  assert.equal(document.querySelector('[data-undo-key="one"]'),null);
+  assert.ok(document.querySelector('[data-undo-key="newer"]'));
 });
