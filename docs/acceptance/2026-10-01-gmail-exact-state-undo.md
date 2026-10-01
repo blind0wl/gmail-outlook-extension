@@ -121,6 +121,39 @@ preserved and no reported error. No additional agent-run mailbox operations were
 performed. Mixed-folder and second-account acceptance remain pending; repository
 containment stays enabled.
 
+### Second-account candidate — owner pass, 2026-10-01
+
+The owner reported “1 PASSED” for the supplied second-Gmail-account checklist:
+extension Trash → Undo on disposable unread mail, return to that account's Inbox
+unread, and the first account unchanged. This records second-account acceptance
+for corrected candidate `653b56a`; mixed-folder acceptance remains pending.
+
+The owner could not start the mixed-folder extension check because opening Gmail
+to trash an individual message marked the conversation read and removed it from
+the extension's unread view. This is a fixture setup issue, not a new reported
+action failure. Revised setup: after trashing one member in Gmail, return to the
+Inbox list, mark the remaining conversation unread and refresh the extension.
+Establish mixed Inbox/Trash membership before the extension action, then verify
+conversation-wide Trash and Undo and unread state from that new starting point.
+
+### Mixed-folder candidate — owner pass, 2026-10-01
+
+After the revised mixed-folder setup and extension Trash → Undo checklist, the
+owner reported “yes all 3 messages come back”. This records the mixed-folder
+conversation's three-message Inbox return on corrected candidate `653b56a`.
+The owner did not separately state each message's unread flag in this response;
+unread preservation was explicitly covered by the earlier three-message pass.
+No new agent-run mailbox operations were performed.
+
+All owner-run cases listed for this investigation now have reported passes:
+repeated cycles, three-message conversation, second-account isolation and
+mixed-folder Inbox return. Worker-restart Undo was verified on the prior
+candidate before the member-target correction; it was not repeated here.
+Repository containment remains enabled pending integration of the corrected
+provider and restored controls into the main extension.
+
+### Original manual checklist — historical setup
+
 The owner offered to run remaining tests to reduce agent usage. A clean isolated
 manual-test copy enables Trash for this authorized test profile only; the main
 repository's containment remains unchanged. The test copy contains no E2E helpers.
@@ -132,8 +165,9 @@ repository's containment remains unchanged. The test copy contains no E2E helper
    or failed Undo. Stop on a failure; do not clear saved evidence or replay it.
 3. If an existing authorized Sonarr conversation has two or more messages, use it
    for one cycle and check every message. No multi-member fixture was found among
-   the first 50 sampled Sonarr conversations. Real multi-member/mixed-folder and
-   second-account acceptance remain open; synthetic coverage is not a substitute.
+   the first 50 sampled Sonarr conversations. At this initial checkpoint, real
+   multi-member/mixed-folder and second-account acceptance remained open;
+   subsequent owner results are recorded above.
 
 Do not remove repository containment or claim release acceptance until the
 remaining requirements in `tasks/plan.md` are resolved and recorded.

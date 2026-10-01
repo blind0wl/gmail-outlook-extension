@@ -94,6 +94,7 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [x] Owner runs repeated cycles on the clean isolated manual-test candidate: five-cycle checklist reported passed on 2026-10-01 for `4d13c20`.
 - [x] Diagnose saved three-member Trash false negative: member target differs from conversation ID. Add RED regressions, resolve exact membership and canonical Undo target; 255 tests and read-only real-target verification pass.
 - [x] Owner retests one three-message Trash → Undo cycle on corrected candidate `653b56a`: reported passed on 2026-10-01, including Inbox return and unread status.
-- [ ] Real mixed-folder and second-account acceptance before containment removal.
+- [x] Second-Gmail-account Trash → Undo acceptance reported passed on 2026-10-01, including unread Inbox return and first-account isolation.
+- [x] Real mixed-folder Trash → Undo: owner confirmed all three messages return on 2026-10-01 after marking the fixture unread to restore extension visibility.
 
 Evidence: `docs/acceptance/2026-10-01-gmail-exact-state-undo.md`.
