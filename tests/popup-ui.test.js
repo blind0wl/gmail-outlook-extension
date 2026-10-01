@@ -439,6 +439,18 @@ test("cancelled outlook add names the cancelled step instead of blaming the addr
   assert.match(err.textContent, /cancelled/);
 });
 
+test('Gmail Trash is visibly unavailable and cannot send actions',async()=>{
+  const {document,messages}=await workspaceFixture();
+  const trash=document.querySelector('[data-mail-action="trash"]');
+  assert.equal(trash.getAttribute('aria-disabled'),'true');
+  assert.match(trash.title,/temporarily unavailable.*Gmail/i);
+  assert.match(document.querySelector('.account-note').textContent,/Gmail Trash is temporarily unavailable/);
+  trash.click();await tick();
+  assert.equal(messages.length,0);
+  assert.ok(document.querySelector('.card'),'blocked click leaves mail visible');
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-disabled'),'false');
+});
+
 test('hover actions use provider-specific labels and resist duplicate clicks', async () => {
   const { document, messages, change } = await workspaceFixture();
   const read = document.querySelector('[data-mail-action="read"]');
@@ -468,6 +480,8 @@ test('mailbox feedback is immediate while worker is pending and rolls back a fai
   assert.ok(document.querySelector('.card').classList.contains('read'),'stale cache cannot restore unread while pending');
   finish({ok:false,code:'provider-error'});await tick();
   assert.equal(document.querySelector('.card').classList.contains('read'),false,'failure restores unread card');
+  const outlook={provider:'outlook',account:'outlook@example.test'};
+  change({accounts:{newValue:[outlook]},mailCache:{newValue:[{key:'outlook:outlook%40example.test:1',...outlook,date:Date.now(),unread:true}]}});
   document.querySelector('[data-mail-action="trash"]').click();
   assert.equal(document.querySelector('.card'),null,'Trash hides card before worker response');
   finish({ok:false,code:'provider-error'});await tick();
@@ -522,7 +536,7 @@ test('uncertain recovery precedes mail, names its scope and leaves unrelated act
   assert.match(recovery.textContent,/1 unconfirmed action/i);
   assert.match(recovery.textContent,/Other mail is still available/);
   const locked=document.querySelector(`[data-key="${original.key}"] [data-mail-action="trash"]`);
-  const usable=document.querySelector(`[data-key="${unrelated.key}"] [data-mail-action="trash"]`);
+  const usable=document.querySelector(`[data-key="${unrelated.key}"] [data-mail-action="read"]`);
   assert.equal(locked.getAttribute('aria-disabled'),'true');
   assert.equal(usable.getAttribute('aria-disabled'),'false');
   usable.click();await tick();

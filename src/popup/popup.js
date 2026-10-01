@@ -276,6 +276,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         mailFeedback.delete(key);
         var code = result?.code;
         mailErrors[key] = code === "check-mailbox" ? unconfirmedMessage
+          : code === "gmail-trash-unavailable" ? "Gmail Trash is temporarily unavailable. Use Gmail to manage Trash."
           : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
           : code === "undo-expired" ? "Undo expired. Restore this mail in your mailbox."
           : "Could not complete the action. Check the account’s sign-in in Settings, then try again.";
@@ -431,11 +432,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       group.appendChild(heading);
       var state = acctState;
       var status = acct.enabled === false ? "Paused" : accountStatusLabel(acct, state);
-      if (status) {
+      if (status || acct.provider === "gmail") {
         var note = document.createElement("div");
         note.className = "account-note";
         var label = document.createElement("span");
-        label.textContent = status;
+        label.textContent = acct.provider === "gmail"
+          ? (status ? status + ". " : "") + "Gmail Trash is temporarily unavailable. Use Gmail to manage Trash."
+          : status;
         note.appendChild(label);
         if (state.needsSignIn && acct.enabled !== false) {
           var recovery = document.createElement("button");
@@ -538,9 +541,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           button.className = "card-icon" + (action === "trash" ? " card-trash" : "");
           button.dataset.mailAction = action;
           var label = action === "read" ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + " as read" : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
-          button.title = label;
+          var trashUnavailable = action === "trash" && item.provider === "gmail";
+          button.title = trashUnavailable ? "Gmail Trash is temporarily unavailable. Use Gmail to manage Trash." : label;
           button.setAttribute("aria-label", label + ": " + (item.subject || "(no subject)") + " for " + item.account);
-          button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || (action === "read" && item.unread !== true)));
+          button.setAttribute("aria-disabled", String(trashUnavailable || pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || (action === "read" && item.unread !== true)));
           button.appendChild(actionIcon(action));
           button.addEventListener("click", function () { if (button.getAttribute("aria-disabled") !== "true") void actOnMail(item.key, action); });
           quick.appendChild(button);
