@@ -144,3 +144,5 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 #mail-undo span { min-width: 0; overflow-wrap: anywhere; }
 @media (hover: none) { .card-quick-actions { opacity: 1; pointer-events: auto; } }
 @media (forced-colors: active) { .card { border-color: CanvasText; } }
+
+.card.read .card-sender, .card.read .card-subject { font-weight: 400; }

@@ -456,3 +456,57 @@ test('hover actions use provider-specific labels and resist duplicate clicks', a
   assert.equal(document.getElementById('mail-undo').hidden,false);
   assert.match(document.querySelector('[data-undo-key]').getAttribute('aria-label'),/Restore Test/);
 });
+
+test('mailbox feedback is immediate while worker is pending and rolls back a failed action',async()=>{
+  const {document,change}=await workspaceFixture();
+  const key=document.querySelector('.card').dataset.key;
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.ok(document.querySelector('.card').classList.contains('read'),'read style changes before worker response');
+  change({mailCache:{newValue:[{key,provider:'gmail',account:'work@example.com',subject:'new cache text',snippet:'text',date:Date.now(),unread:true}]}});
+  assert.ok(document.querySelector('.card').classList.contains('read'),'stale cache cannot restore unread while pending');
+  finish({ok:false,code:'provider-error'});await tick();
+  assert.equal(document.querySelector('.card').classList.contains('read'),false,'failure restores unread card');
+  document.querySelector('[data-mail-action="trash"]').click();
+  assert.equal(document.querySelector('.card'),null,'Trash hides card before worker response');
+  finish({ok:false,code:'provider-error'});await tick();
+  assert.ok(document.querySelector('.card'),'failed Trash restores card');
+});
+
+test('provider-read cards are filtered out',async()=>{
+  const {document,change}=await workspaceFixture();
+  const key=document.querySelector('.card').dataset.key;
+  change({mailCache:{newValue:[{key,provider:'gmail',account:'work@example.com',date:Date.now(),unread:false}]}});
+  assert.equal(document.querySelector('.card'),null,'server-read mail is no longer needed in popup');
+});
+
+
+test('confirmed read feedback resists stale unread cache until reconciliation, then allows new unread mail',async()=>{
+  const {document,change,data}=await workspaceFixture();
+  const cached=data.mailCache[0];
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  finish({ok:true});await tick();
+  assert.equal(document.querySelector('.card'),null);
+  change({mailCache:{newValue:[cached]}});
+  assert.equal(document.querySelector('.card'),null,'stale unread snapshot cannot undo confirmed feedback');
+  change({mailCache:{newValue:[{...cached,unread:false}]}});
+  change({mailCache:{newValue:[{...cached,date:Date.now()+1000}]}});
+  assert.ok(document.querySelector('.card'),'a later unread reply in the same conversation can appear');
+});
+
+test('read cache arriving before action response settles feedback and allows later unread mail',async()=>{
+  const {document,change,data}=await workspaceFixture();
+  const cached=data.mailCache[0];
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  change({mailCache:{newValue:[{...cached,unread:false}]}});
+  assert.ok(document.querySelector('.card.read'),'pending feedback stays visible through storage event');
+  finish({ok:true});await tick();
+  assert.equal(document.querySelector('.card'),null);
+  change({mailCache:{newValue:[cached]}});
+  assert.ok(document.querySelector('.card'),'future unread state can appear after cache/response handoff');
+});

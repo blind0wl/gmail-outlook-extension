@@ -14,7 +14,7 @@ The popup remains cache-only, diagnostics content-free, and accounts isolated.
 
 - Preserve all three themes and full-address account sections; widen to 480px,
   shrink to the host width. Separate message cards with 12px corners and gaps.
-- Sender and subject are bold for read and unread mail. Cached plain-text snippet
+- Sender and subject are bold for unread mail and regular after marking read. Cached plain-text snippet
   is immediately visible, clamped to at most three lines. No preview expansion.
 - Hover reveals mark-read and Trash icons. Keyboard focus reveals the same
   controls; non-hover devices expose them. Keep the existing provider Open
@@ -74,3 +74,18 @@ Sources: [Chrome Identity](https://developer.chrome.com/docs/extensions/referenc
 [Graph move](https://learn.microsoft.com/en-us/graph/api/message-move),
 [Graph update](https://learn.microsoft.com/en-us/graph/api/message-update),
 [Graph immutable IDs](https://learn.microsoft.com/en-us/graph/outlook-immutable-id).
+
+
+## 2026-10-01 feedback correction
+
+Owner reported successful Gmail read/Trash writes with delayed or stale popup cards.
+Trash now hides immediately; read immediately uses regular heading weight while
+pending, then disappears after confirmation. Failed actions remove the temporary
+projection and render the authoritative cache. Provider-read cards are omitted.
+Confirmed projections end when cache reflects the action so new unread replies
+can reappear. Popup remains cache-only.
+
+An unrecognized Gmail write response triggers one uncached unread-feed GET.
+Only a complete feed for the owning account can establish absence. Verified
+absence removes the stale cache card, but does not prove a Trash move or enable
+Undo: the uncertain write lock remains, and no POST is automatically repeated.

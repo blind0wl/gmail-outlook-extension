@@ -113,3 +113,17 @@ test('sign-out during the final journal read prevents confirmed cache commit',as
   const result=await run;
   assert.equal(result.ok,false);assert.ok(getInbox().some(i=>i.key===raceKey));
 });
+
+test('verified unread-inbox absence clears stale card but keeps an unconfirmed write locked',async()=>{
+  const gmail={provider:'gmail',account:'reconciled@example.test'};
+  const gmailKey='gmail:reconciled%40example.test:abcdef';
+  const data={accounts:[gmail],mailActions:{}};
+  globalThis.chrome={storage:{local:{get:async k=>({[k]:data[k]}),set:async p=>Object.assign(data,p)}}};
+  mergeMessages([{...item,...gmail,key:gmailKey}]);
+  const result=await handleMailboxAction({key:gmailKey,action:'trash'},{...deps,mutate:async()=>{throw Object.assign(Error(),{uncertain:true,unreadInboxAbsent:true});}});
+  assert.equal(result.code,'check-mailbox');
+  assert.equal(getInbox().some(i=>i.key===gmailKey),false);
+  assert.equal(data.mailCache.some(i=>i.key===gmailKey),false);
+  assert.equal(data.mailActions[gmailKey].state,'uncertain');
+  assert.equal(data.mailActions[gmailKey].item.subject,undefined);
+});

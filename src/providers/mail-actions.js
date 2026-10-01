@@ -94,6 +94,23 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
   const response = await request(url, { method: 'POST', credentials: 'include', body }, true);
   let text;
   try { text = await response.text(); } catch { throw new MailActionError('check-mailbox', undefined, true); }
-  if (!/\[\s*"ar"\s*,\s*1\s*,/.test(text)) throw new MailActionError('check-mailbox', undefined, true);
+  if (!/\[\s*"ar"\s*,\s*1\s*,/.test(text)) {
+    const error = new MailActionError('check-mailbox', undefined, true);
+    error.unreadInboxAbsent = false;
+    if (action !== 'undo') {
+      try {
+        const response = await request(base + 'feed/atom', { credentials: 'include', cache: 'no-store' });
+        const xml = await response.text();
+        const feed = parseFeed(xml, Number(/\/u\/(\d+)\//.exec(base)[1]));
+        // Feed absence establishes inbox state, not which mutation succeeded.
+        // A truncated feed cannot prove absence; retain the uncertainty lock.
+        error.unreadInboxAbsent = feed.account === account.toLowerCase()
+          && /<fullcount>\d+<\/fullcount>/i.test(xml)
+          && feed.fullcount === feed.entries.length
+          && !feed.entries.some(entry => entry.id.toLowerCase() === id.toLowerCase());
+      } catch { /* Reconciliation failure must never replay the POST. */ }
+    }
+    throw error;
+  }
   return { id };
 }

@@ -187,7 +187,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function visibleItems() {
-    var sorted = items.slice().sort(function (a, b) { return b.date - a.date; });
+    var sorted = displayedItems().sort(function (a, b) { return b.date - a.date; });
     if (filter === "all") return sorted;
     return sorted.filter(function (item) { return item.provider === filter; });
   }
@@ -210,7 +210,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   function renderHeader() {
     var keys = new Set(configuredAccounts.map(accountKey));
-    var scoped = items.filter(function (item) { return keys.has(accountKey(item)); });
+    var scoped = displayedItems().filter(function (item) { return keys.has(accountKey(item)); });
     var el = document.getElementById("unread-count");
     el.textContent = providerUnread(scoped) > 0
       ? "(" + providerUnread(scoped) + ")" + (openedHereCount(scoped) > 0 ? " \u00B7 " + openedHereCount(scoped) + " opened" : "")
@@ -227,6 +227,28 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   var pendingMailActions = new Set();
   var mailActions = {};
+  // Project pending actions over authoritative cache; never write optimistic mail state.
+  var mailFeedback = new Map();
+  function settleMailFeedback() {
+    mailFeedback.forEach(function (feedback, key) {
+      if (feedback.confirmed && !items.some(function (item) { return item.key === key && item.unread !== false; }))
+        mailFeedback.delete(key);
+    });
+  }
+  function displayedItems() {
+    var projected = items.filter(function (item) {
+      var feedback = mailFeedback.get(item.key);
+      return feedback ? feedback.action === "read" && !feedback.confirmed : item.unread !== false;
+    }).map(function (item) {
+      return mailFeedback.has(item.key) ? { ...item, unread: false, localRead: false } : item;
+    });
+    // A storage event may arrive before the worker response. Keep pending read feedback visible.
+    mailFeedback.forEach(function (feedback, key) {
+      if (feedback.action === "read" && !feedback.confirmed && !projected.some(function (item) { return item.key === key; }))
+        projected.push({ ...feedback.item, unread: false, localRead: false });
+    });
+    return projected;
+  }
   var mailErrors = {};
   function actionIcon(kind) {
     var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -241,23 +263,34 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (pendingMailActions.has(key)) return;
     pendingMailActions.add(key);
     delete mailErrors[key];
+    if (action === "read" || action === "trash") mailFeedback.set(key, { action: action, item: items.find(function (item) { return item.key === key; }), confirmed: false });
+    setStatus(action === "read" ? "Marking as read…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
+    renderHeader();
     renderList();
     renderUndo();
     try {
       var result = await chrome.runtime.sendMessage({ type: "mail-action", key: key, action: action });
       if (!result?.ok) {
+        mailFeedback.delete(key);
         var code = result?.code;
         mailErrors[key] = code === "check-mailbox" ? "The result could not be confirmed. Check your mailbox before acting again."
           : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
           : code === "undo-expired" ? "Undo expired. Restore this mail in your mailbox."
           : "Could not complete the action. Check the account’s sign-in in Settings, then try again.";
         setStatus(mailErrors[key], "error");
-      } else setStatus(action === "acknowledge" ? "Action lock cleared. Refresh to check your inbox." : action === "read" ? "Marked as read in your mailbox." : action === "trash" ? "Moved to Trash. Undo is available below." : "Restored to your inbox.", "ok");
+      } else {
+        if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;
+        if (action === "undo") mailFeedback.delete(key);
+        settleMailFeedback();
+        setStatus(action === "acknowledge" ? "Action lock cleared. Refresh to check your inbox." : action === "read" ? "Marked as read in your mailbox." : action === "trash" ? "Moved to Trash. Undo is available below." : "Restored to your inbox.", "ok");
+      }
     } catch {
+      mailFeedback.delete(key);
       mailErrors[key] = "The result could not be confirmed. Check your mailbox before acting again.";
       setStatus(mailErrors[key], "error");
     } finally {
       pendingMailActions.delete(key);
+      renderHeader();
       renderList();
       renderUndo();
     }
@@ -774,6 +807,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           if (changes[CACHE_KEY]) {
             var next = changes[CACHE_KEY].newValue;
             items = Array.isArray(next) ? next : [];
+            settleMailFeedback();
             render();
           }
           if (changes[SOUND_SETTINGS_KEY]) {

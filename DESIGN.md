@@ -283,7 +283,7 @@ accent/on-accent when selected, expressed with `aria-pressed`.
 
 Each full-address account header owns its messages, including same-provider
 accounts. Empty and paused accounts retain identity. Sender and subject are
-600-weight for both read and unread mail; subject uses accent, preview uses
+600-weight for unread mail and 400 while marking read; subject uses accent, preview uses
 muted text. An unread dot preserves the state distinction. Message bodies are
 static and never imply an in-extension reader that has not been implemented.
 
@@ -327,3 +327,9 @@ their preview colors.
 - **Don't** introduce uppercase tracked labels, glyph toolbar icons or ambient motion.
 - **Don't** permanently delete mail or imply full-message reading inside the extension.
 - **Don't** treat synthetic screenshots as real-account acceptance.
+
+
+Mailbox feedback: Trash hides the card on click. Mark-read removes heading
+emphasis immediately, keeps the card while pending, then clears it after
+confirmation. Failures restore the authoritative cached state. Provider-read mail
+is omitted, and later unread replies can reappear after reconciliation.

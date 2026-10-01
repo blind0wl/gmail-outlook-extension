@@ -652,6 +652,6 @@
       "Don't add later-stage mailbox write controls to the Stage 1 component set.",
       "Don't treat synthetic screenshots as real-account acceptance."
     ],
-    "cardActionsUpdate": "2026-10-01: 480px popup, three-line static preview, 600-weight sender/subject for all mail, 34px hover/focus mailbox buttons. Gmail conversation session writes; Outlook individual-message writes. Real-account acceptance pending."
+    "cardActionsUpdate": "2026-10-01: 480px popup, three-line static preview, 600-weight unread headings and 400 pending-read headings. Immediate read/Trash feedback with rollback; provider-read mail omitted. Unknown Gmail responses reconcile complete owning unread feed while preserving write uncertainty. Real-account bug-candidate retest pending."
   }
 }

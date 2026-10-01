@@ -483,6 +483,16 @@ export async function handleMailboxAction(msg, deps = {}) {
         else delete journal[msg.key];
         await patchMailAction(msg.key, journal[msg.key], current);
       }
+      if (acct.provider === "gmail" && error.uncertain && error.unreadInboxAbsent && msg.action !== "undo") {
+        await write(async () => {
+          if (!current()) return;
+          // Remove only the verified absent card; keep the journal lock since
+          // unread-feed absence does not establish a successful Trash move.
+          applyMailboxChange(msg.key, "trash");
+          await persistCache(getInbox());
+          await badgeFor(accounts, deps);
+        });
+      }
       return { ok: false, code: error.uncertain ? "check-mailbox" : error.code ?? "sign-in" };
     }
   });

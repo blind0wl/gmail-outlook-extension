@@ -76,3 +76,24 @@ test('Gmail Undo only reports positive action acknowledgements, including read c
   globalThis.fetch=async(url,options)=>({ok:true,status:200,text:async()=>options.method==='POST'?'["ar",1,"OK"]':url.endsWith('/feed/atom')?'<feed><title>Gmail - Inbox for owner@example.test</title></feed>':'GM_ID_KEY="key"'});
   assert.deepEqual(await mutateGmailConversation('owner@example.test','abcdef','undo'),{id:'abcdef'});
 });
+
+test('unrecognized Gmail acknowledgement reconciles only a complete owning unread feed, without replaying the write',async()=>{
+  const {mutateGmailConversation}=await import('../src/providers/mail-actions.js');
+  globalThis.chrome={cookies:{get:async()=>({value:'csrf'})}};
+  for(const scenario of ['absent','truncated','wrong-account','still-present','offline']) {
+    let posted=false,posts=0;
+    globalThis.fetch=async(url,options)=>{
+      if(options.method==='POST'){posted=true;posts++;return {ok:true,text:async()=>'{"different":"ack"}'};}
+      if(url.endsWith('/feed/atom')) {
+        if(posted&&scenario==='offline')throw Error('offline');
+        const owner=posted&&scenario==='wrong-account'?'other@example.test':'owner@example.test';
+        const entry=!posted||scenario==='still-present'?'<entry><link href="https://mail.google.com/#inbox/abcdef"/></entry>':'';
+        const count=posted&&scenario==='truncated'?30:entry?1:0;
+        return {ok:true,text:async()=>`<feed><title>Gmail - Inbox for ${owner}</title><fullcount>${count}</fullcount>${entry}</feed>`};
+      }
+      return {ok:true,text:async()=> 'GM_ID_KEY="key"'};
+    };
+    await assert.rejects(mutateGmailConversation('owner@example.test','abcdef','trash'),e=>e.uncertain&&e.unreadInboxAbsent===(scenario==='absent'));
+    assert.equal(posts,1);
+  }
+});
