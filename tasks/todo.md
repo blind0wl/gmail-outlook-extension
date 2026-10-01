@@ -1,5 +1,11 @@
 # Gmail follow-ups
 
+Current execution instructions: follow `tasks/plan.md`'s current investigation
+contract. Older unchecked write-retest tasks below are historical, superseded by
+Gmail Trash containment. Do not act on disputed mail or clear preserved locks.
+The owner requested agent-run E2E on 2026-10-01; authenticated disposable test
+mail is required before fresh write/Undo acceptance can be completed.
+
 ## #16 — uncertainty recovery
 - [x] Acknowledgement succeeds alongside an unrelated queued mailbox action.
 - [x] Recovery is shown before mail, with explicit check/acknowledge guidance.
@@ -75,6 +81,6 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [x] Node 24 verification passes 219 tests; independent review and fresh acceptance instructions complete.
 - [x] Owner validates the query against one existing lock without further Trash writes: verified-trash, 80 returned.
 - [x] Review exact Trash-membership fallback; reject it because mixed-folder conversations can match before a move.
-- [ ] Establish exact Inbox exclusion before implementing confirmation; containment remains active.
+- [ ] Establish trustworthy acknowledgement or complete exact per-message state before implementing confirmation; Trash plus Inbox exclusion does not exclude archived members. Containment remains active.
 - [ ] Fresh controlled real-account write/Undo acceptance before restoring Gmail Trash.
 - [x] Correct unsupported dynamic import with static worker wiring and a one-line console helper; 222 tests and a real module-worker browser check pass.
