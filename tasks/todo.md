@@ -75,3 +75,4 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [x] Node 24 verification passes 219 tests; independent review and fresh acceptance instructions complete.
 - [ ] Owner validates the query against existing locks without further Trash writes.
 - [ ] Choose and verify a confirmation fix based on the real query evidence; containment remains active.
+- [x] Correct unsupported dynamic import with static worker wiring and a one-line console helper; 222 tests and a real module-worker browser check pass.

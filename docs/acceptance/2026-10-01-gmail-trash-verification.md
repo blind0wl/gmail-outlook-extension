@@ -1,6 +1,6 @@
 # Read-only Gmail Trash verification — 2026-10-01
 
-Runtime candidate: `4c3d6f59fde072588a31b57525906396347478de` on
+Runtime candidate: `ebcfa83527c680d5fe7a0a1d9e5f5f92ec88597e` on
 `fix/gmail-trash-investigation`, based on merged main `392e5c5`.
 Real-account query validation: **pending**. Gmail Trash remains disabled.
 Owner-reported browser: Version 0.18.2.1 (Official Build, Chromium
@@ -22,8 +22,11 @@ again after the query. Exact returned identifier matches produce `verified-trash
 all other targets remain `not-confirmed`. Absence from a bounded query is not
 proof of a failed move. Unsupported, malformed or ambiguous response formats
 cannot verify anything. It sends no mailbox mutations and writes no cache,
-journal or diagnostic history. No popup/runtime message calls it; it is invoked
-explicitly from the owner's worker console for this investigation.
+journal or diagnostic history. No popup/runtime message calls it. The worker
+statically imports it and exposes a no-argument console helper that validates
+the saved target's active configured account, serializes with polling and guards
+sign-out before returning any result. It inspects the first saved target only;
+repeat calls inspect that same target while its lock remains saved.
 
 The public helper returns ordinal verdicts/counts/fixed error codes only. The
 internal exported parser returns target identifiers for matching/testing; do not
@@ -34,21 +37,27 @@ helper result. The 2 MiB/32-frame limit bounds parsing, not response downloading
 
 ## Fresh verification
 
-- Node 24.21.0: `npm run verify` passed all **219 tests**, none skipped.
+- Node 24.21.0: `npm run verify` passed all **222 tests**, none skipped.
 - New tests failed before the helper existed. Tests cover raw/framed/XSSI search
   replies, UTF-8 frame lengths, malformed and unsupported data, query-only POST,
   account recheck, privacy, failures and invalid/oversized target batches.
 - Independent review found no blocker; `git diff --check` passed.
-- No UI was changed. Real-account query validation is not replaced by synthetic
-  responses, and no new browser UI acceptance is claimed.
+- New worker-console tests verify unchanged locks/cache, no inspection of
+  completed/non-Trash/foreign records or inactive accounts, and sign-out during
+  inspection. They failed before the static helper export existed.
+- T3 browser ran the production worker via static import in a temporary real
+  module service worker. The helper existed and returned no-saved-target with
+  no Chrome storage fixture, proving the command can run in service-worker
+  scope. The temporary registration/file were removed. This is not real Gmail
+  or extension acceptance. No UI was changed.
 
 ## Existing-record validation — no new Trash writes
 
 - [ ] Reload this candidate and verify Gmail Trash remains unavailable.
 - [ ] Keep the disputed saved locks. If Gmail was used to restore a conversation,
   its expected query verdict is not-confirmed. Never delete it again for this test.
-- [ ] Run the block below in the extension service worker console. It inspects
-  each account's saved unconfirmed Trash targets, at most 80 per account.
+- [ ] Run the command below in the extension service worker console. It inspects
+  the first saved unconfirmed Gmail Trash target, without clearing that lock.
 - [ ] Paste only the printed result objects. Do not paste the records, account
   names, generated URLs or raw responses. If no objects appear, report that fact.
 - [ ] Compare a verified-trash result with the deleted notice for the same saved
@@ -56,20 +65,16 @@ helper result. The 2 MiB/32-frame limit bounds parsing, not response downloading
   not relaxed success recognition.
 
 ```js
-{
-  const {inspectGmailTrash} = await import(chrome.runtime.getURL('src/providers/gmail-trash-verification.js'));
-  const {mailActions = {}} = await chrome.storage.local.get('mailActions');
-  const records = Object.values(mailActions).filter(r =>
-    r.item?.provider === 'gmail' && r.action === 'trash' &&
-    ['pending', 'uncertain'].includes(r.state));
-  const accounts = [...new Set(records.map(r => r.item.account))];
-  for (let i = 0; i < accounts.length; i++) {
-    const targets = records.filter(r => r.item.account === accounts[i]).slice(0, 80);
-    console.log({group: i + 1, ...await inspectGmailTrash(accounts[i],
-      targets.map(r => r.id || r.item.key.split(':').pop()))});
-  }
-}
+console.log(await inspectSavedGmailTrash())
 ```
 
 Do not press “I’ve checked” as part of this diagnostic or re-enable Gmail Trash.
 #16 stays open until a supported confirmation fix has fresh acceptance.
+
+## Failed initial diagnostic command — corrected
+
+The owner's dynamic-import command failed with ServiceWorkerGlobalScope's import
+prohibition before any inspection ran. The supplied command was incorrect; it
+does not provide a Gmail query result. This candidate uses static imports and
+the global console helper above, consistent with Chrome's documented restriction:
+https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/basics
