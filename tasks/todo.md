@@ -60,3 +60,10 @@ underlying Trash failure remain unconfirmed.
 - [ ] Owner reloads and captures a new uncertain action's saved diagnostics.
 
 This candidate gathers evidence; it does not change acknowledgement recognition.
+
+## Owner follow-up — searchable mail disappears after Gmail Trash
+- [x] Block Gmail Trash at the worker boundary before provider access or state mutation.
+- [x] Disable Gmail Trash in the popup with explicit account-level guidance; preserve saved locks.
+- [x] RED containment regressions, 215-test verification, synthetic browser and independent review complete.
+- [ ] Owner reloads and confirms disabled controls, without any new real-mail write.
+- [ ] Diagnose actual provider outcome using preserved evidence; missing mail is not established as permanently deleted.

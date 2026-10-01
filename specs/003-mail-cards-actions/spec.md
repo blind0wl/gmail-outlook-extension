@@ -113,3 +113,14 @@ actions in the owning mailbox. Failed acknowledgements/new records remain;
 no provider write is replayed. Timestamp and state checks protect newer locks
 and successful Undo. Fresh acceptance is recorded in
 docs/acceptance/2026-10-01-grouped-mail-recovery.md.
+
+## 2026-10-01 Gmail Trash containment
+
+The owner later reproduced a conversation visible in Gmail search before an
+extension Trash attempt and absent afterward, without verified Trash presence.
+Permanent deletion is not established. Gmail Trash is temporarily disabled in
+the popup and rejected by the worker before provider access or cache/journal
+mutation. This is an explicit temporary deviation from the approved Trash scope
+while the private transport is investigated; it does not widen the permitted
+actions. Existing recovery records remain saved, and no action is replayed.
+See docs/acceptance/2026-10-01-gmail-trash-containment.md for fresh verification.
