@@ -2,7 +2,7 @@
 
 Runtime candidate: `40358c5082e7a708851f76bf01b191910d115a98` on
 `fix/gmail-trash-investigation`, based on merged main `392e5c5`.
-Real-account query validation: **pending**. Gmail Trash remains disabled.
+Real-account query validation: **one saved target verified** on this runtime. Gmail Trash remains disabled.
 Owner-reported browser: Version 0.18.2.1 (Official Build, Chromium
 154.0.8037.92), Arch Linux (x86_64).
 
@@ -43,7 +43,7 @@ length, delimiter whitespace count and payload-type enum, never payload text.
 Trailing whitespace inside a counted frame is preserved. The shared decoder
 preserves the confirmation rules. The 2 MiB/32-frame limit bounds parsing, not response downloading;
 `response.text()` first buffers the provider response. Queries time out after
-15 seconds. Private protocol compatibility remains unverified on the real account.
+15 seconds. This query format has now verified one target on the real account; broader compatibility remains unverified.
 
 ## Fresh verification
 
@@ -114,3 +114,12 @@ Unicode, emoji, embedded frame-like text and trailing-whitespace fixtures. It
 remains a candidate interpretation until the owner's query succeeds or its new
 safe framing summary identifies another format. Independent review found no
 blocker. No write or Trash enablement is introduced.
+
+## Successful owner query — 2026-10-01
+
+The owner reported `{"ok":true,"status":200,"returned":80,"results":["verified-trash"]}`
+from the static helper on runtime candidate `40358c5`. This verifies the first
+saved target in the owning account’s Trash. The lock was not cleared by the
+helper and no new mutation was sent. The particular framing interpretation and
+other targets remain unverified. The next confirmation candidate is recorded in
+`2026-10-01-gmail-trash-confirmation.md`; Gmail Trash remains disabled.

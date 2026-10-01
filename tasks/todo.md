@@ -73,6 +73,8 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [x] Owner's exact-target link opens the deleted conversation with a restore option.
 - [x] Add a diagnostic-only fixed Trash query, positive exact-ID matching and fail-closed parsing.
 - [x] Node 24 verification passes 219 tests; independent review and fresh acceptance instructions complete.
-- [ ] Owner validates the query against existing locks without further Trash writes.
-- [ ] Choose and verify a confirmation fix based on the real query evidence; containment remains active.
+- [x] Owner validates the query against one existing lock without further Trash writes: verified-trash, 80 returned.
+- [x] Review exact Trash-membership fallback; reject it because mixed-folder conversations can match before a move.
+- [ ] Establish exact Inbox exclusion before implementing confirmation; containment remains active.
+- [ ] Fresh controlled real-account write/Undo acceptance before restoring Gmail Trash.
 - [x] Correct unsupported dynamic import with static worker wiring and a one-line console helper; 222 tests and a real module-worker browser check pass.
