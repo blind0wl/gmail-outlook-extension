@@ -120,3 +120,11 @@ test('unsupported, malformed, ambiguous and oversized replies fail closed', () =
     ' '.repeat(2 * 1024 * 1024 + 1) + valid];
   for (const input of cases) assert.deepEqual(parseGmailConversationState(input, TARGET), { recognized: false });
 });
+
+
+test('a member target resolves its complete conversation without accepting unrelated targets', () => {
+  const records = [summary(), member('aa01', ['^k', '^u']), member('aa02', ['^k'])];
+  assert.deepEqual(state(records, 'AA02'), expected(true, false, false));
+  assert.deepEqual(state(records, 'aa03'), { recognized: false });
+  assert.deepEqual(state([summary(), member('aa01', ['^k'])], 'aa01'), { recognized: false });
+});

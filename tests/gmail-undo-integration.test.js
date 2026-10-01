@@ -9,7 +9,7 @@ function exact(labels, missing = false) {
   return JSON.stringify([[cs, ...ms], 'synthetic-trailer']);
 }
 
-for (const scenario of ['success', 'missing-member', 'mixed-before', 'bad-token', 'changed-owner', 'revoked', 'lost-response', 'mixed-after', 'already-restored']) {
+for (const scenario of ['success', 'member-target', 'missing-member', 'mixed-before', 'bad-token', 'changed-owner', 'revoked', 'lost-response', 'mixed-after', 'already-restored']) {
   test(`modern Gmail Undo: ${scenario}`, async () => {
     const originalFetch = globalThis.fetch, originalChrome = globalThis.chrome;
     globalThis.chrome = { cookies: { get: async () => ({ value: 'synthetic-cookie' }) } };
@@ -25,6 +25,7 @@ for (const scenario of ['success', 'missing-member', 'mixed-before', 'bad-token'
         assert.match(url, /\/sync\/u\/0\/i\/s\?/);
         assert.equal(options.headers['X-Framework-Xsrf-Token'], 'synthetic-framework-token-12345678');
         const payload = JSON.parse(options.body);
+        assert.equal(payload[1][0][0][1][0], 'thread-f:11259375');
         assert.deepEqual(payload[1][0][0][1][1][6][2], ['msg-f:43521', 'msg-f:43522']);
         if (scenario === 'lost-response') throw Error('private transport error');
         return { ok: true, status: 200, text: async () => 'unrecognized' };
@@ -40,10 +41,10 @@ for (const scenario of ['success', 'missing-member', 'mixed-before', 'bad-token'
         : `GM_ID_KEY="synthetic-key";var GLOBALS=${JSON.stringify(globals)};` };
     };
     try {
-      const promise = mutateGmailConversation('owner@example.test', 'abcdef', 'undo', () => { if (revoked) throw Error('superseded'); });
-      if (['success', 'lost-response', 'already-restored'].includes(scenario)) assert.deepEqual(await promise, { id: 'abcdef' });
+      const promise = mutateGmailConversation('owner@example.test', scenario === 'member-target' ? 'aa02' : 'abcdef', 'undo', () => { if (revoked) throw Error('superseded'); });
+      if (['success', 'member-target', 'lost-response', 'already-restored'].includes(scenario)) assert.deepEqual(await promise, { id: scenario === 'member-target' ? 'aa02' : 'abcdef' });
       else await assert.rejects(promise);
-      const wrote = ['success', 'lost-response', 'mixed-after'].includes(scenario);
+      const wrote = ['success', 'member-target', 'lost-response', 'mixed-after'].includes(scenario);
       assert.equal(mailboxPosts, wrote ? 1 : 0, 'only one scoped mailbox write; invalid prerequisites stop before writing');
       assert.equal(tokenPosts, wrote || scenario === 'bad-token' ? 1 : 0);
     } finally { globalThis.fetch = originalFetch; globalThis.chrome = originalChrome; }

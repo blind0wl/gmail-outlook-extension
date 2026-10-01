@@ -91,7 +91,9 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [x] Replace retired HTML Undo with fresh-session modern Sync restore.
 - [x] RED regressions, Node 24 verification (253 tests), three real popup cycles and worker-restart Undo.
 - [x] Stop extended automation at owner usage request and restore remaining journaled test targets.
-- [ ] Owner runs repeated cycles on the clean isolated manual-test candidate.
+- [x] Owner runs repeated cycles on the clean isolated manual-test candidate: five-cycle checklist reported passed on 2026-10-01 for `4d13c20`.
+- [x] Diagnose saved three-member Trash false negative: member target differs from conversation ID. Add RED regressions, resolve exact membership and canonical Undo target; 255 tests and read-only real-target verification pass.
+- [ ] Owner retests one three-message Trash → Undo cycle on the corrected isolated candidate.
 - [ ] Real multi-member/mixed-folder and second-account acceptance before containment removal.
 
 Evidence: `docs/acceptance/2026-10-01-gmail-exact-state-undo.md`.

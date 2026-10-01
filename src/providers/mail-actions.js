@@ -122,7 +122,7 @@ export async function mutateGmailConversation(account, id, action, assertAuthori
     // authorization immediately before the single scoped mutation below.
     const ownership = await request(base + 'feed/atom', { credentials: 'include', cache: 'no-store' });
     if (parseFeed(await ownership.text(), slot).account !== account.toLowerCase()) throw new MailActionError('sign-in');
-    ({ url, options } = buildGmailUndoRequest(base, id, state.memberIds, token, session.appInfo));
+    ({ url, options } = buildGmailUndoRequest(base, state.conversationId, state.memberIds, token, session.appInfo));
   } else {
     url = base + 's/?' + new URLSearchParams({ v: 'or', ik: key, at: csrf, subui: 'chrome', hl: 'en' });
     body.set('s_jr', JSON.stringify([null, [[null, null, null, [null, action === 'read' ? 3 : 9, id, id, 'l:all', [], [], []]], [null, null, null, null, null, null, [null, true, false]], [null, null, null, null, null, null, [null, true, false]]], 2, null, null, null, key]));

@@ -62,7 +62,54 @@ mutated. The browser parking daemon was temporarily paused to permit interaction
 - Diagnostics contain no account address, target/member ID, provider body,
   request headers, tokens, mail content or session key.
 
-## Owner-run acceptance still pending
+## Owner-run acceptance — repeated cycles passed, broader checks pending
+
+On 2026-10-01, the owner reported “yep all tests passed” after receiving the
+five-cycle extension Trash → Undo checklist for candidate `4d13c20` in the
+separate Chrome test profile. This records an owner-reported pass for repeated
+cycles, restored unread cards after popup Refresh, and Inbox/unread state after
+refreshing Gmail, with no reported failures. No new agent-run tests were performed
+for this report. The report does not establish multi-member, mixed-folder or
+second-account acceptance; those checks remain open and containment stays active.
+
+### Subsequent owner failure — 2026-10-01
+
+While preparing the multi-message Sonarr check, the owner reported that extension
+Trash displayed “The result could not be confirmed” and offered “I’ve checked”.
+Whether the target actually contained multiple messages and its resulting Gmail
+folder state are not yet established. Saved diagnostics and the uncertainty lock
+are to be preserved; no repeat mailbox write was requested. The earlier repeated
+cycle pass remains recorded, but this new case is unresolved and blocks acceptance.
+
+### Member target diagnosis and correction — 2026-10-01
+
+The owner confirmed all messages moved to Trash and supplied the newest 20
+content-free diagnostics. The latest Trash event (`b3061768-c9ff-4933-9aff-09413a496367`)
+was HTTP 200, uncertain/unrecognized, slot 0. Earlier entries include successful
+state-verified actions and two additional uncertain Trash events; their causes
+are not established by this history.
+
+Read-only inspection of the retained Gmail lock in the isolated test profile
+returned one conversation summary, three listed members and three matching
+message records, each in Trash and outside Inbox. The saved target differed from
+the summary conversation ID but exactly matched a listed member ID. The parser
+rejected that identity mapping before evaluating labels. This establishes the
+cause of this saved target's false-negative confirmation.
+
+The correction accepts a requested conversation ID or a member ID in the fully
+validated member set. Completeness, unique membership, labels and account checks
+remain mandatory. Undo uses the resolved conversation ID in its Sync operation,
+while preserving the original target for journal/cache matching. Unrelated
+targets and incomplete member lists still fail closed.
+
+Both new regressions failed before the correction. Node 24 `npm run verify`
+passes 255 tests. Source/diff review checked identity scoping, malformed replies,
+Undo request targeting and retained account/authorization checks. The updated
+isolated test copy was reloaded; read-only lookup of the same locked target now
+recognizes all three messages in Trash. No mailbox write or unlock was performed.
+The lock remains saved. A new owner-run three-message Trash → Undo cycle is
+still required on this corrected candidate; mixed-folder and second-account
+acceptance remain pending. Repository containment remains enabled.
 
 The owner offered to run remaining tests to reduce agent usage. A clean isolated
 manual-test copy enables Trash for this authorized test profile only; the main

@@ -18,12 +18,15 @@ function parseExactConversation(text, id) {
   if (summaries.length !== 1) return unknown();
   const summary = summaries[0];
   const count = summary[3], ids = summary[8];
-  if (!validId(summary[1]) || summary[1].toLowerCase() !== id.toLowerCase()
+  if (!validId(summary[1])
     || !Number.isInteger(count) || count < 1 || count > 1000
     || !Array.isArray(ids) || ids.length !== count || !ids.every(validId)
     || members.length !== count) return unknown();
   const expected = new Set(ids.map(id => id.toLowerCase()));
   if (expected.size !== count) return unknown();
+  // Atom targets can be member IDs in multi-message conversations. Require
+  // the requested target to name this conversation or one of its members.
+  if (summary[1].toLowerCase() !== id.toLowerCase() && !expected.has(id.toLowerCase())) return unknown();
   const seen = new Set();
   for (const member of members) {
     if (!validId(member[1]) || !Array.isArray(member[9])
@@ -33,7 +36,7 @@ function parseExactConversation(text, id) {
     seen.add(memberId);
   }
   return {
-    recognized: true, memberIds: [...seen], messages: count,
+    recognized: true, conversationId: summary[1].toLowerCase(), memberIds: [...seen], messages: count,
     allTrash: members.every(row => row[9].includes('^k') && !row[9].includes('^i')),
     allInbox: members.every(row => row[9].includes('^i') && !row[9].includes('^k')),
     allRead: members.every(row => !row[9].includes('^u')),
@@ -41,7 +44,7 @@ function parseExactConversation(text, id) {
 }
 
 export function parseGmailConversationState(text, id) {
-  const { memberIds, ...state } = parseExactConversation(text, id);
+  const { memberIds, conversationId, ...state } = parseExactConversation(text, id);
   return state;
 }
 
