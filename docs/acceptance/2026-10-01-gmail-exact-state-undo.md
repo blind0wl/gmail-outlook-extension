@@ -171,3 +171,29 @@ repository's containment remains unchanged. The test copy contains no E2E helper
 
 Do not remove repository containment or claim release acceptance until the
 remaining requirements in `tasks/plan.md` are resolved and recorded.
+
+## Final repository integration — 2026-10-01
+
+After owner acceptance, the owner requested preparation for merge. Repository
+popup and worker Trash containment is removed; pending/uncertain locks, scoped
+acknowledgement and account authorization remain enforced. The retired unavailable
+notice is removed and README describes exact-state confirmation and modern Undo.
+
+New RED regressions establish enabled popup dispatch and worker Trash → Undo
+after explicit acknowledgement, while retaining lock preservation and no provider
+access for locked targets. Node 24 `npm ci` reports zero vulnerabilities and
+`npm run verify` passes all 255 tests. Diff review found no blocker in control
+restoration, account scoping, exact member validation, Undo targeting or diagnostic
+privacy. No mail content or session credentials were copied into release records.
+
+The actual repository-root unpacked extension was loaded in the authorized Chrome
+test profile. Runtime inspection found 28 available Trash controls, no stale
+unavailable notice and zero current uncertainty locks. No mailbox action was
+performed in this final inspection. Provider behavior is supported by the owner
+acceptance on corrected candidate `653b56a`; the final control-restoration diff
+was checked by automated regressions and this runtime inspection. Worker-restart
+Undo evidence remains from the preceding candidate, as disclosed above.
+
+If Gmail's private protocol changes, unrecognized state retains an uncertainty
+lock rather than replaying a write. Reverting the control-restoration commit
+reinstates containment without deleting saved recovery records.
