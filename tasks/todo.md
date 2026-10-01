@@ -37,7 +37,8 @@ Likely files: popup.js and popup-ui.test.js.
 - [x] Node 24 npm ci / npm run verify and git diff --check pass.
 - [x] Browser checks and code review complete; fresh acceptance record exists.
 - [ ] Owner tests #16 with real accounts beyond three deletes and explicit recovery.
-- [ ] Owner tests #15 with Gmail already open; Chrome/OS/candidate recorded.
+- [x] Owner tests #15 with Gmail already open; Chrome/OS/candidate recorded.
+  Evidence: `docs/acceptance/2026-10-01-gmail-read-refresh-guidance.md` (owner-reported pass on `17699f8`, 2026-10-01; Chrome/OS not supplied).
 
 ## Owner follow-up — repeated recovery rows
 - [x] Thirty locks produce one counted row per account and one explicit button.
