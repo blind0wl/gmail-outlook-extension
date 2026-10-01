@@ -69,3 +69,14 @@ The repeated unconfirmed-result warnings remain unresolved: successful provider
 moves were reported as uncertain. Full fresh repeated-action acceptance in both
 accounts remains pending, as does the separate intermittent missing heading.
 The owner has supplied the browser/OS, but the loaded commit remains unverified.
+
+## Fresh four-action reproduction — 2026-10-01
+
+The owner next deleted four conversations in the extension, verified that all
+four moved to Trash in Gmail, and reported that the extension stopped further
+deletion with four unconfirmed actions and an “I’ve checked” button. The button
+has not yet been pressed. This is fresh evidence that provider moves succeed
+while the extension fails to confirm them; full #16 acceptance fails. Whether
+unrelated cards are actually disabled or only the recovery notice is blocking
+the owner's workflow is not yet established. The next requested evidence is the
+existing content-free `gmail-mail-action` worker events for those four writes.
