@@ -261,9 +261,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
   async function actOnMail(key, action) {
     if (pendingMailActions.has(key)) return;
+    var actionItem = items.find(function (item) { return item.key === key; }) || mailActions[key]?.item;
+    var unconfirmedMessage = "The result could not be confirmed. Check this action in your mailbox, then choose “I’ve checked” to unlock it. Other mail is still available.";
     pendingMailActions.add(key);
     delete mailErrors[key];
-    if (action === "read" || action === "trash") mailFeedback.set(key, { action: action, item: items.find(function (item) { return item.key === key; }), confirmed: false });
+    if (action === "read" || action === "trash") mailFeedback.set(key, { action: action, item: actionItem, confirmed: false });
     setStatus(action === "read" ? "Marking as read…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
     renderHeader();
     renderList();
@@ -273,7 +275,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (!result?.ok) {
         mailFeedback.delete(key);
         var code = result?.code;
-        mailErrors[key] = code === "check-mailbox" ? "The result could not be confirmed. Check your mailbox before acting again."
+        mailErrors[key] = code === "check-mailbox" ? unconfirmedMessage
+          : code === "gmail-trash-unavailable" ? "Gmail Trash is temporarily unavailable. Use Gmail to manage Trash."
           : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
           : code === "undo-expired" ? "Undo expired. Restore this mail in your mailbox."
           : "Could not complete the action. Check the account’s sign-in in Settings, then try again.";
@@ -282,11 +285,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;
         if (action === "undo") mailFeedback.delete(key);
         settleMailFeedback();
-        setStatus(action === "acknowledge" ? "Action lock cleared. Refresh to check your inbox." : action === "read" ? "Marked as read in your mailbox." : action === "trash" ? "Moved to Trash. Undo is available below." : "Restored to your inbox.", "ok");
+        var readMessage = actionItem?.provider === "gmail"
+          ? "Marked as read in Gmail. If an open Gmail page still shows unread, refresh that page."
+          : "Marked as read in your mailbox.";
+        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash. Undo is available in Mailbox recovery." : "Restored to your inbox.", "ok");
       }
     } catch {
       mailFeedback.delete(key);
-      mailErrors[key] = "The result could not be confirmed. Check your mailbox before acting again.";
+      mailErrors[key] = unconfirmedMessage;
       setStatus(mailErrors[key], "error");
     } finally {
       pendingMailActions.delete(key);
@@ -295,24 +301,78 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       renderUndo();
     }
   }
+  var pendingRecoveryAccounts = new Set();
+  async function acknowledgeAccount(acctKey, entries, address) {
+    if (pendingRecoveryAccounts.has(acctKey)) return;
+    pendingRecoveryAccounts.add(acctKey);
+    setStatus("Unlocking checked actions…", "progress");
+    renderUndo();
+    var unlocked = 0;
+    try {
+      for (var entry of entries) {
+        try {
+          var result = await chrome.runtime.sendMessage({ type: "mail-action", key: entry[0], action: "acknowledge", expectedExpiresAt: entry[1].expiresAt ?? null });
+          if (result?.ok) {
+            unlocked++;
+            // A storage update may already have removed this lock or installed
+            // a newer one. Only remove the exact record the user checked.
+            if (mailActions[entry[0]] === entry[1]) delete mailActions[entry[0]];
+            delete mailErrors[entry[0]];
+          }
+        } catch { /* Keep failed locks available for explicit recovery. */ }
+      }
+      var remaining = entries.length - unlocked;
+      var message = unlocked + " checked " + (unlocked === 1 ? "action" : "actions") + " unlocked for " + address + ". ";
+      setStatus(message + (remaining ? "Could not unlock " + remaining + "; try “I’ve checked” again." : "Refresh to check your inbox."), remaining ? "error" : "ok");
+    } finally {
+      pendingRecoveryAccounts.delete(acctKey);
+      renderList();
+      renderUndo();
+    }
+  }
   function renderUndo() {
     var list = document.getElementById("mail-undo");
     var focused = document.activeElement?.dataset.undoKey;
+    var focusedAccount = document.activeElement?.dataset.recoveryAccount;
     list.replaceChildren();
+    var groups = new Map();
     Object.entries(mailActions).forEach(function (entry) {
       var key = entry[0], record = entry[1];
-      var uncertain = ["pending", "uncertain"].includes(record.state);
-      if (pendingMailActions.has(key) || (!uncertain && (record.state !== "undo" || record.expiresAt < Date.now())) || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
+      if (pendingMailActions.has(key) || !["pending", "uncertain"].includes(record.state) || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
+      var acctKey = accountKey(record.item);
+      if (!groups.has(acctKey)) groups.set(acctKey, []);
+      groups.get(acctKey).push(entry);
+    });
+    groups.forEach(function (entries, acctKey) {
+      var address = entries[0][1].item.account;
+      var count = entries.length;
       var row = document.createElement("li");
       var text = document.createElement("span");
-      text.textContent = (uncertain ? "Check your mailbox before acting again · " : "Moved to Trash · ") + record.item.account;
+      text.textContent = count + " unconfirmed " + (count === 1 ? "action" : "actions") + " · " + address + ". Check " + (count === 1 ? "this action" : "all these actions") + " in your mailbox before unlocking. Other mail is still available.";
+      var button = document.createElement("button");
+      button.type = "button";
+      button.textContent = pendingRecoveryAccounts.has(acctKey) ? "Unlocking…" : "I’ve checked";
+      button.dataset.recoveryAccount = acctKey;
+      button.setAttribute("aria-label", "I checked all " + count + " actions in my mailbox for " + address + "; unlock those actions");
+      button.setAttribute("aria-disabled", String(pendingRecoveryAccounts.has(acctKey)));
+      button.addEventListener("click", function () { void acknowledgeAccount(acctKey, entries, address); });
+      row.append(text, button);
+      list.appendChild(row);
+      if (focusedAccount === acctKey) button.focus();
+    });
+    Object.entries(mailActions).forEach(function (entry) {
+      var key = entry[0], record = entry[1];
+      if (pendingMailActions.has(key) || record.state !== "undo" || record.expiresAt < Date.now() || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
+      var row = document.createElement("li");
+      var text = document.createElement("span");
+      text.textContent = "Moved to Trash · " + record.item.account;
       var undo = document.createElement("button");
       undo.type = "button";
-      undo.textContent = uncertain ? "I’ve checked" : "Undo";
+      undo.textContent = "Undo";
       undo.dataset.undoKey = key;
-      undo.setAttribute("aria-label", (uncertain ? "I checked my mailbox; allow further actions for " : "Restore ") + (record.item.subject || "mail") + " to Inbox for " + record.item.account);
+      undo.setAttribute("aria-label", "Restore " + (record.item.subject || "mail") + " to Inbox for " + record.item.account);
       undo.setAttribute("aria-disabled", String(pendingMailActions.has(key)));
-      undo.addEventListener("click", function () { void actOnMail(key, uncertain ? "acknowledge" : "undo"); });
+      undo.addEventListener("click", function () { void actOnMail(key, "undo"); });
       row.append(text, undo);
       list.appendChild(row);
       if (focused === key) undo.focus();
@@ -372,11 +432,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       group.appendChild(heading);
       var state = acctState;
       var status = acct.enabled === false ? "Paused" : accountStatusLabel(acct, state);
-      if (status) {
+      if (status || acct.provider === "gmail") {
         var note = document.createElement("div");
         note.className = "account-note";
         var label = document.createElement("span");
-        label.textContent = status;
+        label.textContent = acct.provider === "gmail"
+          ? (status ? status + ". " : "") + "Gmail Trash is temporarily unavailable. Use Gmail to manage Trash."
+          : status;
         note.appendChild(label);
         if (state.needsSignIn && acct.enabled !== false) {
           var recovery = document.createElement("button");
@@ -479,9 +541,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           button.className = "card-icon" + (action === "trash" ? " card-trash" : "");
           button.dataset.mailAction = action;
           var label = action === "read" ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + " as read" : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
-          button.title = label;
+          var trashUnavailable = action === "trash" && item.provider === "gmail";
+          button.title = trashUnavailable ? "Gmail Trash is temporarily unavailable. Use Gmail to manage Trash." : label;
           button.setAttribute("aria-label", label + ": " + (item.subject || "(no subject)") + " for " + item.account);
-          button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || (action === "read" && item.unread !== true)));
+          button.setAttribute("aria-disabled", String(trashUnavailable || pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || (action === "read" && item.unread !== true)));
           button.appendChild(actionIcon(action));
           button.addEventListener("click", function () { if (button.getAttribute("aria-disabled") !== "true") void actOnMail(item.key, action); });
           quick.appendChild(button);

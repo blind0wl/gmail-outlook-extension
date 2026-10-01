@@ -439,6 +439,18 @@ test("cancelled outlook add names the cancelled step instead of blaming the addr
   assert.match(err.textContent, /cancelled/);
 });
 
+test('Gmail Trash is visibly unavailable and cannot send actions',async()=>{
+  const {document,messages}=await workspaceFixture();
+  const trash=document.querySelector('[data-mail-action="trash"]');
+  assert.equal(trash.getAttribute('aria-disabled'),'true');
+  assert.match(trash.title,/temporarily unavailable.*Gmail/i);
+  assert.match(document.querySelector('.account-note').textContent,/Gmail Trash is temporarily unavailable/);
+  trash.click();await tick();
+  assert.equal(messages.length,0);
+  assert.ok(document.querySelector('.card'),'blocked click leaves mail visible');
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-disabled'),'false');
+});
+
 test('hover actions use provider-specific labels and resist duplicate clicks', async () => {
   const { document, messages, change } = await workspaceFixture();
   const read = document.querySelector('[data-mail-action="read"]');
@@ -468,6 +480,8 @@ test('mailbox feedback is immediate while worker is pending and rolls back a fai
   assert.ok(document.querySelector('.card').classList.contains('read'),'stale cache cannot restore unread while pending');
   finish({ok:false,code:'provider-error'});await tick();
   assert.equal(document.querySelector('.card').classList.contains('read'),false,'failure restores unread card');
+  const outlook={provider:'outlook',account:'outlook@example.test'};
+  change({accounts:{newValue:[outlook]},mailCache:{newValue:[{key:'outlook:outlook%40example.test:1',...outlook,date:Date.now(),unread:true}]}});
   document.querySelector('[data-mail-action="trash"]').click();
   assert.equal(document.querySelector('.card'),null,'Trash hides card before worker response');
   finish({ok:false,code:'provider-error'});await tick();
@@ -509,4 +523,100 @@ test('read cache arriving before action response settles feedback and allows lat
   assert.equal(document.querySelector('.card'),null);
   change({mailCache:{newValue:[cached]}});
   assert.ok(document.querySelector('.card'),'future unread state can appear after cache/response handoff');
+});
+
+test('uncertain recovery precedes mail, names its scope and leaves unrelated actions usable',async()=>{
+  const {document,data,messages,change}=await workspaceFixture();
+  const original=data.mailCache[0];
+  const unrelated={...original,key:'gmail:work%40example.com:2',subject:'Other conversation'};
+  change({mailCache:{newValue:[original,unrelated]},mailActions:{newValue:{[original.key]:{state:'uncertain',item:{key:original.key,provider:'gmail',account:original.account}}}}});
+  const recovery=document.getElementById('mail-undo');
+  assert.equal(recovery.nextElementSibling.id,'inbox-list','recovery is available before a long inbox');
+  assert.match(recovery.getAttribute('aria-label'),/recovery/i);
+  assert.match(recovery.textContent,/1 unconfirmed action/i);
+  assert.match(recovery.textContent,/Other mail is still available/);
+  const locked=document.querySelector(`[data-key="${original.key}"] [data-mail-action="trash"]`);
+  const usable=document.querySelector(`[data-key="${unrelated.key}"] [data-mail-action="read"]`);
+  assert.equal(locked.getAttribute('aria-disabled'),'true');
+  assert.equal(usable.getAttribute('aria-disabled'),'false');
+  usable.click();await tick();
+  assert.equal(messages.at(-1).key,unrelated.key);
+  document.querySelector('[data-recovery-account]').click();await tick();
+  assert.equal(messages.at(-1).action,'acknowledge');
+  assert.equal(messages.at(-1).key,original.key);
+});
+
+test('confirmed Gmail read explains open-page refresh even when cache arrives first',async()=>{
+  const {document,change,data,tabs}=await workspaceFixture();
+  const cached=data.mailCache[0];
+  let finish;
+  chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  document.querySelector('[data-mail-action="read"]').click();
+  change({mailCache:{newValue:[]}});
+  finish({ok:true});await tick();
+  assert.equal(document.querySelector('.card'),null);
+  assert.match(document.getElementById('lifecycle-message').textContent,/Marked as read.*open Gmail.*refresh/i);
+  assert.equal(tabs.length,0,'read must not open or reload provider tabs');
+  change({mailCache:{newValue:[cached]}});
+});
+
+test('Gmail refresh guidance is not shown for failed reads or Outlook',async()=>{
+  const {document}=await workspaceFixture();
+  chrome.runtime.sendMessage=async()=>({ok:false,code:'check-mailbox'});
+  document.querySelector('[data-mail-action="read"]').click();await tick();
+  const error=document.getElementById('lifecycle-message').textContent;
+  assert.doesNotMatch(error,/Marked as read|open Gmail.*refresh/i);
+  assert.match(error,/I’ve checked/);
+  const outlook={provider:'outlook',account:'studio@example.test'};
+  const fixture=await workspaceFixture({accounts:[outlook],mailCache:[{...outlook,key:'outlook:studio%40example.test:one',unread:true,date:Date.now()}]});
+  fixture.document.querySelector('[data-mail-action="read"]').click();await tick();
+  assert.equal(fixture.document.getElementById('lifecycle-message').textContent,'Marked as read in your mailbox.');
+});
+
+test('thirty uncertain actions use one account recovery button and acknowledgement sends no mutations',async()=>{
+  const {document,data,messages,change}=await workspaceFixture();
+  const account=data.accounts[0];
+  const other={provider:'gmail',account:'other@example.test'};
+  const records=Object.fromEntries(Array.from({length:30},(_,i)=>['locked-'+i,{state:'uncertain',item:{...account,key:'locked-'+i}}]));
+  records.foreign={state:'uncertain',item:{...other,key:'foreign'}};
+  records.undo={state:'undo',item:{...account,key:'undo',subject:'Recoverable'},expiresAt:Date.now()+60000};
+  change({accounts:{newValue:[account,other]},mailActions:{newValue:records}});
+  const recovery=document.querySelector(`[data-recovery-account="gmail:${account.account}"]`);
+  assert.ok(recovery);
+  assert.equal(document.querySelectorAll('[data-recovery-account]').length,2);
+  assert.equal(document.getElementById('mail-undo').children.length,3,'two account recoveries plus individual Undo');
+  assert.match(recovery.closest('li').textContent,/30 unconfirmed actions/);
+  assert.match(recovery.getAttribute('aria-label'),/all 30 actions/);
+  recovery.click();await tick();
+  assert.equal(messages.length,30);
+  assert.ok(messages.every(msg=>msg.action==='acknowledge'&&msg.key.startsWith('locked-')));
+  assert.equal(document.querySelectorAll('[data-recovery-account]').length,1);
+  assert.ok(document.querySelector('[data-undo-key="undo"]'),'Undo remains independent');
+  assert.match(document.getElementById('lifecycle-message').textContent,/30.*unlocked/);
+});
+
+test('account recovery resists duplicate clicks, keeps failures and leaves new uncertainty for another check',async()=>{
+  const {document,data,messages,change}=await workspaceFixture();
+  const account=data.accounts[0];
+  const first={state:'uncertain',item:{...account,key:'first'}};
+  const failed={state:'uncertain',item:{...account,key:'failed'}};
+  change({mailActions:{newValue:{first,failed}}});
+  let finish;
+  chrome.runtime.sendMessage=async msg=>{
+    messages.push(msg);
+    if(msg.key==='first')await new Promise(resolve=>finish=resolve);
+    if(msg.key==='failed')throw Error('connection interrupted');
+    return {ok:true};
+  };
+  document.querySelector('[data-recovery-account]').click();
+  const busy=document.querySelector('[data-recovery-account]');
+  assert.equal(busy.getAttribute('aria-disabled'),'true');
+  busy.click();assert.equal(messages.length,1);
+  const newLock={state:'uncertain',item:{...account,key:'new'}};
+  change({mailActions:{newValue:{first,failed,new:newLock}}});
+  finish();await tick();
+  assert.deepEqual(messages.map(msg=>msg.key),['first','failed'],'the click checks only its original snapshot');
+  assert.match(document.querySelector('[data-recovery-account]').closest('li').textContent,/2 unconfirmed actions/);
+  assert.equal(document.querySelector('[data-recovery-account]').getAttribute('aria-disabled'),'false');
+  assert.match(document.getElementById('lifecycle-message').textContent,/1.*unlocked.*could not.*unlock/i);
 });

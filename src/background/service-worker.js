@@ -430,8 +430,18 @@ export async function handleMailboxAction(msg, deps = {}) {
     const item = ["undo", "acknowledge"].includes(msg.action) ? prior?.item : getInbox().find(i => i.key === msg.key);
     const acct = accounts.find(a => item && accountKey(a) === accountKey(item));
     if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct))) return { ok: false, code: "sign-in" };
+    // Owner reproduction: Gmail Trash can make previously searchable mail
+    // disappear without verified Trash presence. Block before any provider
+    // access or journal/cache mutation until this transport is validated.
+    if (acct.provider === "gmail" && msg.action === "trash") return { ok: false, code: "gmail-trash-unavailable" };
     if (msg.action === "acknowledge") {
-      if (!prior || pendingMail.size > 1) return { ok: false, code: "pending" };
+      // The poll queue serializes journal changes. Unrelated queued actions
+      // must not prevent the user from releasing this conversation's lock.
+      if (!prior) return { ok: false, code: "pending" };
+      if (!["pending", "uncertain"].includes(prior.state)) return { ok: false, code: "check-mailbox" };
+      // Account recovery checks a snapshot; another popup may have replaced a
+      // lock meanwhile. Never acknowledge a later action on the same mail.
+      if (msg.expectedExpiresAt !== undefined && msg.expectedExpiresAt !== (prior.expiresAt ?? null)) return { ok: false, code: "check-mailbox" };
       await patchMailAction(msg.key, null);
       return { ok: true };
     }

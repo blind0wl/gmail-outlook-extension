@@ -6,6 +6,7 @@ import {
   fetchGmailMessages,
   GmailFetchError,
 } from "../src/providers/gmail.js";
+import { mergeMessages, reconcileAccount, getInbox, pruneCache } from "../src/store/cache.js";
 
 const SECRET = "Q3 report supersecret";
 
@@ -213,6 +214,33 @@ test("gmail matched account with no unread returns empty success", async () => {
     assert.equal(out.complete, true);
   } finally {
     restore();
+  }
+});
+
+test("gmail refresh restores five recent conversations omitted by a stale HTTP feed", async () => {
+  const account = "second@gmail.com";
+  const entries = Array.from({ length: 6 }, (_, i) => ({
+    ...WORK, id: "aabbccdd" + i, date: new Date().toISOString(),
+  }));
+  const cachedFeed = feedXml(account, entries.slice(0, 1));
+  const currentFeed = feedXml(account, entries);
+  const requests = [];
+  const restore = stubFetch(async (url, init) => {
+    requests.push(init);
+    if (url.includes("/u/0/")) return ok(feedXml("first@gmail.com", []));
+    if (url.includes("/u/1/")) return ok(init.cache === "no-store" ? currentFeed : cachedFeed);
+    return { ok: false, status: 404 };
+  });
+  pruneCache(Infinity);
+  try {
+    mergeMessages([normalizeGmailMessage({ ...entries[0], date: Date.now() }, account)]);
+    const result = await fetchGmailMessages(null, 0, account);
+    reconcileAccount({ provider: "gmail", account }, result, result.complete);
+    assert.equal(getInbox().length, 6, "Refresh restores all five missing recent conversations");
+    assert.ok(requests.every(init => init.cache === "no-store"), "all slot probes bypass HTTP cache");
+  } finally {
+    restore();
+    pruneCache(Infinity);
   }
 });
 

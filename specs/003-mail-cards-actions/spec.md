@@ -89,3 +89,38 @@ An unrecognized Gmail write response triggers one uncached unread-feed GET.
 Only a complete feed for the owning account can establish absence. Verified
 absence removes the stale cache card, but does not prove a Trash move or enable
 Undo: the uncertain write lock remains, and no POST is automatically repeated.
+
+## 2026-10-01 Gmail follow-up candidate (#15 / #16)
+
+Recovery and Undo precede the mail list. Uncertain writes lock only their
+conversation/message; acknowledgement is serialized with writes and must not
+be blocked by an unrelated queued action. Gmail session ownership/key GETs
+bypass the HTTP cache, and the action token is acquired after those requests.
+Worker diagnostics use fixed fields without mail content, account addresses,
+message IDs, URLs or session keys. Unknown responses retain explicit recovery.
+
+Confirmed Gmail read feedback explains that an open Gmail page may need
+refreshing; no provider tab is automatically reloaded. The owner also reported
+second-account Trash leaving conversations in Inbox after refreshing Gmail.
+The token-order change is a candidate mitigation, not a proven resolution of
+that provider failure. Fresh acceptance remains pending in
+docs/acceptance/2026-10-01-gmail-action-recovery.md.
+
+Owner follow-up: dozens of identical recovery rows made the popup unusable.
+Unconfirmed records now group by account with a count. One explicit “I’ve checked”
+acknowledges only the records captured by that button, after checking all those
+actions in the owning mailbox. Failed acknowledgements/new records remain;
+no provider write is replayed. Timestamp and state checks protect newer locks
+and successful Undo. Fresh acceptance is recorded in
+docs/acceptance/2026-10-01-grouped-mail-recovery.md.
+
+## 2026-10-01 Gmail Trash containment
+
+The owner later reproduced a conversation visible in Gmail search before an
+extension Trash attempt and absent afterward, without verified Trash presence.
+Permanent deletion is not established. Gmail Trash is temporarily disabled in
+the popup and rejected by the worker before provider access or cache/journal
+mutation. This is an explicit temporary deviation from the approved Trash scope
+while the private transport is investigated; it does not widen the permitted
+actions. Existing recovery records remain saved, and no action is replayed.
+See docs/acceptance/2026-10-01-gmail-trash-containment.md for fresh verification.

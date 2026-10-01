@@ -10,6 +10,11 @@ bold sender/subject and an automatic preview capped at three lines. Hover or
 keyboard focus reveals mark-as-read and Trash actions. Gmail uses the existing
 browser login and acts on **whole conversations**; Outlook acts on individual
 messages through Graph. Trash is recoverable through Undo for ten minutes.
+**Gmail Trash is currently disabled in both the popup and worker.** The owner
+reproduced a conversation visible in Gmail search before an extension Trash
+attempt and absent afterward, without verified Trash presence. Use Gmail itself
+for Trash while this is investigated. Existing recovery records remain saved;
+this containment does not restore previously affected mail.
 **Open** still opens the provider and retains the extension’s local read flag.
 Full-message reading inside the extension, compose/send, archive and search
 remain outside this change.
@@ -18,6 +23,18 @@ Mailbox actions are an implementation candidate: real-account acceptance is
 pending, especially Gmail’s private session protocol and legacy Undo endpoint.
 Unrecognized responses never report success; check your mailbox, then use
 **I’ve checked** to unlock further actions. No automatic mutation retry occurs.
+Recovery and Undo appear above the mail list. Saved unconfirmed actions use one
+counted row per account; check all those actions in the mailbox before using
+**I’ve checked** to unlock them. Individual Undo remains separate.
+Only the affected conversation or
+message is locked; other mail remains usable. After a confirmed Gmail read, the
+popup explains that an already-open Gmail page may need refreshing.
+
+The Gmail follow-up candidates refresh session checks and retain content-free
+action diagnostics. Earlier disputed moves were verified in Trash after
+refreshing a stale Gmail page, but the later disappearance report requires
+[Gmail Trash containment](docs/acceptance/2026-10-01-gmail-trash-containment.md).
+#16 remains open; no further real-mail Trash reproduction is requested.
 
 ## Setup
 

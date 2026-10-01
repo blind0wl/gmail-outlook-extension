@@ -97,3 +97,52 @@ test('unrecognized Gmail acknowledgement reconciles only a complete owning unrea
     assert.equal(posts,1);
   }
 });
+
+test('Gmail takes the action token after uncached session requests can rotate cookies',async()=>{
+  const {mutateGmailConversation}=await import('../src/providers/mail-actions.js');
+  let cookie='old-session';
+  let posts=0;
+  globalThis.chrome={cookies:{get:async()=>({value:cookie})}};
+  globalThis.fetch=async(url,options)=>{
+    if(options.method==='POST') {
+      posts++;
+      assert.equal(new URL(url).searchParams.get('at'),'current-session');
+      return {ok:true,status:200,text:async()=>'["ar",1,"OK"]'};
+    }
+    assert.equal(options.cache,'no-store','ownership/session reads must not use cached pages');
+    if(url.endsWith('/feed/atom'))return {ok:true,status:200,text:async()=>'<feed><title>Gmail - Inbox for owner@example.test</title></feed>'};
+    cookie='current-session';
+    return {ok:true,status:200,text:async()=>'GM_ID_KEY="key"'};
+  };
+  assert.deepEqual(await mutateGmailConversation('owner@example.test','abcdef','trash'),{id:'abcdef'});
+  assert.equal(posts,1);
+});
+
+test('Gmail write diagnostics classify replies without logging mail or credentials',async()=>{
+  const {mutateGmailConversation}=await import('../src/providers/mail-actions.js');
+  let saved={};
+  globalThis.chrome={cookies:{get:async()=>({value:'private-csrf'})},storage:{local:{
+    get:async()=>structuredClone(saved),set:async value=>{saved=structuredClone(value);}
+  }}};
+  const captured=[];
+  const original=console.info;
+  console.info=value=>captured.push(JSON.parse(value));
+  try {
+    for(const reply of ['["ar",1,"Private subject"]','<script>https://mail.google.com/mail/u/0/spreauth</script>','<html>Private mail and credentials</html>']) {
+      globalThis.fetch=async(url,options)=>({ok:true,status:200,text:async()=>options.method==='POST'?reply:url.endsWith('/feed/atom')?'<feed><title>Gmail - Inbox for owner@example.test</title><fullcount>0</fullcount></feed>':'GM_ID_KEY="private-key"'});
+      if(reply.startsWith('["ar"'))await mutateGmailConversation('owner@example.test','abcdef','trash');
+      else await assert.rejects(mutateGmailConversation('owner@example.test','abcdef','trash'),e=>e.uncertain===true);
+    }
+  } finally {console.info=original;}
+  assert.equal(captured.length,3);
+  assert.deepEqual(captured.map(event=>event.response),['acknowledged','sign-in-challenge','unrecognized']);
+  assert.deepEqual(captured.map(event=>event.outcome),['acknowledged','uncertain','uncertain']);
+  assert.deepEqual(saved.mailActionDiagnostics,captured,'actual provider outcomes survive console loss');
+  for(const event of captured) {
+    assert.equal(event.event,'gmail-mail-action');
+    assert.equal(event.entryPoint,'popup-mail-action');
+    assert.match(event.requestId,/^[0-9a-f-]{36}$/);
+    assert.equal(event.action,'trash');assert.equal(event.slot,0);assert.equal(event.status,200);
+    assert.doesNotMatch(JSON.stringify(event),/Private|private|owner|abcdef|https|csrf/);
+  }
+});
