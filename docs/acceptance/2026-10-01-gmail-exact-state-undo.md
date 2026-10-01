@@ -111,6 +111,16 @@ The lock remains saved. A new owner-run three-message Trash → Undo cycle is
 still required on this corrected candidate; mixed-folder and second-account
 acceptance remain pending. Repository containment remains enabled.
 
+### Corrected three-message candidate — owner pass, 2026-10-01
+
+For corrected candidate `653b56a`, the owner reported “all passed” after the
+checklist to restore the saved conversation in Gmail, acknowledge the existing
+lock, refresh, and perform extension Trash → Undo. This records an owner-reported
+pass for the three-message conversation returning to Inbox with unread status
+preserved and no reported error. No additional agent-run mailbox operations were
+performed. Mixed-folder and second-account acceptance remain pending; repository
+containment stays enabled.
+
 The owner offered to run remaining tests to reduce agent usage. A clean isolated
 manual-test copy enables Trash for this authorized test profile only; the main
 repository's containment remains unchanged. The test copy contains no E2E helpers.
