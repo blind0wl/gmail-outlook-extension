@@ -12,7 +12,7 @@ const mailCache = subjects.map((subject, i) => ({
   key: `synthetic-${i}`, provider: accounts[i < 2 ? 0 : i - 1].provider,
   account: accounts[i < 2 ? 0 : i - 1].account,
   from: ["Reading room", "Morgan Lee", "The studio", "Alex Chen"][i], subject,
-  snippet: "A few details to catch up on, with everything you need for the week ahead.",
+  snippet: "A few details to catch up on, with everything you need for the week ahead. The reading room opens early on Thursday, and the updated notes include the complete schedule, suggested reading, and a few questions for our next conversation. There is more to explore in your mailbox.",
   date: Date.now() - i * 3600000, unread: true,
   webLink: "https://outlook.live.com/mail/deeplink/read/synthetic",
 }));
@@ -35,6 +35,20 @@ Object.defineProperty(globalThis, "chrome", { configurable: true, value: {
   runtime: { sendMessage: async message => { requests.push(message);
     if (params.has("pending")) await new Promise(resolve => setTimeout(resolve, 5000));
     if (params.has("action-error")) throw Error("Synthetic action error");
+    if (message.type === "mail-action") {
+      const records = { ...(data.mailActions || {}) };
+      const item = data.mailCache.find(i => i.key === message.key);
+      if (message.action === "read" && item) update({ mailCache: data.mailCache.map(i => i.key === message.key ? { ...i, unread: false, localRead: false } : i) });
+      if (message.action === "trash" && item) {
+        records[message.key] = { state: "undo", item, id: message.key, expiresAt: Date.now() + 600000 };
+        update({ mailCache: data.mailCache.filter(i => i.key !== message.key), mailActions: records });
+      }
+      if (message.action === "undo" && records[message.key]) {
+        const restored = records[message.key].item;
+        delete records[message.key];
+        update({ mailCache: [...data.mailCache, restored], mailActions: records });
+      }
+    }
     if (message.type === "remove-account") update({ accounts: data.accounts.filter(a => a.account !== message.account) });
     return { ok: true };
   } }, tabs: { create: async ({url}) => { requests.push({ type: "synthetic-open", url }); } },

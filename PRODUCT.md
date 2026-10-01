@@ -76,3 +76,18 @@ No real addresses or mail content should be used in design examples.
 - Treat the provider as the source of truth for requested mailbox actions.
 - Keep data in the browser profile and preserve keyboard access.
 - Present design choices and previews for owner approval before UI edits.
+
+## Owner-approved card/actions update — 2026-10-01
+
+The owner requested separate rounded email cards, bold sender and subject for
+all mail, automatic text capped at three lines, a wider popup, and read/Trash
+icons revealed on hover. Keyboard focus exposes the same controls. Full-message
+reading inside the extension is deferred; provider Open remains available.
+
+The owner explicitly authorized real mailbox writes, rejected Google Cloud/OAuth
+setup for Gmail, and accepted whole-conversation Gmail actions. This supersedes
+the read-only/staged OAuth statements above for this candidate. Gmail keeps its
+browser session; Outlook requests Mail.ReadWrite. A worker-owned ten-minute Undo
+journal survives popup close; uncertain results require checking the mailbox.
+Actual provider acceptance is pending, especially private Gmail session/Undo
+compatibility. No send, permanent-delete, backend, analytics or popup API calls.

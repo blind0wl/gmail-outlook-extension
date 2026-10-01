@@ -14,11 +14,11 @@ import {
 // chrome.storage.session under MS_SESSION_KEY and clear on sign out.
 //
 // Runtime scopes (never in manifest.json):
-//   User.Read, Mail.Read, offline_access
-// Never request Mail.Read.Shared (work accounts) or send/write scopes.
+//   User.Read, Mail.ReadWrite, offline_access
+// Never request Mail.Read.Shared (work accounts) or send scopes.
 
 export const MS_AUTHORITY = "https://login.microsoftonline.com/consumers";
-export const MS_SCOPES = ["User.Read", "Mail.Read", "offline_access"];
+export const MS_SCOPES = ["User.Read", "Mail.ReadWrite", "offline_access"];
 export const MS_SESSION_KEY = "auth.microsoft.graph";
 export const GRAPH_ME_URL =
   "https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName";

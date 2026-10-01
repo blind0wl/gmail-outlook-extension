@@ -17,8 +17,10 @@ ai-dev-system workflow or source of mandatory routing and approval gates.
 - Run `npm run verify` for JavaScript syntax checks plus all tests.
 - The unpacked extension loads directly from the repository root; no build
   or development server is required. Setup and architecture are in README.md.
-- Keep the popup cache-only, provider access read-only, and diagnostics free
-  of mail content and credentials. Preserve per-account error isolation.
+- Keep the popup cache-only and diagnostics free of mail content and credentials.
+  Provider writes are limited to the owner-approved read/Trash/Undo scope in
+  specs/003-mail-cards-actions/spec.md (2026-10-01); no send or permanent delete.
+  Preserve per-account error isolation.
 - CI does not replace real-account Chrome acceptance. Record a new dated
   acceptance result for each feature/bug candidate; do not reuse historical ticks.
 - The v1 product spec owns scope; the original plan contains historical steps.

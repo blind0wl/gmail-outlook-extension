@@ -16,13 +16,13 @@ replaces the view. Same-provider accounts never share a combined container.
 
 OWN-WORLD: Approved Midnight blue-grey/teal, Slate tinted blue-grey/blue and Signal
 silver/amber token families; normal-case system typography, crisp authored icons,
-flat message rows inside account panels and restrained inset Settings sections.
+separate rounded message cards beneath account headers and restrained inset Settings sections.
 
-STORY: Identify account and unread mail, preview cached text, Open the provider;
-manage accounts/alerts/sound and choose a remembered theme in Settings. Real
-read/unread and Trash/Undo controls belong to the later mailbox-actions stage.
+STORY: Identify account and unread mail, scan three-line cached text, Open the provider;
+manage accounts/alerts/sound and choose a remembered theme in Settings. Hover/focus icons mark read or move to Trash; Gmail uses conversations and its
+browser session, Outlook uses individual messages. Provider acceptance is pending.
 
-FIRST VIEWPORT: Compact 404px maximum-width popup; toolbar title/count, Refresh
+FIRST VIEWPORT: Compact 480px maximum-width popup; toolbar title/count, Refresh
 and Settings, then provider filters and stacked full-address account headers
 carrying visible checked times.
 First account's newest mail leads; later accounts remain in vertical order.

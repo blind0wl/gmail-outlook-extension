@@ -19,7 +19,7 @@
   --hover: #d9dee1; --accent: #765014; --danger: #a33132;
   --tag: #f2dfb4; --control: #d9dee1; --on-accent: #ffffff;
 }
-html { width: 404px; max-width: 100%; background: var(--bg); }
+html { width: 480px; max-width: 100%; background: var(--bg); }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body {
@@ -48,35 +48,31 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .pills button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 #inbox-list, .account-mail, #account-controls, #sound-accounts { list-style: none; margin: 0; padding: 0; }
 #inbox-list { display: flex; flex-direction: column; gap: 12px; }
-.account-section { background: var(--panel); border-radius: 12px; overflow: hidden; }
-.account-heading { padding: 12px 14px; background: var(--header); }
+.account-section { min-width: 0; }
+.account-mail { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
+.account-heading { padding: 12px 14px; background: var(--header); border-radius: 12px; }
 .account-heading h2 { margin: 6px 0 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; font-weight: 600; }
 .account-heading-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; }
 .account-checked { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .badge, .account-count { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--tag); color: var(--text); }
 .account-count { color: var(--accent); background: transparent; font-variant-numeric: tabular-nums; }
-.card { position: relative; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0; padding: 10px 14px 10px 20px; }
-.card + .card { border-top: 1px solid var(--line); }
-.card-summary { display: block; flex: 1 1 0; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font-weight: 400; text-align: left; }
+.card { position: relative; padding: 12px 14px 10px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.card:hover, .card:focus-within { border-color: var(--muted); }
 .card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .card-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.card-head { display: block; flex-basis: 100%; min-width: 0; }
+.card-head { min-width: 0; }
 .card-subject, .card-snippet { display: block; min-width: 0; }
 .card-subject { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
-.card.read .card-subject, .card.read .card-sender { font-weight: 400; }
-.card-snippet { color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-snippet { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; color: var(--muted); margin-top: 4px; overflow: hidden; overflow-wrap: anywhere; white-space: normal; max-height: 4.5em; }
 .opened-tag { font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 0 4px; flex-shrink: 0; white-space: nowrap; }
 .unread-dot { position: absolute; left: 8px; top: 20px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .card.read .unread-dot { display: none; }
-.card-actions { display: flex; flex-basis: 100%; align-items: flex-start; gap: 8px; min-width: 0; }
+.card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; min-width: 0; }
 .card-open { flex-shrink: 0; align-self: flex-start; margin: 0; background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; }
-.card-preview { flex-basis: 100%; white-space: pre-wrap; overflow-wrap: anywhere; padding-top: 8px; }
-.preview-cue { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .mail-note { margin: 0; padding: 0 4px 8px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 #empty-setup { margin: 12px 4px 0; }
 .form-note { font-size: 13px; color: var(--muted); margin: 8px 0 0; overflow-wrap: anywhere; }
-.card-preview p { margin: 6px 0; }
 .account-note, .account-empty { margin: 0; padding: 12px 14px; overflow-wrap: anywhere; color: var(--muted); }
 .account-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .status-signin { color: var(--accent); background: transparent; }
@@ -136,3 +132,15 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 }
 
 #back-to-mail { white-space: nowrap; }
+
+.card-quick-actions { display: flex; gap: 4px; opacity: 0; pointer-events: none; }
+.card:hover .card-quick-actions, .card:focus-within .card-quick-actions { opacity: 1; pointer-events: auto; }
+.card-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 6px; background: transparent; border-color: transparent; }
+.card-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.card-trash:not([aria-disabled="true"]) { color: var(--danger); }
+.card-error { margin: 8px 0 0; color: var(--danger); }
+#mail-undo { list-style: none; margin: 12px 0 0; padding: 0; }
+#mail-undo li { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 8px 12px; background: var(--panel); border-radius: 12px; }
+#mail-undo span { min-width: 0; overflow-wrap: anywhere; }
+@media (hover: none) { .card-quick-actions { opacity: 1; pointer-events: auto; } }
+@media (forced-colors: active) { .card { border-color: CanvasText; } }

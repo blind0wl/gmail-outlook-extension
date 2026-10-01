@@ -123,8 +123,9 @@ components:
     textColor: "{colors.midnight-text}"
     rounded: "{rounded.panel}"
   mail-row:
-    backgroundColor: "transparent"
+    backgroundColor: "{colors.midnight-panel}"
     textColor: "{colors.midnight-text}"
+    rounded: "{rounded.panel}"
     padding: "12px 14px 10px 20px"
   email-input:
     backgroundColor: "{colors.midnight-control}"
@@ -217,7 +218,7 @@ uses muted 13px regular text alongside the title.
 
 ## Layout
 
-The popup is one column (404px maximum width) with a fixed-height flex shell
+The popup is one column (480px maximum width) with a fixed-height flex shell
 (`600px`). The intrinsic height must not depend on the initial viewport;
 automatically sized extension hosts can start at zero height. The toolbar stays outside the independently scrolling Mail
 or Settings viewport. View insets are 12px horizontally and 16px at the bottom;
@@ -225,15 +226,14 @@ the toolbar uses a 16px inset. Panels stack with 12px gaps. Account headers and
 mail rows use a 14px horizontal inset; rows reserve 20px on the left for the
 unread dot. Settings panels use a 14px inset.
 
-Account identity wraps; sender, subject and snippet collapse with a one-line
-ellipsis until preview text is expanded. Buttons and account actions wrap.
-Mail rows keep static headings above a snippet toggle and Open sharing one explicit actions row.
-Account headers show a visible per-account checked time from the worker-persisted
-stamp; failed or paused accounts show no stamp. Counts report provider unread mail
-with an opened-here suffix when mail was opened locally. A muted mail note states
-the same. A visible Preview cue labels the toggle and names its collapse state;
-the opened area shows the cached body text only, since sender and subject stay
-visible as headings.
+Account identity wraps. Sender and subject use bold weight and a one-line
+ellipsis; cached plain text is immediately visible with a three-line clamp and
+word wrapping. There is no preview button or expanded content. Separate message
+cards use panel surfaces, one-pixel line borders, 12px corners and 8px gaps.
+Account headers remain distinct above their messages, without an enclosing
+nested panel. Open sits below the preview; 34px read/Trash icon buttons appear
+on card hover or keyboard focus. Non-hover devices expose them continuously.
+Account headers keep checked times and provider counts/opened-here markers.
 The volume control is a label/range/value grid with an 8px gap and a 4ch value
 column. Toolbar tools wrap at 340px; at 240px the title occupies its own row.
 Back to mail remains a single-line label. Native thin scrollbars use theme colors.
@@ -282,22 +282,19 @@ accent/on-accent when selected, expressed with `aria-pressed`.
 ### Cards / Containers
 
 Each full-address account header owns its messages, including same-provider
-accounts. Empty and paused accounts keep their panels and identity. Flat rows
-have static sender/time and subject headings above a snippet toggle with a sibling
-Open button on one flex line. Subjects use the theme accent color so they stand
-apart from the muted preview text; unread subjects and senders are semibold while
-read mail uses regular weight. Only the snippet area is the preview toggle: a native
-summary button with `aria-expanded` and `aria-controls` whose accessible name carries
-subject, sender, time and unread state, with a visible Preview cue naming its
-collapse state for sighted users. The opened area shows the cached body text only,
-wrapping with preserved line breaks. Preview is display-only. Refresh announces Checking then a checked time, or names
-accounts needing attention on partial success; progress, success and error states
-use distinct lifecycle styling. Error notes keep numeric codes beside actionable
-guidance (automatic retry, Refresh, account-specific sign-in); add-account
-failures name the failing step. Each account row carries its own lifecycle hint.
-Open retains the extension-local read flag and the exact provider message link,
-labelled as opened-here with provider unchanged.
-Stage 1 has no mailbox read/unread, Trash or Undo buttons.
+accounts. Empty and paused accounts retain identity. Sender and subject are
+600-weight for both read and unread mail; subject uses accent, preview uses
+muted text. An unread dot preserves the state distinction. Message bodies are
+static and never imply an in-extension reader that has not been implemented.
+
+Hover/focus actions use authored 18px stroke SVGs on 34px buttons, currentColor
+and theme danger for Trash. Gmail labels explicitly name conversation actions;
+Outlook labels name individual-message actions. Pending buttons stay focusable
+with aria-disabled and resist duplicate clicks; errors display safe recovery text.
+Undo records live below the list and survive popup close for ten minutes.
+Uncertain responses present “I’ve checked” after the user inspects their mailbox.
+Open retains its existing provider link and opened-here behavior. Real-account
+acceptance is pending; Gmail’s private session interface can change independently.
 
 ### Inputs / Fields
 
@@ -321,12 +318,12 @@ their preview colors.
 
 - **Do** apply the active theme to every surface and interaction color.
 - **Do** preserve full account identity, native keyboard controls and visible focus.
-- **Do** render external mail as text and keep expanded preview display-only.
+- **Do** render external mail as text and clamp previews to three lines.
 - **Do** use synthetic account addresses and message content in design examples.
 
 ### Don't:
 
 - **Don't** combine messages from different accounts into one account panel.
 - **Don't** introduce uppercase tracked labels, glyph toolbar icons or ambient motion.
-- **Don't** add later-stage mailbox write controls to the Stage 1 component set.
+- **Don't** permanently delete mail or imply full-message reading inside the extension.
 - **Don't** treat synthetic screenshots as real-account acceptance.
