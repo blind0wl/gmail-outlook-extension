@@ -84,3 +84,14 @@ This candidate gathers evidence; it does not change acknowledgement recognition.
 - [ ] Establish trustworthy acknowledgement or complete exact per-message state before implementing confirmation; Trash plus Inbox exclusion does not exclude archived members. Containment remains active.
 - [ ] Fresh controlled real-account write/Undo acceptance before restoring Gmail Trash.
 - [x] Correct unsupported dynamic import with static worker wiring and a one-line console helper; 222 tests and a real module-worker browser check pass.
+
+## Exact state and Undo candidate — agent investigation
+- [x] Reproduce HTTP-success/legacy-ack false negative with approved disposable mail.
+- [x] Confirm complete exact conversation membership and labels, failing closed.
+- [x] Replace retired HTML Undo with fresh-session modern Sync restore.
+- [x] RED regressions, Node 24 verification (253 tests), three real popup cycles and worker-restart Undo.
+- [x] Stop extended automation at owner usage request and restore remaining journaled test targets.
+- [ ] Owner runs repeated cycles on the clean isolated manual-test candidate.
+- [ ] Real multi-member/mixed-folder and second-account acceptance before containment removal.
+
+Evidence: `docs/acceptance/2026-10-01-gmail-exact-state-undo.md`.

@@ -82,7 +82,16 @@ test('Gmail rechecks worker authorization immediately before a session POST',asy
 test('Gmail Undo confirms complete Inbox restoration, including read conversations',async()=>{
   const {mutateGmailConversation}=await import('../src/providers/mail-actions.js');
   globalThis.chrome={cookies:{get:async()=>({value:'csrf'})}};
-  globalThis.fetch=async(url,options)=>({ok:true,status:200,text:async()=>options.method==='POST'?'["ar",1,"OK"]':new URL(url).searchParams.get('view')==='cv'?exactState(url,['^i']):url.endsWith('/feed/atom')?'<feed><title>Gmail - Inbox for owner@example.test</title></feed>':'GM_ID_KEY="key"'});
+  let posted = false;
+  const globals = Array(10).fill(null); globals[2] = 123456; globals[3] = 'gmail.main.20261001'; globals[9] = 'key';
+  globalThis.fetch = async (url, options) => {
+    if (url.includes('/token?')) return { ok: true, text: async () => 'synthetic-framework-token-12345678' };
+    if (options.method === 'POST') posted = true;
+    return { ok: true, status: 200, text: async () => options.method === 'POST' ? '["ar",1,"OK"]'
+      : new URL(url).searchParams.get('view') === 'cv' ? exactState(url, [posted ? '^i' : '^k'])
+      : url.endsWith('/feed/atom') ? '<feed><title>Gmail - Inbox for owner@example.test</title></feed>'
+      : 'GM_ID_KEY="key";var GLOBALS=' + JSON.stringify(globals) + ';' };
+  };
   assert.deepEqual(await mutateGmailConversation('owner@example.test','abcdef','undo'),{id:'abcdef'});
 });
 

@@ -6,7 +6,7 @@ import { parseFeed } from './gmail.js';
 const validId = id => typeof id === 'string' && /^[a-f0-9]+$/i.test(id);
 const unknown = () => ({ recognized: false });
 
-export function parseGmailConversationState(text, id) {
+function parseExactConversation(text, id) {
   if (!validId(id)) return unknown();
   const decoded = decodeGmailReply(text);
   if (decoded.issue || decoded.payloads.length !== 1) return unknown();
@@ -33,11 +33,16 @@ export function parseGmailConversationState(text, id) {
     seen.add(memberId);
   }
   return {
-    recognized: true, messages: count,
+    recognized: true, memberIds: [...seen], messages: count,
     allTrash: members.every(row => row[9].includes('^k') && !row[9].includes('^i')),
     allInbox: members.every(row => row[9].includes('^i') && !row[9].includes('^k')),
     allRead: members.every(row => !row[9].includes('^u')),
   };
+}
+
+export function parseGmailConversationState(text, id) {
+  const { memberIds, ...state } = parseExactConversation(text, id);
+  return state;
 }
 
 async function read(url) {
@@ -49,8 +54,8 @@ async function read(url) {
   return response.text();
 }
 
-export async function verifyGmailConversationState(account, session, id, action) {
-  if (!validId(id) || !['read', 'trash', 'undo'].includes(action)) return false;
+export async function readGmailConversationMembers(account, session, id) {
+  if (!validId(id)) return null;
   try {
     // GmailJS documents the old exact-conversation format and cs/ms fields:
     // https://github.com/KartikTalwar/gmail.js/blob/2dd9644a7f0101714ac847320c162a721032ded4/src/gmail.js
@@ -60,13 +65,19 @@ export async function verifyGmailConversationState(account, session, id, action)
       ui: '2', ik: session.key, view: 'cv', th: id,
       msgs: '', mb: '0', rt: '1', search: 'all',
     });
-    const state = parseGmailConversationState(await read(url), id);
-    if (!state.recognized) return false;
+    const state = parseExactConversation(await read(url), id);
+    if (!state.recognized) return null;
     const slot = Number(/\/u\/(\d+)\//.exec(session.base)[1]);
     const ownership = parseFeed(await read(session.base + 'feed/atom'), slot);
-    if (ownership.account !== account.toLowerCase()) return false;
-    return action === 'trash' ? state.allTrash : action === 'undo' ? state.allInbox : state.allRead;
+    if (ownership.account !== account.toLowerCase()) return null;
+    return state;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function verifyGmailConversationState(account, session, id, action) {
+  if (!['read', 'trash', 'undo'].includes(action)) return false;
+  const state = await readGmailConversationMembers(account, session, id);
+  return !!state && (action === 'trash' ? state.allTrash : action === 'undo' ? state.allInbox : state.allRead);
 }

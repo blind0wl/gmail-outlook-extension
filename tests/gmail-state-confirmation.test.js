@@ -50,13 +50,15 @@ test('read and Undo confirmation require every message to have the intended stat
   try {
     for (const action of ['read', 'undo']) for (const complete of [true, false]) {
       let posts = 0;
+      const globals = Array(10).fill(null); globals[2] = 123456; globals[3] = 'gmail.main.20261001'; globals[9] = 'private-key';
       globalThis.fetch = async (url, options) => {
+        if (url.includes('/token?')) return { ok: true, text: async () => 'synthetic-framework-token-12345678' };
         if (options.method === 'POST') { posts++; return { ok: true, status: 200, text: async () => '[null,[],1]' }; }
         if (new URL(url).searchParams.get('view') === 'cv') return { ok: true, text: async () => exactReply([
-          ['^i'], complete ? ['^i'] : action === 'read' ? ['^i', '^u'] : ['^k'],
+          [action === 'undo' && !posts ? '^k' : '^i'], action === 'undo' && !posts ? ['^k'] : complete ? ['^i'] : action === 'read' ? ['^i', '^u'] : ['^k'],
         ]) };
         return { ok: true, text: async () => url.endsWith('/feed/atom')
-          ? '<feed><title>Gmail - Inbox for owner@example.test</title><fullcount>0</fullcount></feed>' : 'GM_ID_KEY="private-key"' };
+          ? '<feed><title>Gmail - Inbox for owner@example.test</title><fullcount>0</fullcount></feed>' : 'GM_ID_KEY="private-key";var GLOBALS=' + JSON.stringify(globals) + ';' };
       };
       if (complete) assert.deepEqual(await mutateGmailConversation('owner@example.test', 'abcdef', action), { id: 'abcdef' });
       else await assert.rejects(mutateGmailConversation('owner@example.test', 'abcdef', action), error => error.uncertain === true);
