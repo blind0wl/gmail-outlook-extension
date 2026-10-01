@@ -89,3 +89,19 @@ An unrecognized Gmail write response triggers one uncached unread-feed GET.
 Only a complete feed for the owning account can establish absence. Verified
 absence removes the stale cache card, but does not prove a Trash move or enable
 Undo: the uncertain write lock remains, and no POST is automatically repeated.
+
+## 2026-10-01 Gmail follow-up candidate (#15 / #16)
+
+Recovery and Undo precede the mail list. Uncertain writes lock only their
+conversation/message; acknowledgement is serialized with writes and must not
+be blocked by an unrelated queued action. Gmail session ownership/key GETs
+bypass the HTTP cache, and the action token is acquired after those requests.
+Worker diagnostics use fixed fields without mail content, account addresses,
+message IDs, URLs or session keys. Unknown responses retain explicit recovery.
+
+Confirmed Gmail read feedback explains that an open Gmail page may need
+refreshing; no provider tab is automatically reloaded. The owner also reported
+second-account Trash leaving conversations in Inbox after refreshing Gmail.
+The token-order change is a candidate mitigation, not a proven resolution of
+that provider failure. Fresh acceptance remains pending in
+docs/acceptance/2026-10-01-gmail-action-recovery.md.

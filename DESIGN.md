@@ -333,3 +333,6 @@ Mailbox feedback: Trash hides the card on click. Mark-read removes heading
 emphasis immediately, keeps the card while pending, then clears it after
 confirmation. Failures restore the authoritative cached state. Provider-read mail
 is omitted, and later unread replies can reappear after reconciliation.
+Recovery and Undo appear before the mail list; uncertainty copy names the
+explicit “I’ve checked” step and explains that other mail remains usable.
+Confirmed Gmail read feedback includes guidance to refresh a stale open Gmail page.
