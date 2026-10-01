@@ -1,8 +1,9 @@
 # Gmail poll freshness — 2026-10-01
 
 Runtime candidate: `e3f0e3e87959cfac5a3e4b0dd353423a4265c7bd` on
-`fix/gmail-action-recovery`, draft PR #18. Real-account acceptance: **pending**.
-Chrome version, OS and owner's loaded candidate: not yet supplied.
+`fix/gmail-action-recovery`, draft PR #18. Real-account recovery retest: **failed**.
+Owner-reported browser: Version 0.18.2.1 (Official Build, Chromium
+154.0.8037.92). OS: Arch Linux (x86_64). Loaded commit not independently verified.
 
 The owner confirmed that the second Gmail account's heading and unread messages
 returned after their intermittent absence. Five of its newest unread Inbox
@@ -43,3 +44,12 @@ No provider write, automatic replay or recovery acknowledgement behavior changes
 - [ ] If mail remains absent, gather content-free poll/action evidence before
   attributing it to the cache policy. The prior acceptance records describe safe
   action diagnostics; a successful Refresh alone does not prove feed completeness.
+
+## Owner retest result — 2026-10-01
+
+After receiving the reload/reopen/All/Refresh instructions, the owner reported:
+“The 5 dont return” and supplied the browser and OS above. HTTP cache bypass is
+therefore insufficient to resolve this real-account report. Do not treat the
+passing simulated regression as acceptance or repeat the same retest unchanged.
+The next evidence needed is whether the owning account's fresh Atom feed itself
+contains the five conversations, before investigating parser/cache/UI exclusion.
