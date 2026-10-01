@@ -18,11 +18,14 @@ Mailbox actions are an implementation candidate: real-account acceptance is
 pending, especially Gmail’s private session protocol and legacy Undo endpoint.
 Unrecognized responses never report success; check your mailbox, then use
 **I’ve checked** to unlock further actions. No automatic mutation retry occurs.
-Recovery and Undo appear above the mail list. Only the affected conversation or
+Recovery and Undo appear above the mail list. Saved unconfirmed actions use one
+counted row per account; check all those actions in the mailbox before using
+**I’ve checked** to unlock them. Individual Undo remains separate.
+Only the affected conversation or
 message is locked; other mail remains usable. After a confirmed Gmail read, the
 popup explains that an already-open Gmail page may need refreshing.
 
-The [Gmail follow-up candidate](docs/acceptance/2026-10-01-gmail-action-recovery.md)
+The [Gmail follow-up candidate](docs/acceptance/2026-10-01-grouped-mail-recovery.md)
 refreshes session checks and action-token acquisition. The owner reported that
 Trash in a second account left conversations in Inbox after refreshing Gmail;
 this provider failure remains open pending a real-account retest.

@@ -6,6 +6,9 @@ documentation-only commits do not change its runtime.
 Real-account acceptance: **pending**. Chrome version and OS: not yet supplied.
 Related issues: [#16](https://github.com/blind0wl/gmail-outlook-extension/issues/16)
 and [#15](https://github.com/blind0wl/gmail-outlook-extension/issues/15).
+Superseded for recovery presentation by the
+[grouped recovery candidate](2026-10-01-grouped-mail-recovery.md), which has its
+own fresh verification and unchecked real-account acceptance.
 
 ## Evidence and limits
 

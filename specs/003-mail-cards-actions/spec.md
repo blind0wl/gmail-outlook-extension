@@ -105,3 +105,11 @@ second-account Trash leaving conversations in Inbox after refreshing Gmail.
 The token-order change is a candidate mitigation, not a proven resolution of
 that provider failure. Fresh acceptance remains pending in
 docs/acceptance/2026-10-01-gmail-action-recovery.md.
+
+Owner follow-up: dozens of identical recovery rows made the popup unusable.
+Unconfirmed records now group by account with a count. One explicit “I’ve checked”
+acknowledges only the records captured by that button, after checking all those
+actions in the owning mailbox. Failed acknowledgements/new records remain;
+no provider write is replayed. Timestamp and state checks protect newer locks
+and successful Undo. Fresh acceptance is recorded in
+docs/acceptance/2026-10-01-grouped-mail-recovery.md.

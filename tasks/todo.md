@@ -32,3 +32,14 @@ Likely files: popup.js and popup-ui.test.js.
 - [x] Browser checks and code review complete; fresh acceptance record exists.
 - [ ] Owner tests #16 with real accounts beyond three deletes and explicit recovery.
 - [ ] Owner tests #15 with Gmail already open; Chrome/OS/candidate recorded.
+
+## Owner follow-up — repeated recovery rows
+- [x] Thirty locks produce one counted row per account and one explicit button.
+- [x] Acknowledgement sends no provider mutations and isolates the captured batch.
+- [x] Failed/new locks remain; duplicates and completed Undo races are guarded.
+- [x] Node 24 verification, browser checks, independent review and fresh acceptance record complete.
+- [ ] Owner reloads and confirms grouping/recovery with existing locks.
+
+Verification: popup/worker tests, 480px/320px synthetic browser, fresh acceptance.
+Dependencies: existing recovery candidate; underlying provider retest stays open.
+Files: popup.js, service-worker.js, their tests and the synthetic fixture.

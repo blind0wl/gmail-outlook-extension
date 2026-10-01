@@ -335,4 +335,6 @@ confirmation. Failures restore the authoritative cached state. Provider-read mai
 is omitted, and later unread replies can reappear after reconciliation.
 Recovery and Undo appear before the mail list; uncertainty copy names the
 explicit “I’ve checked” step and explains that other mail remains usable.
+Unconfirmed actions use one row per account with a count and one acknowledgement
+button, including a busy state. Undo stays separate for each completed Trash.
 Confirmed Gmail read feedback includes guidance to refresh a stale open Gmail page.

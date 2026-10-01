@@ -45,6 +45,15 @@ the approved read/Trash/Undo contract in specs/003-mail-cards-actions/spec.md.
 Task completion is tracked in tasks/todo.md. Issue closure requires real-account
 acceptance, especially the unknown Gmail acknowledgement after repeated deletes.
 
+## Owner follow-up: repeated recovery rows
+
+The owner reported 30+ identical saved uncertainty rows for one account. Group
+these per account, expose the count, and acknowledge a captured batch only after
+the user checks all affected actions. Keep partial failures/new locks and Undo
+separate. Check state and timestamp in the worker to protect records changed by
+another popup. Verify 30-lock grouping, duplicates, partial failure and races in
+tests; inspect 480px and 320px, then record a new candidate acceptance result.
+
 ## Acceptance still requiring the owner
 
 Test beyond three Trash actions with two signed-in Gmail accounts; confirm
