@@ -2,10 +2,10 @@
 
 ## Owner report
 
-After four or five Undos, the HTML extension page displayed “This action is
+After four or five Undos, the toolbar popup displayed “This action is
 already queued. Wait for it to finish.” Closing/reopening made it responsive.
-All deleted messages were back in Gmail Inbox. Whether additional extension
-views were open is not established. Successful provider restoration does not
+All deleted messages were back in Gmail Inbox. The owner subsequently clarified
+that only the toolbar popup was open. Successful provider restoration does not
 establish the exact cause of the popup/worker feedback problem.
 
 ## Reproduced defects and change
@@ -38,15 +38,21 @@ write types retain duplicate rejection. Durable locks and account checks remain.
 - Independent review reran all five new regressions: passed, no required issues.
 - Impeccable detector on changed popup.js: no findings; git diff --check passed.
 
-## Fresh real-account Chrome acceptance: pending
+## Fresh real-account Chrome acceptance — passed for reported batch
 
-Reload the extension and test the HTML extension page with a batch of around
-fifteen deletions and Undos. Verify the tray clears and the page stays usable
-without closing it; compare against Gmail Inbox. If two extension views are used,
-try Undo on the same saved record in both views and confirm one restore completes
-without a persistent queued error. Check genuinely unconfirmed actions in Gmail
-before acknowledging them; no uncertain provider write is automatically replayed.
+Owner result, 2026-10-01, following candidate `4ca2583`:
 
-These regressions establish relevant synchronization defects, not proof that they
-caused the precise real-account incident. No real-provider action was performed
-for this candidate, and fresh acceptance remains pending.
+- Surface: toolbar popup only (owner clarification).
+- Twenty messages were moved to Trash successfully. The owner saw progressive
+  “Moved to Trash” feedback and described the operations as fairly slow.
+- The owner then invoked Undo for all twenty. Undo progressed slowly and the
+  displayed count decreased as the operations completed.
+- The owner confirmed all twenty messages were back in Gmail Inbox.
+- No stuck queued message or sign-in error was reported in this acceptance run.
+
+This is owner-observed real-account acceptance for the twenty-message Gmail
+Trash/Undo cycle. It does not establish the precise cause of the earlier failure,
+accept Outlook or multiple simultaneous extension views, or measure performance.
+The observed slowness remains a usability finding; worker serialization and
+per-action ownership/state checks are retained. No speed optimization was made
+as part of recording this result.

@@ -178,3 +178,14 @@ uncertainty; it never adds a second provider write. Other overlapping operations
 still reject duplicates. The worker clears in-flight tracking after completion;
 durable uncertainty/restart locks are unchanged. Fresh acceptance is pending in
 docs/acceptance/2026-10-01-undo-queue-follow-up.md.
+
+
+## 2026-10-01 owner acceptance — twenty-message Gmail Undo batch
+
+The owner clarified the prior queued issue occurred in the toolbar popup only.
+Following candidate `4ca2583`, the owner moved twenty messages to Trash, observed
+progressive feedback, then invoked Undo for all twenty and saw the count decrease.
+The owner confirmed every message was back in Gmail Inbox. This accepts the
+reported Gmail batch scenario; the earlier failure's exact cause remains unknown.
+Both operations were described as slow. No timing measurement or performance
+optimization is implied. See docs/acceptance/2026-10-01-undo-queue-follow-up.md.
