@@ -43,3 +43,12 @@ Likely files: popup.js and popup-ui.test.js.
 Verification: popup/worker tests, 480px/320px synthetic browser, fresh acceptance.
 Dependencies: existing recovery candidate; underlying provider retest stays open.
 Files: popup.js, service-worker.js, their tests and the synthetic fixture.
+
+## Owner follow-up — five newest unread conversations missing
+- [x] Trace cache recovery and identify the default HTTP cache policy in Gmail polling.
+- [x] Reproduce a stale feed omitting five recent second-account conversations, then bypass HTTP cache on all poll probes.
+- [x] Node 24 verification passes 210 tests; independent review and fresh candidate acceptance record complete.
+- [ ] Owner reloads the candidate and confirms whether Refresh restores the five conversations; record Chrome/OS.
+
+The regression models a stale HTTP response. The owner's specific cause and
+underlying Trash failure remain unconfirmed.
