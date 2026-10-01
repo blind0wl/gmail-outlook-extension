@@ -54,3 +54,28 @@ await chrome.storage.local.remove('mailActionDiagnostics')
 
 #16 stays open. Successful moves have been verified; their repeated uncertain
 classification and the intermittent missing account heading remain unresolved.
+
+## Owner evidence — 2026-10-01
+
+The owner supplied one actual `gmail-mail-action` event: Trash, slot 1,
+HTTP 200, outcome uncertain, response unrecognized, unreadInboxAbsent false.
+This establishes that a POST received an HTTP-success reply without the expected
+acknowledgement. It does not prove the mutation succeeded or failed; the complete
+owning-feed absence check also did not establish absence. The console's copy
+command returned undefined, which is normal for that clipboard helper; the
+copied saved history has not yet been supplied.
+
+The owner then reported two new Trash attempts removed conversations from Inbox
+but did not put them in Trash, leaving two unconfirmed locks. This differs from
+the earlier five/four verified moves. Fresh Gmail reload and a search of all
+locations are needed to establish these conversations' actual labels/unread
+state; permanent deletion or archiving is not established by this report.
+
+Read-only comparison against inbasic/ignotifier at
+`df220fa2eff2ba48627f72ca9220a0f7aace817b`,
+`v3.classic/core/offscreen/gmail/core.js`, uses action code 9 for Trash and code
+1 for Archive with the same request structure. This does not prove compatibility
+with the owner's current Gmail session. Do not guess another opcode or relax
+success recognition on HTTP 200 or unread-feed absence alone.
+
+Reference: https://github.com/inbasic/ignotifier/blob/df220fa2eff2ba48627f72ca9220a0f7aace817b/v3.classic/core/offscreen/gmail/core.js
