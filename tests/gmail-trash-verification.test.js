@@ -24,6 +24,7 @@ test('unrecognized replies expose only fixed format and structural summaries',()
   assert.deepEqual(framed.structure[0].targetTypes,{legacyHex:0,otherString:1,other:0});
   const malformed=summarizeGmailSearchReply(frame(searchReply(['abcdef'])).slice(0,-1));
   assert.equal(malformed.issue,'invalid-frame');
+  assert.equal(summarizeGmailSearchReply('99999999&[null]').issue,'invalid-frame');
   assert.doesNotMatch(JSON.stringify([html,framed,malformed]),/private|not-legacy|abcdef|https|token|subject|body/i);
 });
 
@@ -34,6 +35,16 @@ test('search parser recognizes bounded JSON and byte-framed replies without expo
   }
   for(const text of ['', '<html>Private body</html>',frame(raw).slice(0,-1),frame(raw)+'trailing junk',searchReply(['not-a-hex-id'])]) {
     assert.deepEqual(parseGmailSearchTargets(text),{recognized:false,ids:[],returned:0});
+  }
+});
+
+test('search frames support character lengths and a delimiter newline without splitting mail strings',()=>{
+  const raw=searchReply(['abcdef']).replace('Private subject','Private café 🦉 12& inside mail');
+  const characterFrame=`${raw.length}&${raw}`;
+  const newlineFrame=`${new TextEncoder().encode(raw).length}&\n${raw}`;
+  for(const text of [characterFrame,newlineFrame,`${raw.length}&\n${raw}`,frame(raw+'\n')]) {
+    assert.deepEqual(parseGmailSearchTargets(text),{recognized:true,ids:['abcdef'],returned:1});
+    assert.equal(summarizeGmailSearchReply(text).issue,null);
   }
 });
 

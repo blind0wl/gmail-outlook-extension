@@ -7,41 +7,59 @@ const MAX_TARGETS = 80;
 const unknown = () => ({ recognized: false, ids: [], returned: 0 });
 
 // Reference client's search shape: j[1][0][2][5], target at row[11].
-// Consume byte-length frames rather than splitting inside mail strings.
+// Consume declared-length frames rather than splitting inside mail strings.
 // Unsupported formats fail closed; subject/body fields are never returned.
 function decodeSearchReply(text) {
   const fail = (format, issue) => ({ format, issue, payloads: [] });
   if (typeof text !== 'string') return fail('other', 'unsupported-prefix');
   if (text.length > MAX_BYTES) return fail('oversized', 'parse-limit');
-  const cleaned = text.replace(/^\)\]\}'\s*/, '').trim();
+  const cleaned = text.replace(/^\)\]\}'\s*/, '').trimStart();
   const bytes = new TextEncoder().encode(cleaned);
   if (bytes.length > MAX_BYTES) return fail('oversized', 'parse-limit');
   if (!cleaned) return fail('empty', 'empty');
   const format = cleaned.startsWith('[') ? 'json' : /^\d+&/.test(cleaned)
     ? 'length-framed' : cleaned.startsWith('<') ? 'html' : 'other';
   if (!['json', 'length-framed'].includes(format)) return fail(format, 'unsupported-prefix');
-  const decoder = new TextDecoder('utf-8', { fatal: true });
-  const payloads = [];
-  try {
-    if (cleaned.startsWith('[')) payloads.push(JSON.parse(cleaned));
-    else {
-      let offset = 0;
-      while (offset < bytes.length) {
-        while ([9, 10, 13, 32].includes(bytes[offset])) offset++;
-        if (offset === bytes.length) break;
-        let length = 0, digits = 0;
-        while (bytes[offset] >= 48 && bytes[offset] <= 57) {
-          length = length * 10 + bytes[offset++] - 48;
-          if (++digits > 7) return fail(format, 'invalid-frame');
+  if (format === 'json') {
+    try { return { format, issue: null, payloads: [JSON.parse(cleaned)] }; }
+    catch { return fail(format, 'invalid-json'); }
+  }
+  const candidates = [];
+  const attempts = [];
+  for (const unit of ['utf8', 'utf16']) for (const skipDelimiter of [false, true]) {
+    const payloads = [];
+    let offset = 0, issue = null;
+    try {
+      while (offset < cleaned.length) {
+        offset += /^\s*/.exec(cleaned.slice(offset))[0].length;
+        if (offset === cleaned.length) break;
+        const header = /^(\d{1,7})&/.exec(cleaned.slice(offset));
+        const length = header ? Number(header[1]) : 0;
+        if (!length || length > MAX_BYTES || payloads.length >= 32) { issue = 'invalid-frame'; break; }
+        offset += header[0].length;
+        if (skipDelimiter) offset += /^\s*/.exec(cleaned.slice(offset))[0].length;
+        let chunk;
+        if (unit === 'utf16') {
+          if (offset + length > cleaned.length) { issue = 'invalid-frame'; break; }
+          chunk = cleaned.slice(offset, offset + length);
+        } else {
+          const remaining = new TextEncoder().encode(cleaned.slice(offset));
+          if (length > remaining.length) { issue = 'invalid-frame'; break; }
+          chunk = new TextDecoder('utf-8', { fatal: true }).decode(remaining.slice(0, length));
         }
-        if (!digits || bytes[offset++] !== 38 || length < 1
-          || offset + length > bytes.length || payloads.length >= 32) return fail(format, 'invalid-frame');
-        payloads.push(JSON.parse(decoder.decode(bytes.slice(offset, offset + length))));
-        offset += length;
+        payloads.push(JSON.parse(chunk));
+        offset += chunk.length;
       }
-    }
-    return { format, issue: null, payloads };
-  } catch { return fail(format, 'invalid-json'); }
+    } catch { issue = 'invalid-json'; }
+    attempts.push({ unit, skipDelimiter, issue });
+    if (!issue) candidates.push(payloads);
+  }
+  if (!candidates.length) return { ...fail(format, attempts.some(a => a.issue === 'invalid-json')
+    ? 'invalid-json' : 'invalid-frame'), attempts };
+  const canonical = JSON.stringify(candidates[0]);
+  if (candidates.some(candidate => JSON.stringify(candidate) !== canonical))
+    return { ...fail(format, 'ambiguous-framing'), attempts };
+  return { format, issue: null, payloads: candidates[0], attempts };
 }
 
 export function parseGmailSearchTargets(text) {
@@ -66,10 +84,27 @@ export function parseGmailSearchTargets(text) {
 // object keys, identifiers, subject/body fields, URLs or exception messages.
 export function summarizeGmailSearchReply(text) {
   const decoded = decodeSearchReply(text);
+  let firstFrame = null;
+  if (decoded.format === 'length-framed') {
+    const cleaned = text.replace(/^\)\]\}'\s*/, '').trim();
+    const header = /^(\d{1,7})&/.exec(cleaned);
+    if (header && Number(header[1]) <= MAX_BYTES) {
+      const rest = cleaned.slice(header[0].length);
+      const whitespace = /^\s*/.exec(rest)[0].length;
+      const start = rest[whitespace];
+      firstFrame = {
+        declaredLength: Number(header[1]), delimiterWhitespace: whitespace,
+        payloadType: start === '[' ? 'array' : start === '{' ? 'object'
+          : start === '<' ? 'markup' : start === undefined ? 'empty' : 'other',
+      };
+    }
+  }
   const shape = value => Array.isArray(value) ? { type: 'array', length: value.length }
     : { type: value === null ? 'null' : value === undefined ? 'missing' : typeof value };
   return {
     format: decoded.format, issue: decoded.issue, frames: decoded.payloads.length,
+    ...(decoded.attempts ? { framingAttempts: decoded.attempts } : {}),
+    ...(firstFrame ? { firstFrame } : {}),
     sessionChallengeMarker: typeof text === 'string' && text.length <= MAX_BYTES && text.includes('/spreauth'),
     structure: decoded.payloads.slice(0, 8).map(payload => {
       const rows = payload?.[1]?.[0]?.[2]?.[5];
