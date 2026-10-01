@@ -143,6 +143,26 @@ test('checking an uncertain conversation succeeds with an unrelated action queue
   assert.equal(calls,1,'acknowledgement must never send a provider write');
 });
 
+test('account recovery cannot acknowledge a newer lock created after its snapshot',async()=>{
+  const data=fixture();
+  const newer={state:'uncertain',item:{key,...account},expiresAt:2000};
+  data.mailActions[key]=newer;
+  const result=await handleMailboxAction({key,action:'acknowledge',expectedExpiresAt:1000},deps);
+  assert.equal(result.ok,false);
+  assert.deepEqual(data.mailActions[key],newer);
+  assert.equal((await handleMailboxAction({key,action:'acknowledge',expectedExpiresAt:2000},deps)).ok,true);
+  assert.equal(data.mailActions[key],undefined);
+});
+
+test('account recovery preserves Undo when a captured pending Trash has completed',async()=>{
+  const data=fixture();
+  const undo={state:'undo',item,id:'moved',expiresAt:2000};
+  data.mailActions[key]=undo;
+  const result=await handleMailboxAction({key,action:'acknowledge',expectedExpiresAt:2000},deps);
+  assert.equal(result.ok,false);
+  assert.deepEqual(data.mailActions[key],undo);
+});
+
 test('repeated Gmail Trash stays isolated after one uncertain result and explicit recovery',async()=>{
   const gmail={provider:'gmail',account:'repeated@example.test'};
   const other={provider:'gmail',account:'other-repeated@example.test'};

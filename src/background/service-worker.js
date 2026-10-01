@@ -434,6 +434,10 @@ export async function handleMailboxAction(msg, deps = {}) {
       // The poll queue serializes journal changes. Unrelated queued actions
       // must not prevent the user from releasing this conversation's lock.
       if (!prior) return { ok: false, code: "pending" };
+      if (!["pending", "uncertain"].includes(prior.state)) return { ok: false, code: "check-mailbox" };
+      // Account recovery checks a snapshot; another popup may have replaced a
+      // lock meanwhile. Never acknowledge a later action on the same mail.
+      if (msg.expectedExpiresAt !== undefined && msg.expectedExpiresAt !== (prior.expiresAt ?? null)) return { ok: false, code: "check-mailbox" };
       await patchMailAction(msg.key, null);
       return { ok: true };
     }
