@@ -44,3 +44,19 @@ record so recovery cannot clear a newer lock or a completed Trash's Undo.
 Use the content-free worker diagnostics procedure in
 [the prior candidate record](2026-10-01-gmail-action-recovery.md) if a write is
 still unconfirmed. Do not share raw provider responses, URLs, cookies or mail.
+
+## Owner follow-up — 2026-10-01
+
+After checking Gmail and acknowledging the saved locks, the owner reported that
+the second Gmail account's heading and mail were absent, including after Refresh
+with All selected and scrolling to the bottom. A Settings → Accounts screenshot
+confirmed that both Gmail accounts remained configured. While preparing a Mail
+screenshot, the owner then saw the second account return and confirmed that its
+unread messages were also visible again. No intervening action or elapsed time
+was established. The loaded candidate, Chrome version and OS remain unconfirmed.
+
+The missing account is therefore intermittent and currently recovered; its cause
+is unresolved. Synthetic checks of the current popup retained configured account
+headings after acknowledging locks and emptying the cache. This owner report does
+not establish successful Trash, explain the temporary absence, or satisfy the
+real-account acceptance checks above.
