@@ -9,11 +9,17 @@ const unknown = () => ({ recognized: false, ids: [], returned: 0 });
 // Reference client's search shape: j[1][0][2][5], target at row[11].
 // Consume byte-length frames rather than splitting inside mail strings.
 // Unsupported formats fail closed; subject/body fields are never returned.
-export function parseGmailSearchTargets(text) {
-  if (typeof text !== 'string' || text.length > MAX_BYTES) return unknown();
+function decodeSearchReply(text) {
+  const fail = (format, issue) => ({ format, issue, payloads: [] });
+  if (typeof text !== 'string') return fail('other', 'unsupported-prefix');
+  if (text.length > MAX_BYTES) return fail('oversized', 'parse-limit');
   const cleaned = text.replace(/^\)\]\}'\s*/, '').trim();
   const bytes = new TextEncoder().encode(cleaned);
-  if (bytes.length > MAX_BYTES) return unknown();
+  if (bytes.length > MAX_BYTES) return fail('oversized', 'parse-limit');
+  if (!cleaned) return fail('empty', 'empty');
+  const format = cleaned.startsWith('[') ? 'json' : /^\d+&/.test(cleaned)
+    ? 'length-framed' : cleaned.startsWith('<') ? 'html' : 'other';
+  if (!['json', 'length-framed'].includes(format)) return fail(format, 'unsupported-prefix');
   const decoder = new TextDecoder('utf-8', { fatal: true });
   const payloads = [];
   try {
@@ -26,16 +32,24 @@ export function parseGmailSearchTargets(text) {
         let length = 0, digits = 0;
         while (bytes[offset] >= 48 && bytes[offset] <= 57) {
           length = length * 10 + bytes[offset++] - 48;
-          if (++digits > 7) return unknown();
+          if (++digits > 7) return fail(format, 'invalid-frame');
         }
         if (!digits || bytes[offset++] !== 38 || length < 1
-          || offset + length > bytes.length || payloads.length >= 32) return unknown();
+          || offset + length > bytes.length || payloads.length >= 32) return fail(format, 'invalid-frame');
         payloads.push(JSON.parse(decoder.decode(bytes.slice(offset, offset + length))));
         offset += length;
       }
     }
+    return { format, issue: null, payloads };
+  } catch { return fail(format, 'invalid-json'); }
+}
+
+export function parseGmailSearchTargets(text) {
+  const decoded = decodeSearchReply(text);
+  if (decoded.issue) return unknown();
+  try {
     let rows = null;
-    for (const payload of payloads) {
+    for (const payload of decoded.payloads) {
       const entries = payload?.[1]?.[0]?.[2]?.[5];
       if (!Array.isArray(entries)) continue;
       // Multiple candidate result sets are ambiguous, not stronger evidence.
@@ -46,6 +60,29 @@ export function parseGmailSearchTargets(text) {
       || typeof row[11] !== 'string' || !/^[a-f0-9]+$/i.test(row[11]))) return unknown();
     return { recognized: true, ids: rows.map(row => row[11].toLowerCase()), returned: rows.length };
   } catch { return unknown(); }
+}
+
+// Only enums, booleans and array counts. Never include a string from Gmail,
+// object keys, identifiers, subject/body fields, URLs or exception messages.
+export function summarizeGmailSearchReply(text) {
+  const decoded = decodeSearchReply(text);
+  const shape = value => Array.isArray(value) ? { type: 'array', length: value.length }
+    : { type: value === null ? 'null' : value === undefined ? 'missing' : typeof value };
+  return {
+    format: decoded.format, issue: decoded.issue, frames: decoded.payloads.length,
+    sessionChallengeMarker: typeof text === 'string' && text.length <= MAX_BYTES && text.includes('/spreauth'),
+    structure: decoded.payloads.slice(0, 8).map(payload => {
+      const rows = payload?.[1]?.[0]?.[2]?.[5];
+      const targetTypes = { legacyHex: 0, otherString: 0, other: 0 };
+      if (Array.isArray(rows)) for (const row of rows.slice(0, MAX_TARGETS)) {
+        const id = Array.isArray(row) ? row[11] : undefined;
+        targetTypes[typeof id !== 'string' ? 'other' : /^[a-f0-9]+$/i.test(id) ? 'legacyHex' : 'otherString']++;
+      }
+      return { root: shape(payload), first: shape(payload?.[0]), second: shape(payload?.[1]),
+        query: shape(payload?.[1]?.[0]), container: shape(payload?.[1]?.[0]?.[2]),
+        rows: shape(rows), targetTypes };
+    }),
+  };
 }
 
 async function readRequest(url, options = {}) {
@@ -76,9 +113,11 @@ export async function inspectGmailTrash(account, ids) {
       v: 'or', ik: key, at: csrf, subui: 'chrome', hl: 'en', ts: String(Date.now()),
     });
     const response = await readRequest(url, { method: 'POST', body });
-    const parsed = parseGmailSearchTargets(await response.text());
+    const text = await response.text();
+    const parsed = parseGmailSearchTargets(text);
     if (!parsed.recognized)
-      return { ok: false, code: 'unrecognized-search', status: response.status, results: unconfirmed() };
+      return { ok: false, code: 'unrecognized-search', status: response.status,
+        diagnostic: summarizeGmailSearchReply(text), results: unconfirmed() };
     // Recheck ownership after the query before attributing any returned target.
     const check = await readRequest(base + 'feed/atom');
     if (parseFeed(await check.text(), Number(/\/u\/(\d+)\//.exec(base)[1])).account !== account.toLowerCase())

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inspectGmailTrash, parseGmailSearchTargets } from '../src/providers/gmail-trash-verification.js';
+import { inspectGmailTrash, parseGmailSearchTargets, summarizeGmailSearchReply } from '../src/providers/gmail-trash-verification.js';
 
 function searchReply(ids) {
   const rows=ids.map(id=>{
@@ -11,6 +11,21 @@ function searchReply(ids) {
   return JSON.stringify([null,[[null,null,[null,null,null,null,null,rows]]]]);
 }
 const frame=value=>`${new TextEncoder().encode(value).length}&${value}`;
+
+test('unrecognized replies expose only fixed format and structural summaries',()=>{
+  const privateText='<html><script>https://mail.google.com/mail/u/1/spreauth?token=private-token</script>Private body</html>';
+  const html=summarizeGmailSearchReply(privateText);
+  assert.equal(html.format,'html');
+  assert.equal(html.sessionChallengeMarker,true);
+  const framed=summarizeGmailSearchReply(")]}'\n"+frame(searchReply(['not-legacy-hex'])));
+  assert.equal(framed.format,'length-framed');
+  assert.equal(framed.frames,1);
+  assert.equal(framed.structure[0].rows.type,'array');
+  assert.deepEqual(framed.structure[0].targetTypes,{legacyHex:0,otherString:1,other:0});
+  const malformed=summarizeGmailSearchReply(frame(searchReply(['abcdef'])).slice(0,-1));
+  assert.equal(malformed.issue,'invalid-frame');
+  assert.doesNotMatch(JSON.stringify([html,framed,malformed]),/private|not-legacy|abcdef|https|token|subject|body/i);
+});
 
 test('search parser recognizes bounded JSON and byte-framed replies without exposing content',()=>{
   const raw=searchReply(['abcdef','123abc']);
@@ -68,6 +83,7 @@ test('unrecognized search, transport failure and changed ownership never verify 
       const result=await inspectGmailTrash('owner@example.test',['abcdef']);
       assert.equal(result.ok,false);
       assert.deepEqual(result.results,['not-confirmed']);
+      if(mode==='unknown')assert.equal(result.diagnostic.format,'html');
       assert.doesNotMatch(JSON.stringify(result),/private|owner|abcdef|other|https/i);
     }
   } finally {globalThis.fetch=previousFetch;globalThis.chrome=previousChrome;}
