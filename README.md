@@ -145,7 +145,7 @@ mail content, or sensitive diagnostics in the repository.
 
 Mail shows one section per configured account, including empty or paused
 accounts. All/Gmail/Outlook filters retain separate account ownership. Settings
-contains Accounts, Mail checking, Themes, Notifications and Sound; Back returns to the prior
+contains Accounts, Themes, Notifications, Sound and Mail checking; Back returns to the prior
 Mail scroll position. Account drafts survive cache updates and theme changes.
 
 Click an account heading to open its webmail inbox in one new active tab.

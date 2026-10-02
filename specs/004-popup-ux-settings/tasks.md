@@ -98,7 +98,7 @@ no actual provider calls from setting changes.
 ## Task 5: Expose check frequency in Settings
 
 **Module**: `check-frequency`
-**Description**: Add the retained Mail checking form after Accounts, loading the
+**Description**: Add the retained Mail checking form after Sound, loading the
 effective interval and saving through the worker contract.
 
 **Acceptance criteria:**

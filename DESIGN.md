@@ -239,7 +239,7 @@ column. Toolbar tools wrap at 340px; at 240px the title occupies its own row.
 Back to mail remains a single-line label. Native thin scrollbars use theme colors.
 
 The popup has Mail and Settings views. Settings leads with Accounts, then
-Mail checking, Themes, Notifications and Sound sections. Back restores the Mail scroll position;
+Themes, Notifications, Sound and Mail checking sections. Back restores the Mail scroll position;
 storage updates retain surviving focus and account drafts. Detailed surface
 composition remains in `.impeccable/surfaces/src-popup-popup-html.md`.
 
@@ -355,11 +355,11 @@ pending in docs/acceptance/2026-10-01-compact-undo-stack.md.
 
 Whole account headers are native links, including empty/paused/error accounts.
 They retain 12px/14px padding, all visible metadata, semantic headings and wrapped
-addresses. Hover uses the theme hover token and underlines the address; keyboard
+addresses. Hover highlights the whole header with the theme hover token; keyboard
 focus uses the accent inset outline. Account-key focus survives mailbox renders.
 Account routing is a compatibility candidate awaiting real-account acceptance.
 
-Mail checking follows Accounts in Settings. Native duration input, unit select
+Mail checking follows Sound at the bottom of Settings. Native duration input, unit select
 and Save share an 8px-gap grid; input and select use control/text/muted tokens,
 6px corners and 8px padding. Numeric values use tabular numerals and accent
 carets. Errors use danger and role=alert; application status uses role=status.

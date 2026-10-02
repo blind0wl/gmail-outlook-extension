@@ -702,9 +702,9 @@ test('whole account headings open one active inbox tab and retain focus through 
   change({accounts:{newValue:[accounts[0]]}});assert.equal(document.activeElement.id,'refresh-mail');
 });
 
-test('global Mail checking form loads legacy precision and stays directly after Accounts',async()=>{
+test('global Mail checking form loads legacy precision and stays last in Settings',async()=>{
   const {document}=await workspaceFixture({pollIntervalMs:60000.5,accounts:[],mailCache:[]});
-  assert.deepEqual([...document.querySelectorAll('#settings-view > section > h2')].map(h=>h.textContent).slice(0,3),['Accounts','Mail checking','Themes']);
+  assert.deepEqual([...document.querySelectorAll('#settings-view > section > h2')].map(h=>h.textContent),['Accounts','Themes','Notifications','Sound','Mail checking']);
   assert.equal(document.getElementById('poll-duration').value,'60.0005');
   assert.equal(document.getElementById('poll-unit').value,'seconds');
 });

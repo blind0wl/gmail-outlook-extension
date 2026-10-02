@@ -26,7 +26,7 @@ FIRST VIEWPORT: Compact 480px maximum-width popup; toolbar title/count, Refresh
 and Settings, then provider filters and stacked full-address account headers
 carrying visible checked times.
 First account's newest mail leads; later accounts remain in vertical order.
-Settings opens Accounts, Mail checking, Themes, Notifications and Sound; Back returns to Mail.
+Settings opens Accounts, Themes, Notifications, Sound and Mail checking; Back returns to Mail.
 
 FORM: Owner-approved account panels; original concept seed ee0c2e51, index7
 Midnight desk, alongside approved Slate workspace and Signal panel. Code-led;
@@ -38,7 +38,7 @@ changes, no entrance/ambient animation or theme-transition motion.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
 2026-10-02 candidate: whole account headings open account-hinted owning inboxes.
-Mail checking uses one retained duration/unit/Save form after Accounts, applying
+Mail checking uses one retained duration/unit/Save form after Sound, applying
 to all enabled accounts. Completed Trash has concise success without visible
 Undo; unconfirmed per-account recovery remains. Existing themes and composition
 remain the visual authority. Synthetic verification passes; fresh real-account

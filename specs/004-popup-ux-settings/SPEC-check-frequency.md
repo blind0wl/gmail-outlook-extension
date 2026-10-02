@@ -12,7 +12,7 @@ email accounts from one setting. There are no per-account interval controls.
 
 ## Approved UX
 
-Add a “Mail checking” section directly after Accounts in Settings, preserving
+Add a “Mail checking” section at the bottom of Settings, after Sound, preserving
 the relative order of other sections. Use a labelled “Check mail every” duration
 field, a seconds/minutes/hours selector and an explicit Save button. Supporting
 text states that the interval applies to all enabled accounts and that checks
@@ -77,3 +77,6 @@ and the existing shared alarm concept. Verify current Chrome alarm constraints
 and scheduling semantics from official documentation during technical planning.
 No new dependency or permission is proposed. Duration field, units, Save,
 section placement and global scope are owner-approved.
+
+Owner smoke-test feedback (2026-10-02) moves Mail checking from after Accounts
+to the bottom of Settings, after Sound. This supersedes the original placement.

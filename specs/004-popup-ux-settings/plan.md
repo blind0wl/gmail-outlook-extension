@@ -126,7 +126,7 @@ as successfully applied.
 
 ### Settings UI
 
-Place the Mail checking section directly after Accounts. Use a retained form
+Place the Mail checking section at the bottom of Settings, after Sound. Use a retained form
 with a numeric duration, native unit selector and Save button. Convert units to
 milliseconds and validate whole-second results, without floating-point rounding
 that silently turns invalid input into a valid value. Display errors beside the
