@@ -189,13 +189,27 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
   // Cards expanded in place. Survives list re-renders; expanding never
   // touches mailbox state, it only unclamps the cached snippet.
+  // Accordion: opening one card closes the others.
   var expandedKeys = new Set();
+  var cardToggles = new Map();
   function toggleCard(card, toggle, key, force) {
     var on = force !== undefined ? force : !card.classList.contains("expanded");
+    if (on) {
+      expandedKeys.forEach(function (otherKey) {
+        if (otherKey === key) return;
+        var other = cardToggles.get(otherKey);
+        if (other) {
+          other.card.classList.remove("expanded");
+          other.toggle.setAttribute("aria-expanded", "false");
+          other.toggle.setAttribute("aria-label", "Expand: " + (other.subject || "(no subject)"));
+        }
+      });
+      expandedKeys.clear();
+      expandedKeys.add(key);
+    } else expandedKeys.delete(key);
+    cardToggles.set(key, { card: card, toggle: toggle, subject: toggle.dataset.subject });
     card.classList.toggle("expanded", on);
     toggle.setAttribute("aria-expanded", String(on));
-    if (on) expandedKeys.add(key);
-    else expandedKeys.delete(key);
   }
 
   function visibleItems() {
@@ -292,7 +306,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("aria-hidden", "true");
     var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", kind === "read" ? "M3 8l9 6 9-6M3 8l9-5 9 5v12H3V8M8 17l2 2 4-4" : "M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7");
+    path.setAttribute("d", kind === "read" ? "M3 8l9 6 9-6M3 8l9-5 9 5v12H3V8M8 17l2 2 4-4" : kind === "open" ? "M14 4h6v6M20 4L11 13M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" : "M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7");
     svg.appendChild(path);
     return svg;
   }
@@ -530,104 +544,116 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         // The toggle owns sender/subject/snippet; icon and Open buttons
         // stay siblings so nesting stays valid. Clicking elsewhere on the
         // card delegates to the toggle; expanding only unclamps cache text.
-        var toggle = document.createElement("button");
-        toggle.type = "button";
+        // v3 card layout: the top row is sender, icon group, then bold time.
+        // The toggle owns the sender/subject/snippet; open/read/trash are
+        // sibling icon buttons with reserved space so the time never shifts.
+        // The whole card is the toggle surface; keyboard support comes from
+        // tabindex + Enter/Space/Escape on the card (no nested buttons).
+        var toggle = document.createElement("div");
         toggle.className = "card-toggle";
+        toggle.setAttribute("role", "button");
+        toggle.setAttribute("tabindex", "0");
+        toggle.dataset.subject = item.subject || "(no subject)";
         toggle.setAttribute("aria-expanded", String(expandedKeys.has(item.key)));
         toggle.setAttribute("aria-label", (expandedKeys.has(item.key) ? "Collapse: " : "Expand: ") + (item.subject || "(no subject)"));
         if (expandedKeys.has(item.key)) card.classList.add("expanded");
 
-        var head = document.createElement("span");
-        head.className = "card-head";
-
+        // card-top is a display:contents wrapper so sender/icons/time lay
+        // out as one flex row whether icons are siblings or nested.
         var top = document.createElement("span");
         top.className = "card-top";
+        var topline = document.createElement("span");
+        topline.className = "card-topline";
 
         var sender = document.createElement("span");
         sender.className = "card-sender";
         sender.textContent = item.from || "Unknown sender";
-        top.appendChild(sender);
+        topline.appendChild(sender);
 
-        var time = document.createElement("span");
-        time.className = "card-time";
-        time.textContent = formatTime(item.date);
-        top.appendChild(time);
-        if (item.unread === true && item.localRead === true) {
-          var openedTag = document.createElement("span");
-          openedTag.className = "opened-tag";
-          openedTag.textContent = "Opened here";
-          top.appendChild(openedTag);
-        }
-        head.appendChild(top);
-
-        var subject = document.createElement("span");
-        subject.className = "card-subject";
-        subject.textContent = item.subject || "(no subject)";
-        head.appendChild(subject);
-        toggle.appendChild(head);
-
-        var snippet = document.createElement("span");
-        snippet.className = "card-snippet";
-        snippet.textContent = item.snippet || "";
-        toggle.appendChild(snippet);
-        toggle.addEventListener("click", function (event) {
-          event.stopPropagation();
-          toggleCard(card, toggle, item.key);
-        });
-        card.appendChild(toggle);
-
-        var open = document.createElement("button");
-        open.type = "button";
-        open.className = "card-open";
-        open.textContent = "Open";
-        open.title = "Opens the provider message and marks opened here (provider unread unchanged)";
-        open.setAttribute("aria-label", "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account + " (marks opened here, provider unchanged)");
-        open.addEventListener("click", function (event) {
-          event.stopPropagation();
-          markRead(item.key);
-          openUrl(threadUrl(item));
-        });
-        // Read/delete icons live top-right and reveal on hover only; their
-        // clicks never reach the card toggle below.
-        var icons = document.createElement("div");
+        // Open/read/delete icons sit inline left of the time with reserved
+        // space; their clicks route below and never reach the card toggle.
+        var icons = document.createElement("span");
         icons.className = "card-icons";
-        ["read", "trash"].forEach(function (action) {
+        ["open", "read", "trash"].forEach(function (action) {
           var button = document.createElement("button");
           button.type = "button";
           // The read control is a toggle: unread mail sends read, mail marked
           // read here sends unread. Gmail has no verified unread transport,
           // so its read cards keep a disabled toggle instead of a doomed write.
           var isToggle = action === "read";
+          var isOpen = action === "open";
           var readState = item.unread !== true;
           var gmailUnreadBlocked = isToggle && readState && item.provider === "gmail";
           button.className = "card-icon" + (action === "trash" ? " card-trash" : "") + (isToggle && readState ? " card-icon-active" : "");
           button.dataset.mailAction = action;
-          var label = isToggle
-            ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + (readState ? " as unread" : " as read")
-            : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
-          button.title = gmailUnreadBlocked ? "Marking unread is not available for Gmail yet" : label;
+          var label = isOpen
+            ? "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account + " (marks opened here, provider unchanged)"
+            : isToggle
+              ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + (readState ? " as unread" : " as read")
+              : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
+          button.title = isOpen
+            ? "Opens the provider message and marks opened here (provider unread unchanged)"
+            : gmailUnreadBlocked ? "Marking unread is not available for Gmail yet" : label;
           if (isToggle) button.setAttribute("aria-pressed", String(readState));
-          button.setAttribute("aria-label", label + ": " + (item.subject || "(no subject)") + " for " + item.account);
+          button.setAttribute("aria-label", isOpen ? label : label + ": " + (item.subject || "(no subject)") + " for " + item.account);
           button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || gmailUnreadBlocked));
           button.appendChild(actionIcon(action));
-          button.addEventListener("click", function () {
-            if (button.getAttribute("aria-disabled") !== "true") void actOnMail(item.key, isToggle ? (readState ? "unread" : "read") : action);
+          // stopImmediatePropagation: the card-level toggle listener sits on
+          // an ancestor, and linkedom bubbles regardless of stopPropagation.
+          button.addEventListener("click", function (event) {
+            event.stopPropagation();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            if (button.getAttribute("aria-disabled") === "true") return;
+            if (isOpen) {
+              markRead(item.key);
+              openUrl(threadUrl(item));
+            } else void actOnMail(item.key, isToggle ? (readState ? "unread" : "read") : action);
           });
           icons.appendChild(button);
         });
-        card.appendChild(icons);
-        card.addEventListener("click", function (event) {
-          if (event.target.closest("button") && !event.target.closest(".card-toggle")) return;
+        topline.appendChild(icons);
+
+        var time = document.createElement("span");
+        time.className = "card-time";
+        time.textContent = formatTime(item.date);
+        topline.appendChild(time);
+        if (item.unread === true && item.localRead === true) {
+          var openedTag = document.createElement("span");
+          openedTag.className = "opened-tag";
+          openedTag.textContent = "Opened here";
+          topline.appendChild(openedTag);
+        }
+        top.appendChild(topline);
+        toggle.appendChild(top);
+        var subject = document.createElement("span");
+        subject.className = "card-subject";
+        subject.textContent = item.subject || "(no subject)";
+        toggle.appendChild(subject);
+
+        var snippet = document.createElement("span");
+        snippet.className = "card-snippet";
+        snippet.textContent = item.snippet || "";
+        toggle.appendChild(snippet);
+        card.appendChild(toggle);
+        // One toggle surface: clicks on content expand/collapse, icon
+        // clicks are guarded. No nested buttons — the content area is a
+        // div with button role, icons are the only real buttons.
+        // Card content toggles expand/collapse. Icon buttons stop
+        // propagation in their own listeners, so only content clicks arrive.
+        // No nested buttons — the content area is a div with button role,
+        // icons are the only real buttons.
+        toggle.addEventListener("click", function () {
           toggleCard(card, toggle, item.key);
+        });
+        toggle.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleCard(card, toggle, item.key);
+          }
         });
         card.addEventListener("keydown", function (event) {
           if (event.key === "Escape" && card.classList.contains("expanded")) toggleCard(card, toggle, item.key, false);
         });
-
-        var actionsRow = document.createElement("div");
-        actionsRow.className = "card-actions";
-        actionsRow.appendChild(open);
-        card.appendChild(actionsRow);
 
         messageList.appendChild(card);
         if (pendingMailActions.has(item.key)) card.setAttribute("aria-busy", "true");
@@ -638,8 +664,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           card.appendChild(error);
         }
         if (focusedKey === item.key) {
-          var restore = focusedToggle ? toggle : (card.querySelector('[data-mail-action="' + focusedAction + '"]') || open);
-          (restore || open).focus();
+          var restore = focusedToggle ? toggle : card.querySelector('[data-mail-action="' + focusedAction + '"]') || card.querySelector('[data-mail-action="open"]') || toggle;
+          restore.focus();
         }
       });
     });
