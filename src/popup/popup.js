@@ -7,7 +7,7 @@
 
 import { THEME_KEY, DEFAULT_THEME, validTheme, loadTheme, saveTheme } from "./themes.js";
 import { normalizeAccount, accountKey } from "../store/accounts.js";
-import { threadUrl } from "./links.js";
+import { threadUrl, accountInboxUrl } from "./links.js";
 import { accountStatusLabel } from "../notify/notify.js";
 import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
 
@@ -381,6 +381,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var active = document.activeElement;
     var focusedKey = active?.closest?.(".card")?.getAttribute("data-key");
     var focusedAction = active?.dataset.mailAction;
+    var focusedInbox = active?.dataset.inboxAccount;
     var focusedRecovery = active?.closest?.(".status-signin")?.dataset.accountKey;
     var hadListFocus = list.contains(active);
     var recoveryFocus = null;
@@ -423,7 +424,23 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       address.textContent = acct.account;
       address.id = "account-heading-" + index++;
       group.setAttribute("aria-labelledby", address.id);
-      heading.append(top, address);
+      var inboxUrl = accountInboxUrl(acct);
+      if (inboxUrl) {
+        var inbox = document.createElement("a");
+        inbox.className = "account-inbox";
+        inbox.href = inboxUrl;
+        inbox.target = "_blank";
+        inbox.rel = "noreferrer";
+        inbox.dataset.inboxAccount = accountKey(acct);
+        inbox.title = "Open inbox for " + acct.account;
+        inbox.append(top, address);
+        inbox.addEventListener("click", function (event) {
+          if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || (event.button && event.button !== 0) || !globalThis.chrome?.tabs?.create) return;
+          event.preventDefault();
+          void chrome.tabs.create({ url: inboxUrl, active: true });
+        });
+        heading.appendChild(inbox);
+      } else heading.append(top, address);
       group.appendChild(heading);
       var state = acctState;
       var status = acct.enabled === false ? "Paused" : accountStatusLabel(acct, state);
@@ -454,6 +471,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       messageList.className = "account-mail";
       group.appendChild(messageList);
       list.appendChild(group);
+      if (focusedInbox === accountKey(acct) && inboxUrl) inbox.focus();
       if (!mail.length) {
         var noMail = document.createElement("p");
         noMail.className = "account-empty";

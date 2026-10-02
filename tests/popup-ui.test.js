@@ -672,3 +672,22 @@ test('a stale action-state reread cannot replace a newer recovery storage event'
   assert.equal(document.querySelector('[data-recovery-account="gmail:work@example.com"]'),null);
   assert.ok(document.querySelector('[data-recovery-account="gmail:newer@example.test"]'));
 });
+
+test('whole account headings open one active inbox tab and retain focus through updates',async()=>{
+  const accounts=[{provider:'gmail',account:'first@example.test'}, {provider:'gmail',account:'second@example.test',enabled:false},{provider:'outlook',account:'third@example.test'}];
+  const {document,window,tabs,messages,change}=await workspaceFixture({accounts,mailCache:[],accountState:{'outlook:third@example.test':{needsSignIn:true}}});
+  const links=[...document.querySelectorAll('.account-inbox')];
+  assert.equal(links.length,3);
+  links.forEach((link,i)=>{
+    assert.equal(link.querySelector('h2').textContent,accounts[i].account);
+    assert.equal(link.target,'_blank');
+    link.click();
+  });
+  await tick();
+  assert.equal(tabs.length,3);assert.ok(tabs.every(tab=>tab.active));assert.equal(messages.length,0);
+  links[1].focus();change({mailCache:{newValue:[]}});
+  assert.equal(document.activeElement.dataset.inboxAccount,'gmail:second@example.test');
+  const modified=new window.Event('click',{bubbles:true,cancelable:true});modified.ctrlKey=true;
+  document.activeElement.dispatchEvent(modified);await tick();assert.equal(tabs.length,3);assert.equal(modified.defaultPrevented,false);
+  change({accounts:{newValue:[accounts[0]]}});assert.equal(document.activeElement.id,'refresh-mail');
+});

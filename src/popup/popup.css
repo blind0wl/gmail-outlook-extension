@@ -148,3 +148,9 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 .card.read .card-sender, .card.read .card-subject { font-weight: 400; }
 
 /* Keep Undo above Mail without growing as more messages are deleted. */
+
+.account-heading:has(.account-inbox) { padding: 0; }
+.account-inbox { display: block; padding: 10px 14px; color: inherit; text-decoration: none; border-radius: inherit; }
+.account-inbox:hover { background: var(--hover); }
+.account-inbox:hover h2 { text-decoration: underline; text-underline-offset: 3px; }
+.account-inbox:focus-visible { outline-offset: -3px; }

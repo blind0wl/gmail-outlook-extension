@@ -66,3 +66,12 @@ export function threadUrl(item) {
     return safeOutlookWebLink(item.webLink, item.account) ?? outlookThreadUrl(item.account, id);
   return gmailThreadUrl(item.account, id);
 }
+
+// Inbox compatibility URLs require fresh multi-account browser acceptance.
+export function accountInboxUrl(account) {
+  if (typeof account?.account !== 'string' || !account.account.trim()) return null;
+  const address = encodeURIComponent(account.account);
+  if (account.provider === 'gmail') return `${GMAIL_THREAD_BASE}?authuser=${address}#inbox`;
+  if (account.provider === 'outlook') return `${OUTLOOK_MAIL_BASE}0/inbox?login_hint=${address}`;
+  return null;
+}

@@ -55,3 +55,10 @@ test("messageIdOf strips the provider prefix", () => {
   assert.equal(messageIdOf("gmail:abc"), "abc");
   assert.equal(messageIdOf("outlook:A=B"), "A=B");
 });
+
+test('inbox links encode configured identities and reject missing or unknown accounts', async () => {
+  const {accountInboxUrl} = await import('../src/popup/links.js');
+  assert.equal(accountInboxUrl({provider:'gmail',account:'first+work@example.test'}),'https://mail.google.com/mail/?authuser=first%2Bwork%40example.test#inbox');
+  assert.equal(accountInboxUrl({provider:'outlook',account:'second@example.test'}),'https://outlook.live.com/mail/0/inbox?login_hint=second%40example.test');
+  for(const account of [null,{}, {provider:'other',account:'a@b.test'},{provider:'gmail',account:''}]) assert.equal(accountInboxUrl(account),null);
+});
