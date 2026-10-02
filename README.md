@@ -100,7 +100,7 @@ framework, bundler, or production npm dependencies.
 | `src/auth/` | Personal Microsoft OAuth/PKCE, renewal, and session invalidation. |
 | `src/store/` | Account normalization and the bounded mail cache. |
 | `src/popup/` | Cache-only rendering, provider links, and actions sent to the worker. |
-| `src/notify/` | Notifications, mute/volume settings, and offscreen Web Audio chime. |
+| `src/notify/` | Notifications, mute/volume settings, and offscreen MP3 chime. |
 | `tests/` | Automated regressions, fixtures, and the popup acceptance procedure. |
 | `.dev/`, `.specify/` | Historical workflow records and specification tooling; not an active ai-dev-system workflow. |
 
@@ -203,3 +203,11 @@ for product scope. [DESIGN.md](DESIGN.md) documents the existing visual system;
 captures; [the workspace fixture](docs/ui-workspace/README.md) reuses current
 production files with synthetic accounts. The original implementation plan is historical context;
 current source and dated acceptance records describe the implemented behavior.
+
+## Acknowledgements
+
+[Checker Plus for Gmail](https://jasonsavard.com/CheckerPlusForGmail/), created
+by Jason Savard, inspired me to build my own Gmail and Outlook extension.
+This project uses its `sounds/chime.mp3` notification sound, bundled here as
+`src/notify/sounds/chime.mp3` from Checker Plus for Gmail version 36.5.2.
+The source extension's copyright notice reads: “Copyright Jason Savard”.
