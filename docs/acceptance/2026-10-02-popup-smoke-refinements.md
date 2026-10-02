@@ -59,3 +59,14 @@ Fresh verification: Node 24.19.0 `npm run verify` passed all 286 tests;
 Detector retains only the pre-existing Signal swatch advisory. Source review
 confirms navigation/form behavior unchanged. No real mail or credentials were
 accessed during agent verification.
+
+## Owner acceptance — 2026-10-02
+
+The owner reports that the stronger whole-heading hover smoke test passed and
+is happy with the results. The hover candidate `d69da65` is now owner-accepted,
+alongside the previously reported passing smoke tests for inbox navigation,
+removed Undo presentation, polling settings and bottom-of-Settings placement.
+All requested UI refinements are accepted. No additional implementation remains
+for this feedback. This owner smoke acceptance does not claim unreported detailed
+restart/failure/accessibility protocols were performed. No merge or release was
+requested or performed.

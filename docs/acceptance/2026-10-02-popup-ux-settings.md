@@ -82,3 +82,11 @@ Trash, and working polling settings. See [the smoke/refinement record](2026-10-0
 for evidence limits and fresh checks on `6788b89`, which removes address
 underlining and moves Mail checking after Sound. Earlier synthetic records
 retain their original section order; current specs follow the owner's revision.
+
+## Owner smoke acceptance complete — 2026-10-02
+
+The owner reports the final whole-heading hover test passed and is happy with
+the results. All requested UI refinements are owner-accepted; see
+[the smoke record](2026-10-02-popup-smoke-refinements.md). Earlier pending smoke
+statements are superseded by these owner results. Unreported detailed acceptance
+protocols remain unclaimed; no merge or release was authorized.
