@@ -132,6 +132,7 @@ test("popup lifecycle controls send worker messages and static previews never wr
   assert.equal(messages.at(-1).type, "remove-account");
   let finishAction;
   let pendingRequests = 0;
+  test.afterEach(() => { try { finishAction?.({ ok: false, code: "teardown" }); } catch {} });
   chrome.runtime.sendMessage = () => {
     pendingRequests++;
     return new Promise(resolve => { finishAction = resolve; });
@@ -431,6 +432,51 @@ test("icon clicks act on mail without toggling the card", async () => {
   assert.equal(card.classList.contains("expanded"), true, "icon action keeps the expanded card open");
 });
 
+test("read cards stay visible this session with a pressed inverted toggle for unread", async () => {
+  const outlook = { provider: "outlook", account: "o@example.test" };
+  const { document, change } = await workspaceFixture({
+    accounts: [outlook],
+    mailCache: [{ ...outlook, key: "outlook:o%40example.test:1", from: "Sender", subject: "Hello", snippet: "text", date: Date.now(), unread: true }],
+  });
+  const cached = { ...outlook, key: "outlook:o%40example.test:1", from: "Sender", subject: "Hello", snippet: "text", date: Date.now(), unread: true };
+  let finish;
+  chrome.runtime.sendMessage = () => new Promise((resolve) => { finish = resolve; });
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
+  const toggle = () => document.querySelector('[data-mail-action="read"]');
+  assert.equal(toggle().getAttribute("aria-pressed"), "false");
+  toggle().click();
+  finish({ ok: true });
+  await tick();
+  change({ mailCache: { newValue: [{ ...cached, unread: false }] } });
+  assert.ok(document.querySelector(".card"), "confirmed read stays visible this session");
+  assert.equal(toggle().getAttribute("aria-pressed"), "true");
+  assert.ok(toggle().classList.contains("card-icon-active"), "pressed toggle uses the inverted scheme");
+  assert.match(toggle().getAttribute("aria-label"), /Mark .* as unread/);
+  toggle().click();
+  await tick();
+  finish({ ok: true });
+  await tick();
+  change({ mailCache: { newValue: [cached] } });
+  assert.equal(toggle().getAttribute("aria-pressed"), "false");
+  assert.equal(toggle().classList.contains("card-icon-active"), false);
+});
+
+test("gmail read toggle is disabled while unread transport is unavailable", async () => {
+  const { document, change, data } = await workspaceFixture();
+  const cached = data.mailCache[0];
+  let finish;
+  chrome.runtime.sendMessage = () => new Promise((resolve) => { finish = resolve; });
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
+  document.querySelector('[data-mail-action="read"]').click();
+  finish({ ok: true });
+  await tick();
+  change({ mailCache: { newValue: [{ ...cached, unread: false }] } });
+  const toggle = document.querySelector('[data-mail-action="read"]');
+  assert.ok(document.querySelector(".card"), "gmail read card stays visible this session");
+  assert.equal(toggle.getAttribute("aria-disabled"), "true");
+  assert.match(toggle.title, /not available for Gmail/);
+});
+
 test("settings leads with accounts before themes", async () => {
   const { document } = await workspaceFixture();
   const labels = [...document.querySelectorAll("#settings-view > section")]
@@ -497,6 +543,7 @@ test('hover actions use provider-specific labels and resist duplicate clicks', a
   assert.equal(pending.getAttribute('aria-disabled'),'true');
   pending.click();assert.equal(messages.length,1);
   assert.equal(messages[0].type,'mail-action');assert.equal(messages[0].action,'read');
+  test.afterEach(() => { try { finish?.(); } catch {} });
   finish();await tick();
   change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com',subject:'Test'}}}}});
   assert.ok(!document.querySelector('[data-undo-key]'));
@@ -545,17 +592,27 @@ test('confirmed read feedback resists stale unread cache until reconciliation, t
 });
 
 test('read cache arriving before action response settles feedback and allows later unread mail',async()=>{
-  const {document,change,data}=await workspaceFixture();
-  const cached=data.mailCache[0];
+  const outlook={provider:'outlook',account:'o@example.test'};
+  const {document,change}=await workspaceFixture({
+    accounts:[outlook],
+    mailCache:[{...outlook,key:'outlook:o%40example.test:1',from:'Sender',subject:'Session',snippet:'text',date:Date.now(),unread:true}],
+  });
+  const cached={...outlook,key:'outlook:o%40example.test:1',from:'Sender',subject:'Session',snippet:'text',date:Date.now(),unread:true};
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
   document.querySelector('[data-mail-action="read"]').click();
   change({mailCache:{newValue:[{...cached,unread:false}]}});
   assert.ok(document.querySelector('.card.read'),'pending feedback stays visible through storage event');
   finish({ok:true});await tick();
-  assert.equal(document.querySelector('.card'),null);
+  assert.ok(document.querySelector('.card'),'confirmed read stays visible for the session toggle');
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-pressed'),'true');
+  document.querySelector('[data-mail-action="read"]').click();
+  await tick();
+  finish({ok:true});await tick();
   change({mailCache:{newValue:[cached]}});
   assert.ok(document.querySelector('.card'),'future unread state can appear after cache/response handoff');
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-pressed'),'false');
 });
 
 test('uncertain recovery precedes mail, names its scope and leaves unrelated actions usable',async()=>{
@@ -645,6 +702,7 @@ test('account recovery resists duplicate clicks, keeps failures and leaves new u
   const busy=document.querySelector('[data-recovery-account]');
   assert.equal(busy.getAttribute('aria-disabled'),'true');
   busy.click();assert.equal(messages.length,1);
+  test.afterEach(() => { try { finish?.(); } catch {} });
   const newLock={state:'uncertain',item:{...account,key:'new'}};
   change({mailActions:{newValue:{first,failed,new:newLock}}});
   finish();await tick();
@@ -739,6 +797,7 @@ test('check frequency saves through worker, validates drafts and keeps pending s
   assert.match(document.getElementById('poll-error').textContent,/30 seconds.*5 hours.*whole seconds/);
   edit('2');unit.value='minutes';let finish;
   chrome.runtime.sendMessage=msg=>{messages.push(msg);return new Promise(resolve=>finish=resolve);};
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
   duration.focus();submit();submit();assert.equal(messages.length,1);assert.equal(save.disabled,true);
   change({pollIntervalMs:{newValue:120000},mailCache:{newValue:[]},popupTheme:{newValue:'signal'}});
   assert.doesNotMatch(document.getElementById('poll-status').textContent,/Saved/);assert.equal(duration.value,'2');
@@ -782,6 +841,7 @@ test('a delayed initial interval read cannot overwrite successful Save or report
 test('a newer interval event survives an older successful Save response without false success',async()=>{
   const {document,window,change}=await workspaceFixture();let finish;
   chrome.runtime.sendMessage=()=>new Promise(resolve=>finish=resolve);
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
   const duration=document.getElementById('poll-duration');duration.value='2';duration.dispatchEvent(new window.Event('input'));
   document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
   change({pollIntervalMs:{newValue:120000}});change({pollIntervalMs:{newValue:180000}});

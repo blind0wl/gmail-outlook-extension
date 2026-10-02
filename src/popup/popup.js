@@ -252,17 +252,31 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
   // Project pending actions over authoritative cache; never write optimistic mail state.
   var mailFeedback = new Map();
+  // Mail marked read here stays visible for this session with a pressed
+  // toggle, so unread can be restored without waiting for the next poll.
+  var sessionRead = new Set();
   function settleMailFeedback() {
     mailFeedback.forEach(function (feedback, key) {
-      if (feedback.confirmed && !items.some(function (item) { return item.key === key && item.unread !== false; }))
+      var current = items.find(function (item) { return item.key === key; });
+      if (feedback.confirmed && feedback.action === "unread" && current && current.unread !== false) {
         mailFeedback.delete(key);
+        sessionRead.delete(key);
+      } else if (feedback.confirmed && feedback.action === "read" && !(current && current.unread !== false)) {
+        mailFeedback.delete(key);
+      }
+    });
+    sessionRead.forEach(function (key) {
+      if (!items.some(function (item) { return item.key === key; })) sessionRead.delete(key);
     });
   }
   function displayedItems() {
     var projected = items.filter(function (item) {
       var feedback = mailFeedback.get(item.key);
-      return feedback ? feedback.action === "read" && !feedback.confirmed : item.unread !== false;
+      if (feedback) return feedback.action === "unread" || (feedback.action === "read" && !feedback.confirmed);
+      return item.unread !== false || sessionRead.has(item.key);
     }).map(function (item) {
+      var feedback = mailFeedback.get(item.key);
+      if (feedback && feedback.action === "unread") return { ...item, unread: true, localRead: false };
       return mailFeedback.has(item.key) ? { ...item, unread: false, localRead: false } : item;
     });
     // A storage event may arrive before the worker response. Keep pending read feedback visible.
@@ -288,8 +302,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var unconfirmedMessage = "The result could not be confirmed. Check this action in your mailbox, then choose “I’ve checked” to unlock it. Other mail is still available.";
     pendingMailActions.add(key);
     delete mailErrors[key];
-    if (action === "read" || action === "trash") mailFeedback.set(key, { action: action, item: actionItem, confirmed: false });
-    setStatus(action === "read" ? "Marking as read…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
+    if (action === "read" || action === "trash" || action === "unread") mailFeedback.set(key, { action: action, item: actionItem, confirmed: false });
+    setStatus(action === "read" ? "Marking as read…" : action === "unread" ? "Marking as unread…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
     renderHeader();
     renderList();
     renderRecovery();
@@ -308,11 +322,16 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       } else {
         if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;
         if (action === "undo") mailFeedback.delete(key);
+        if (action === "read") sessionRead.add(key);
+        if (action === "unread") sessionRead.delete(key);
         settleMailFeedback();
         var readMessage = actionItem?.provider === "gmail"
           ? "Marked as read in Gmail. If an open Gmail page still shows unread, refresh that page."
           : "Marked as read in your mailbox.";
-        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash." : "Restored to your inbox.", "ok");
+        var unreadMessage = actionItem?.provider === "gmail"
+          ? "Marked as unread in Gmail. If an open Gmail page still shows read, refresh that page."
+          : "Marked as unread in your mailbox.";
+        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "unread" ? unreadMessage : action === "trash" ? "Moved to Trash." : "Restored to your inbox.", "ok");
       }
     } catch {
       mailFeedback.delete(key);
@@ -575,14 +594,25 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         ["read", "trash"].forEach(function (action) {
           var button = document.createElement("button");
           button.type = "button";
-          button.className = "card-icon" + (action === "trash" ? " card-trash" : "");
+          // The read control is a toggle: unread mail sends read, mail marked
+          // read here sends unread. Gmail has no verified unread transport,
+          // so its read cards keep a disabled toggle instead of a doomed write.
+          var isToggle = action === "read";
+          var readState = item.unread !== true;
+          var gmailUnreadBlocked = isToggle && readState && item.provider === "gmail";
+          button.className = "card-icon" + (action === "trash" ? " card-trash" : "") + (isToggle && readState ? " card-icon-active" : "");
           button.dataset.mailAction = action;
-          var label = action === "read" ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + " as read" : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
-          button.title = label;
+          var label = isToggle
+            ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + (readState ? " as unread" : " as read")
+            : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
+          button.title = gmailUnreadBlocked ? "Marking unread is not available for Gmail yet" : label;
+          if (isToggle) button.setAttribute("aria-pressed", String(readState));
           button.setAttribute("aria-label", label + ": " + (item.subject || "(no subject)") + " for " + item.account);
-          button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || (action === "read" && item.unread !== true)));
+          button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || gmailUnreadBlocked));
           button.appendChild(actionIcon(action));
-          button.addEventListener("click", function () { if (button.getAttribute("aria-disabled") !== "true") void actOnMail(item.key, action); });
+          button.addEventListener("click", function () {
+            if (button.getAttribute("aria-disabled") !== "true") void actOnMail(item.key, isToggle ? (readState ? "unread" : "read") : action);
+          });
           icons.appendChild(button);
         });
         card.appendChild(icons);

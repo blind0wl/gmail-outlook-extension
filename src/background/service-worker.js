@@ -446,7 +446,7 @@ export async function inspectSavedGmailTrash(deps = {}) {
 globalThis.inspectSavedGmailTrash = () => inspectSavedGmailTrash();
 
 export async function handleMailboxAction(msg, deps = {}) {
-  if (!msg || !["read", "trash", "undo", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
+  if (!msg || !["read", "trash", "undo", "unread", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
   if (msg.action === "undo" && pendingUndos.has(msg.key)) return pendingUndos.get(msg.key);
   if (pendingMail.has(msg.key)) return { ok: false, code: "pending" };
   pendingMail.add(msg.key);

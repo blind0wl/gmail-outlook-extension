@@ -140,6 +140,8 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 .card-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 6px; background: transparent; border-color: transparent; }
 .card-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .card-trash:not([aria-disabled="true"]) { color: var(--danger); }
+.card-icon-active:not([aria-disabled="true"]) { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.card-icon-active:hover:not([aria-disabled="true"]) { background: var(--accent); color: var(--on-accent); }
 .card-error { margin: 8px 0 0; color: var(--danger); }
 #mail-undo { list-style: none; margin: 12px 0 0; padding: 0; }
 #mail-undo li { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 8px 12px; background: var(--panel); border-radius: 12px; }

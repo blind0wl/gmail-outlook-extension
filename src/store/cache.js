@@ -66,6 +66,9 @@ export function applyMailboxChange(key, action, replacement) {
   if (action === "read" && item) {
     item.unread = false;
     item.localRead = false;
+  } else if (action === "unread" && item) {
+    item.unread = true;
+    item.localRead = false;
   } else if (action === "trash") {
     byKey.delete(key);
   } else if (action === "undo" && replacement) {
