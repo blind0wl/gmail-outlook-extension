@@ -9,7 +9,9 @@ The popup groups cached mail under each account in separate rounded cards, with
 bold sender/subject and an automatic preview capped at three lines. Hover or
 keyboard focus reveals mark-as-read and Trash actions. Gmail uses the existing
 browser login and acts on **whole conversations**; Outlook acts on individual
-messages through Graph. Trash is recoverable through Undo for ten minutes.
+messages through Graph. Trash remains recoverable in the owning mailbox; the
+popup has no Undo tray or button. The worker retains its ten-minute restore
+journal and existing Undo command.
 Gmail Trash and Undo require verified state for every member of the conversation.
 Existing unconfirmed recovery records remain saved until you check the mailbox
 and acknowledge them.
@@ -22,9 +24,9 @@ complete conversation membership and labels; Undo uses fresh session metadata
 and the current Sync restore operation.
 Unrecognized responses never report success; check your mailbox, then use
 **I’ve checked** to unlock further actions. No automatic mutation retry occurs.
-Recovery and Undo appear above the mail list. Saved unconfirmed actions use one
+Unconfirmed-action recovery appears above the mail list. Saved unconfirmed actions use one
 counted row per account; check all those actions in the mailbox before using
-**I’ve checked** to unlock them. Individual Undo remains separate.
+**I’ve checked** to unlock them. Completed deletions have no visible Undo feedback.
 Only the affected conversation or
 message is locked; other mail remains usable. After a confirmed Gmail read, the
 popup explains that an already-open Gmail page may need refreshing.
@@ -143,8 +145,21 @@ mail content, or sensitive diagnostics in the repository.
 
 Mail shows one section per configured account, including empty or paused
 accounts. All/Gmail/Outlook filters retain separate account ownership. Settings
-contains Themes, Accounts, Notifications and Sound; Back returns to the prior
+contains Accounts, Themes, Notifications, Sound and Mail checking; Back returns to the prior
 Mail scroll position. Account drafts survive cache updates and theme changes.
+
+Click an account heading to open its webmail inbox in one new active tab.
+Heading navigation does not mark mail read or refresh the cache. The encoded
+Gmail/Outlook account hints still require fresh two-account compatibility
+acceptance for this candidate; see the [candidate record](docs/acceptance/2026-10-02-popup-ux-settings.md).
+
+Under **Settings → Mail checking**, enter a duration, choose seconds/minutes/hours,
+and press **Save**. One preference applies to all enabled accounts. The default
+is 1 minute; the supported range is 30 seconds–5 hours, in whole seconds.
+Save applies the running schedule without fetching mail. Checks may be delayed
+by the browser or provider; paused accounts and provider backoff still apply.
+Manual Refresh remains available. Unrelated updates preserve unsaved drafts;
+a failed Save retains your choice for retry and does not report success.
 
 **Midnight desk** is the default for new or unset profiles. Choose **Slate
 workspace** or **Signal panel** under Settings → Themes; the `popupTheme` local

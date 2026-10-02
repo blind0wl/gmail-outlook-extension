@@ -1,3 +1,4 @@
+import { initPollSettings } from "./poll-settings-form.js";
 // A v5 inbox popup. Reads the normalized cache from chrome.storage.local
 // key "mailCache" only (shape from src/store/cache.js):
 // { key, provider, account, from, subject, snippet, date, unread, localRead }
@@ -7,7 +8,7 @@
 
 import { THEME_KEY, DEFAULT_THEME, validTheme, loadTheme, saveTheme } from "./themes.js";
 import { normalizeAccount, accountKey } from "../store/accounts.js";
-import { threadUrl } from "./links.js";
+import { threadUrl, accountInboxUrl } from "./links.js";
 import { accountStatusLabel } from "../notify/notify.js";
 import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
 
@@ -235,7 +236,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (revision !== mailActionsRevision) return;
       mailActions = data?.mailActions || {};
       renderList();
-      renderUndo();
+      renderRecovery();
     } catch { /* Keep the saved recovery view if local storage is unavailable. */ }
   }
   // Project pending actions over authoritative cache; never write optimistic mail state.
@@ -280,7 +281,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     setStatus(action === "read" ? "Marking as read…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
     renderHeader();
     renderList();
-    renderUndo();
+    renderRecovery();
     try {
       var result = await chrome.runtime.sendMessage({ type: "mail-action", key: key, action: action });
       if (!result?.ok) {
@@ -300,7 +301,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var readMessage = actionItem?.provider === "gmail"
           ? "Marked as read in Gmail. If an open Gmail page still shows unread, refresh that page."
           : "Marked as read in your mailbox.";
-        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash. Undo is available above the mail list." : "Restored to your inbox.", "ok");
+        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "trash" ? "Moved to Trash." : "Restored to your inbox.", "ok");
       }
     } catch {
       mailFeedback.delete(key);
@@ -311,7 +312,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       pendingMailActions.delete(key);
       renderHeader();
       renderList();
-      renderUndo();
+      renderRecovery();
     }
   }
   var pendingRecoveryAccounts = new Set();
@@ -319,7 +320,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (pendingRecoveryAccounts.has(acctKey)) return;
     pendingRecoveryAccounts.add(acctKey);
     setStatus("Unlocking checked actions…", "progress");
-    renderUndo();
+    renderRecovery();
     var unlocked = 0;
     try {
       for (var entry of entries) {
@@ -340,15 +341,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     } finally {
       pendingRecoveryAccounts.delete(acctKey);
       renderList();
-      renderUndo();
+      renderRecovery();
     }
   }
-  var undoTimer;
-  var newestUndo;
-  function renderUndo() {
-    clearTimeout(undoTimer);
+  function renderRecovery() {
     var list = document.getElementById("mail-undo");
-    var focused = document.activeElement?.dataset.undoKey;
     var focusedAccount = document.activeElement?.dataset.recoveryAccount;
     list.replaceChildren();
     var groups = new Map();
@@ -377,40 +374,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (focusedAccount === acctKey) button.focus();
     });
     list.hidden = !list.childElementCount;
-    var tray = document.getElementById("undo-tray");
-    list = document.getElementById("undo-list");
-    var scroll = list.scrollTop;
-    list.replaceChildren();
-    var now = Date.now();
-    var nextUpdate = 60000;
-    Object.entries(mailActions).sort(function (a, b) { return b[1].expiresAt - a[1].expiresAt; }).forEach(function (entry) {
-      var key = entry[0], record = entry[1];
-      if (pendingMailActions.has(key) || record.state !== "undo" || record.expiresAt <= now || !configuredAccounts.some(a => accountKey(a) === accountKey(record.item))) return;
-      var row = document.createElement("li");
-      var text = document.createElement("span");
-      var remaining = record.expiresAt - now;
-      nextUpdate = Math.min(nextUpdate, remaining % 60000 || 60000);
-      text.textContent = (record.item.subject || "Mail") + " · " + record.item.account + " · " + Math.ceil(remaining / 60000) + " min left";
-      var undo = document.createElement("button");
-      undo.type = "button";
-      undo.textContent = "Undo";
-      undo.dataset.undoKey = key;
-      undo.setAttribute("aria-label", "Restore " + (record.item.subject || "mail") + " to Inbox for " + record.item.account);
-      undo.setAttribute("aria-disabled", String(pendingMailActions.has(key)));
-      undo.addEventListener("click", function () { void actOnMail(key, "undo"); });
-      row.append(text, undo);
-      list.appendChild(row);
-      if (focused === key) undo.focus();
-    });
-    document.getElementById("undo-summary").textContent = list.childElementCount + " moved to Trash · Undo for 10 minutes";
-    tray.hidden = !list.childElementCount || document.getElementById("mail-view").hidden;
-    var firstKey = list.querySelector("[data-undo-key]")?.dataset.undoKey;
-    if (focused || firstKey === newestUndo) list.scrollTop = scroll;
-    newestUndo = firstKey;
-    if (list.childElementCount) {
-      undoTimer = setTimeout(renderUndo, nextUpdate);
-      undoTimer?.unref?.();
-    }
   }
 
   function renderList() {
@@ -419,6 +382,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var active = document.activeElement;
     var focusedKey = active?.closest?.(".card")?.getAttribute("data-key");
     var focusedAction = active?.dataset.mailAction;
+    var focusedInbox = active?.dataset.inboxAccount;
     var focusedRecovery = active?.closest?.(".status-signin")?.dataset.accountKey;
     var hadListFocus = list.contains(active);
     var recoveryFocus = null;
@@ -461,7 +425,23 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       address.textContent = acct.account;
       address.id = "account-heading-" + index++;
       group.setAttribute("aria-labelledby", address.id);
-      heading.append(top, address);
+      var inboxUrl = accountInboxUrl(acct);
+      if (inboxUrl) {
+        var inbox = document.createElement("a");
+        inbox.className = "account-inbox";
+        inbox.href = inboxUrl;
+        inbox.target = "_blank";
+        inbox.rel = "noreferrer";
+        inbox.dataset.inboxAccount = accountKey(acct);
+        inbox.title = "Open inbox for " + acct.account;
+        inbox.append(top, address);
+        inbox.addEventListener("click", function (event) {
+          if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || (event.button && event.button !== 0) || !globalThis.chrome?.tabs?.create) return;
+          event.preventDefault();
+          void chrome.tabs.create({ url: inboxUrl, active: true });
+        });
+        heading.appendChild(inbox);
+      } else heading.append(top, address);
       group.appendChild(heading);
       var state = acctState;
       var status = acct.enabled === false ? "Paused" : accountStatusLabel(acct, state);
@@ -492,6 +472,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       messageList.className = "account-mail";
       group.appendChild(messageList);
       list.appendChild(group);
+      if (focusedInbox === accountKey(acct) && inboxUrl) inbox.focus();
       if (!mail.length) {
         var noMail = document.createElement("p");
         noMail.className = "account-empty";
@@ -671,7 +652,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     renderHeader();
     renderPills();
     renderList();
-    renderUndo();
+    renderRecovery();
     renderSound();
   }
 
@@ -717,7 +698,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (settings && !mail.hidden) mailScroll = mail.scrollTop;
     mail.hidden = settings;
     view.hidden = !settings;
-    renderUndo();
+    renderRecovery();
     document.getElementById("mail-tools").hidden = settings;
     document.getElementById("settings-tools").hidden = !settings;
     document.getElementById("workspace-title").textContent = settings ? "Settings" : "Inbox";
@@ -762,6 +743,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function init() {
+    var pollSettings = initPollSettings();
     initThemes();
     document.getElementById("open-settings").addEventListener("click", function () { showView(true); });
     document.getElementById("back-to-mail").addEventListener("click", function () { showView(false); });
@@ -888,11 +870,12 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
         if (area === "local" && changes) {
+          if (changes.pollIntervalMs) pollSettings.changed(changes.pollIntervalMs.newValue);
           if (changes.mailActions) {
             mailActionsRevision++;
             mailActions = changes.mailActions.newValue || {};
             renderList();
-            renderUndo();
+            renderRecovery();
           }
           if (changes[THEME_KEY] && !themeWrites) applyTheme(changes[THEME_KEY].newValue);
           if (changes[CACHE_KEY]) {

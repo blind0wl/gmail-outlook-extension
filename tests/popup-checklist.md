@@ -50,3 +50,26 @@ are a procedure, not evidence of a current pass.
 Automated checks: Node 24, `npm ci`, `npm run verify`, `git diff --check`.
 Synthetic browser checks are in docs/ui-workspace/ and do not replace real
 provider authentication, extension reload, native notifications or audio.
+
+## Popup UX/settings candidate — 2026-10-02 (fresh acceptance required)
+
+Historical ticks above do not accept this candidate. Record results in
+`docs/acceptance/2026-10-02-popup-ux-settings.md` with commit and Chrome version.
+
+- [ ] Trash disposable Gmail conversations and Outlook messages: card hides,
+      concise success, no Undo tray/button/countdown after reopen. Restore in
+      provider UI. Failures restore cards; uncertainty retains “I’ve checked”.
+- [ ] With two accounts per provider, activate each heading in both directions:
+      correct owning inbox, exactly one active tab, no read/write/refresh.
+      Check missing sessions, empty/paused/error accounts and modified clicks.
+- [ ] Keyboard activation and focus restoration survive cache updates and
+      provider filters; headings retain provider/address/count/checked time.
+- [ ] Save 30 seconds, 31 seconds, 2 minutes and 5 hours globally; observe
+      enabled Gmail/Outlook checks, then reopen/reload/restart to verify retention.
+- [ ] Reject empty, out-of-range and subsecond durations. Verify pending,
+      successful and failed Save messages; failure retains drafts and allows retry.
+- [ ] Cache/theme/account updates preserve unsaved duration/unit and focus.
+- [ ] Save while a poll runs: it finishes normally; no immediate fetch or alert
+      on Save. Manual Refresh stays silent; paused/backed-off accounts stay isolated.
+- [ ] Inspect all themes at 320px/480px, keyboard/200% zoom/forced colors;
+      inspect console and ensure popup provider requests remain absent.
