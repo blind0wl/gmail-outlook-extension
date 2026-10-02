@@ -1,3 +1,4 @@
+import { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS, normalizePollInterval, validPollInterval } from "../store/poll-settings.js";
 import { mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
 import { inspectGmailTrash } from "../providers/gmail-trash-verification.js";
 import { messageIdOf } from "../popup/links.js";
@@ -52,9 +53,7 @@ import {
 } from "../notify/sound.js";
 
 export const ALARM_NAME = "mail-poll";
-export const DEFAULT_POLL_MS = 60_000;
-export const MIN_POLL_MS = 30_000;
-export const MAX_POLL_MS = 5 * 3600 * 1000;
+export { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS };
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 10 * 60_000;
 
@@ -794,12 +793,49 @@ function withRealTokens(accounts, deps = {}) {
 async function ensureAlarm() {
   const alarms = globalThis.chrome?.alarms;
   if (!alarms) return;
-  const stored =
-    await globalThis.chrome?.storage?.local?.get?.("pollIntervalMs");
-  await alarms.create(ALARM_NAME, {
-    periodInMinutes:
-      clampInterval(stored?.pollIntervalMs ?? DEFAULT_POLL_MS) / 60000,
+  const stored = await chrome.storage.local.get("pollIntervalMs");
+  const periodInMinutes = normalizePollInterval(stored?.pollIntervalMs) / 60000;
+  const existing = await alarms.get?.(ALARM_NAME);
+  if (existing?.periodInMinutes === periodInMinutes) return;
+  await alarms.create(ALARM_NAME, { delayInMinutes: periodInMinutes, periodInMinutes });
+}
+
+// Preference saves have their own queue: a slow mailbox poll must not block
+// scheduling, and overlapping settings transactions must not undo each other.
+let settingsTail = Promise.resolve();
+function savePollInterval(pollIntervalMs) {
+  if (!validPollInterval(pollIntervalMs)) return Promise.resolve({ ok: false, code: "invalid-interval" });
+  const operation = settingsTail.then(async () => {
+    const store = globalThis.chrome?.storage?.local;
+    const alarms = globalThis.chrome?.alarms;
+    let previous, alarm, snapshot = false;
+    try {
+      previous = await store.get("pollIntervalMs");
+      alarm = await alarms.get(ALARM_NAME);
+      snapshot = true;
+      await store.set({ pollIntervalMs });
+      const periodInMinutes = pollIntervalMs / 60000;
+      await alarms.create(ALARM_NAME, { delayInMinutes: periodInMinutes, periodInMinutes });
+      return { ok: true, pollIntervalMs };
+    } catch {
+      let uncertain = false;
+      if (snapshot) {
+        // Attempt both repairs even if one fails. Never report a failed Save
+        // as applied, since storage and alarms are not an atomic transaction.
+        try {
+          if (previous.pollIntervalMs === undefined) await store.remove("pollIntervalMs");
+          else await store.set({ pollIntervalMs: previous.pollIntervalMs });
+        } catch { uncertain = true; }
+        try {
+          if (alarm) await alarms.create(ALARM_NAME, { when: alarm.scheduledTime, ...(alarm.periodInMinutes === undefined ? {} : {periodInMinutes:alarm.periodInMinutes}) });
+          else await alarms.clear(ALARM_NAME);
+        } catch { uncertain = true; }
+      }
+      return { ok: false, code: "save-failed", ...(uncertain ? { uncertain: true } : {}) };
+    }
   });
+  settingsTail = operation.catch(() => {});
+  return operation;
 }
 
 // One initialization promise created at worker evaluation. Every polling
@@ -810,7 +846,7 @@ async function init() {
   await hydrateCache();
   await hydrateAccountState();
   await pruneMailActions();
-  await ensureAlarm();
+  try { await ensureAlarm(); } catch { /* Later initialization or Save can repair scheduling; mail stays usable. */ }
 }
 
 export const ready = init();
@@ -967,6 +1003,7 @@ export async function handleManualRefresh(accounts, deps = {}) {
 
 export async function handleMessage(msg, deps = {}) {
   await ready;
+  if (msg.type === "set-poll-interval") return savePollInterval(msg.pollIntervalMs);
   if (msg.type === "refresh") {
     const result = await handleManualRefresh(await loadAccounts(), deps);
     // Per-account outcome lists let the popup report honest freshness:
@@ -1069,6 +1106,7 @@ if (typeof chrome !== "undefined") {
   chrome.runtime?.onMessage?.addListener((msg, _sender, sendResponse) => {
     if (
       ![
+        "set-poll-interval",
         "refresh",
         "mark-read",
         "mail-action",
