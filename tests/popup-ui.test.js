@@ -191,7 +191,7 @@ test("notification is silent so mute governs all extension sound", async () => {
 });
 
 let popupFixtureId = 0;
-async function workspaceFixture(overrides = {}) {
+async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
   const { window, document } = popupDOM(
     readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
   );
@@ -221,6 +221,7 @@ async function workspaceFixture(overrides = {}) {
       onChanged: { addListener: callback => { listener = callback; } },
     },
   };
+  configureChrome(globalThis.chrome);
   await import(`../src/popup/popup.js?workspace=${++popupFixtureId}`);
   await tick(); await tick();
   return { document, window, data, messages, tabs,
@@ -736,4 +737,39 @@ test('unrelated events preserve interval drafts and focus; worker failure permit
   assert.equal(duration.value,'3');assert.equal(unit.value,'minutes');assert.equal(document.getElementById('poll-save').disabled,false);
   chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
   form.dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();assert.match(document.getElementById('poll-status').textContent,/Saved/);
+});
+
+test('a delayed initial interval read cannot overwrite successful Save or report a stale error',async()=>{
+  for(const rejects of [false,true]) {
+    let finish;
+    const {document,window}=await workspaceFixture({},chrome=>{
+      const get=chrome.storage.local.get;
+      chrome.storage.local.get=key=>key==='pollIntervalMs'?new Promise((resolve,reject)=>{
+        finish=()=>rejects?reject(new Error('old read failed')):resolve({pollIntervalMs:60000});
+      }):get(key);
+      chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+    });
+    const duration=document.getElementById('poll-duration');
+    duration.value='2';duration.dispatchEvent(new window.Event('input'));
+    document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+    await tick();finish();await tick();
+    assert.equal(duration.value,'2');assert.equal(document.getElementById('poll-unit').value,'minutes');
+    assert.match(document.getElementById('poll-status').textContent,/Saved/);
+    assert.equal(document.getElementById('poll-error').hidden,true);
+  }
+});
+test('a newer interval event survives an older successful Save response without false success',async()=>{
+  const {document,window,change}=await workspaceFixture();let finish;
+  chrome.runtime.sendMessage=()=>new Promise(resolve=>finish=resolve);
+  const duration=document.getElementById('poll-duration');duration.value='2';duration.dispatchEvent(new window.Event('input'));
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  change({pollIntervalMs:{newValue:120000}});change({pollIntervalMs:{newValue:180000}});
+  finish({ok:true,pollIntervalMs:120000});await tick();
+  assert.equal(duration.value,'3');assert.equal(document.getElementById('poll-unit').value,'minutes');
+  assert.doesNotMatch(document.getElementById('poll-status').textContent,/Saved/);
+  assert.match(document.getElementById('poll-status').textContent,/changed while saving/i);
+  assert.equal(document.getElementById('poll-save').disabled,false);
+  chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();
+  assert.equal(duration.value,'3');assert.match(document.getElementById('poll-status').textContent,/Saved/);
 });

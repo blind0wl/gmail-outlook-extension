@@ -30,7 +30,9 @@ export function initPollSettings() {
     try {
       const data = await chrome.storage.local.get(POLL_INTERVAL_KEY);
       if (version === revision) changed(data[POLL_INTERVAL_KEY]);
-    } catch { showError('Could not load the saved interval. Try saving your choice again.'); }
+    } catch {
+      if (version === revision) showError('Could not load the saved interval. Try saving your choice again.');
+    }
   }
   fill();
   void load();
@@ -50,6 +52,8 @@ export function initPollSettings() {
       duration.focus();
       return;
     }
+    // Saving supersedes any read begun before this submission.
+    const saveRevision = ++revision;
     pending = true;
     save.disabled = true;
     duration.readOnly = true;
@@ -60,10 +64,16 @@ export function initPollSettings() {
     try {
       const result = await chrome.runtime.sendMessage({type:'set-poll-interval',pollIntervalMs});
       if (result?.ok && result.pollIntervalMs === pollIntervalMs) {
-        effective = result.pollIntervalMs;
+        // Preference events can arrive while this worker reply is in transit.
+        // Keep a different observed value, and do not claim it was applied.
+        const changedDuringSave = revision !== saveRevision && effective !== result.pollIntervalMs;
+        if (!changedDuringSave) effective = result.pollIntervalMs;
+        revision++;
         dirty = false;
         fill();
-        status.textContent = 'Saved. Applies to all enabled accounts.';
+        status.textContent = changedDuringSave
+          ? 'The interval changed while saving. Check the current value before saving again.'
+          : 'Saved. Applies to all enabled accounts.';
       } else {
         status.textContent = '';
         showError(result?.uncertain ? 'The interval could not be confirmed. Check your choice and try again.' : 'Could not apply the interval. Your choice is still here; try again.');
