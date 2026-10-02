@@ -58,7 +58,9 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .account-count { color: var(--accent); background: transparent; font-variant-numeric: tabular-nums; }
 .card { position: relative; padding: 12px 14px 10px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .card:hover, .card:focus-within { border-color: var(--muted); }
-.card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; padding-right: 60px; }
+.card-toggle { display: block; width: 100%; margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.card.expanded .card-snippet { display: block; -webkit-line-clamp: unset; line-clamp: unset; max-height: none; overflow: visible; }
 .card-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .card-head { min-width: 0; }
@@ -133,8 +135,8 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 
 #back-to-mail { white-space: nowrap; }
 
-.card-quick-actions { display: flex; gap: 4px; opacity: 0; pointer-events: none; }
-.card:hover .card-quick-actions, .card:focus-within .card-quick-actions { opacity: 1; pointer-events: auto; }
+.card-icons { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; opacity: 0; pointer-events: none; }
+.card:hover .card-icons, .card:focus-within .card-icons { opacity: 1; pointer-events: auto; }
 .card-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 6px; background: transparent; border-color: transparent; }
 .card-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .card-trash:not([aria-disabled="true"]) { color: var(--danger); }
@@ -142,7 +144,7 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 #mail-undo { list-style: none; margin: 12px 0 0; padding: 0; }
 #mail-undo li { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding: 8px 12px; background: var(--panel); border-radius: 12px; }
 #mail-undo span { min-width: 0; overflow-wrap: anywhere; }
-@media (hover: none) { .card-quick-actions { opacity: 1; pointer-events: auto; } }
+@media (hover: none) { .card-icons { opacity: 1; pointer-events: auto; } }
 @media (forced-colors: active) { .card { border-color: CanvasText; } }
 
 .card.read .card-sender, .card.read .card-subject { font-weight: 400; }

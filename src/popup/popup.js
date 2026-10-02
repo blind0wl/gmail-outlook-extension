@@ -187,6 +187,17 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
   }
 
+  // Cards expanded in place. Survives list re-renders; expanding never
+  // touches mailbox state, it only unclamps the cached snippet.
+  var expandedKeys = new Set();
+  function toggleCard(card, toggle, key, force) {
+    var on = force !== undefined ? force : !card.classList.contains("expanded");
+    card.classList.toggle("expanded", on);
+    toggle.setAttribute("aria-expanded", String(on));
+    if (on) expandedKeys.add(key);
+    else expandedKeys.delete(key);
+  }
+
   function visibleItems() {
     var sorted = displayedItems().sort(function (a, b) { return b.date - a.date; });
     if (filter === "all") return sorted;
@@ -382,6 +393,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var active = document.activeElement;
     var focusedKey = active?.closest?.(".card")?.getAttribute("data-key");
     var focusedAction = active?.dataset.mailAction;
+    var focusedToggle = active?.classList?.contains("card-toggle") === true;
     var focusedInbox = active?.dataset.inboxAccount;
     var focusedRecovery = active?.closest?.(".status-signin")?.dataset.accountKey;
     var hadListFocus = list.contains(active);
@@ -496,11 +508,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           card.appendChild(dot);
         }
 
-        // Mail content stays static until in-extension reading is implemented.
-        var head = document.createElement("div");
+        // The toggle owns sender/subject/snippet; icon and Open buttons
+        // stay siblings so nesting stays valid. Clicking elsewhere on the
+        // card delegates to the toggle; expanding only unclamps cache text.
+        var toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "card-toggle";
+        toggle.setAttribute("aria-expanded", String(expandedKeys.has(item.key)));
+        toggle.setAttribute("aria-label", (expandedKeys.has(item.key) ? "Collapse: " : "Expand: ") + (item.subject || "(no subject)"));
+        if (expandedKeys.has(item.key)) card.classList.add("expanded");
+
+        var head = document.createElement("span");
         head.className = "card-head";
 
-        var top = document.createElement("div");
+        var top = document.createElement("span");
         top.className = "card-top";
 
         var sender = document.createElement("span");
@@ -520,16 +541,21 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         }
         head.appendChild(top);
 
-        var subject = document.createElement("div");
+        var subject = document.createElement("span");
         subject.className = "card-subject";
         subject.textContent = item.subject || "(no subject)";
         head.appendChild(subject);
-        card.appendChild(head);
+        toggle.appendChild(head);
 
-        var snippet = document.createElement("div");
+        var snippet = document.createElement("span");
         snippet.className = "card-snippet";
         snippet.textContent = item.snippet || "";
-        card.appendChild(snippet);
+        toggle.appendChild(snippet);
+        toggle.addEventListener("click", function (event) {
+          event.stopPropagation();
+          toggleCard(card, toggle, item.key);
+        });
+        card.appendChild(toggle);
 
         var open = document.createElement("button");
         open.type = "button";
@@ -542,11 +568,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           markRead(item.key);
           openUrl(threadUrl(item));
         });
-        var actionsRow = document.createElement("div");
-        actionsRow.className = "card-actions";
-        actionsRow.appendChild(open);
-        var quick = document.createElement("div");
-        quick.className = "card-quick-actions";
+        // Read/delete icons live top-right and reveal on hover only; their
+        // clicks never reach the card toggle below.
+        var icons = document.createElement("div");
+        icons.className = "card-icons";
         ["read", "trash"].forEach(function (action) {
           var button = document.createElement("button");
           button.type = "button";
@@ -558,9 +583,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || (action === "read" && item.unread !== true)));
           button.appendChild(actionIcon(action));
           button.addEventListener("click", function () { if (button.getAttribute("aria-disabled") !== "true") void actOnMail(item.key, action); });
-          quick.appendChild(button);
+          icons.appendChild(button);
         });
-        actionsRow.appendChild(quick);
+        card.appendChild(icons);
+        card.addEventListener("click", function (event) {
+          if (event.target.closest("button") && !event.target.closest(".card-toggle")) return;
+          toggleCard(card, toggle, item.key);
+        });
+        card.addEventListener("keydown", function (event) {
+          if (event.key === "Escape" && card.classList.contains("expanded")) toggleCard(card, toggle, item.key, false);
+        });
+
+        var actionsRow = document.createElement("div");
+        actionsRow.className = "card-actions";
+        actionsRow.appendChild(open);
         card.appendChild(actionsRow);
 
         messageList.appendChild(card);
@@ -571,7 +607,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           error.textContent = mailErrors[item.key];
           card.appendChild(error);
         }
-        if (focusedKey === item.key) (card.querySelector('[data-mail-action="' + focusedAction + '"]') || open).focus();
+        if (focusedKey === item.key) {
+          var restore = focusedToggle ? toggle : (card.querySelector('[data-mail-action="' + focusedAction + '"]') || open);
+          (restore || open).focus();
+        }
       });
     });
     if (recoveryFocus) recoveryFocus.focus();

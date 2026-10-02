@@ -399,15 +399,36 @@ test("opened mail keeps provider counts with an opened-here marker", async () =>
   assert.match(document.querySelector(".card-open").getAttribute("aria-label"), /opened here/);
 });
 
-test("cards show automatic plain-text previews without expansion or content click actions", async () => {
+test("cards expand in place on toggle without changing mailbox state", async () => {
   const { document, messages, tabs } = await workspaceFixture();
   const card = document.querySelector(".card");
-  assert.ok(card.querySelector(".card-snippet"));
-  assert.equal(card.querySelector(".preview-cue"), null);
-  assert.equal(card.querySelector("[aria-expanded]"), null);
+  const toggle = card.querySelector(".card-toggle");
+  assert.ok(toggle, "card content is a toggle control");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(card.classList.contains("expanded"), false);
+  const icons = card.querySelector(".card-icons");
+  assert.ok(icons, "read/delete icons live in a top-right group");
+  assert.equal(icons.querySelector('[data-mail-action="read"]')?.getAttribute("aria-label")?.includes("conversation as read"), true);
+  toggle.click();
+  assert.equal(card.classList.contains("expanded"), true);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.equal(messages.length, 0, "expanding never writes to the mailbox");
+  assert.equal(tabs.length, 0, "expanding never opens provider tabs");
   card.click();
-  assert.equal(messages.length, 0);
-  assert.equal(tabs.length, 0, "in-extension reading is deferred");
+  assert.equal(card.classList.contains("expanded"), false, "clicking the card again collapses");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+});
+
+test("icon clicks act on mail without toggling the card", async () => {
+  const { document, messages } = await workspaceFixture();
+  const card = document.querySelector(".card");
+  card.querySelector(".card-toggle").click();
+  assert.equal(card.classList.contains("expanded"), true);
+  card.querySelector('[data-mail-action="read"]').click();
+  await tick();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, "read");
+  assert.equal(card.classList.contains("expanded"), true, "icon action keeps the expanded card open");
 });
 
 test("settings leads with accounts before themes", async () => {
