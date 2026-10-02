@@ -39,3 +39,23 @@ restart, failure/recovery, focused-host accessibility and timing checks from
 [the feature checklist](2026-10-02-popup-ux-settings.md) remain outstanding where
 not established by the owner's smoke report. No real account content or
 credentials were recorded; no mailbox writes occurred during agent verification.
+
+## Owner follow-up and stronger hover — 2026-10-02
+
+The owner reports all other smoke tests passed on the refinements, including
+Mail checking's new placement. The remaining feedback was that whole-heading
+hover needed a clearer visible response. This supersedes the earlier pending
+smoke status for those other refinements; detailed browser/version and restart/
+failure protocol evidence was not supplied.
+
+New candidate: `d69da6501852f670f9fb0f58e67447b5b0114579` adds a 2px inset
+accent outline on hover, retaining the whole-header background and no address
+underline. The outline does not change heading size or move nearby content;
+forced colors use Highlight. This latest hover change awaits owner smoke testing.
+
+Fresh verification: Node 24.19.0 `npm run verify` passed all 286 tests;
+`git diff --check` passed. T3 synthetic pointer hover confirmed a 2px outline,
+-2px inset, no underline and stable heading dimensions in Midnight/Slate/Signal.
+Detector retains only the pre-existing Signal swatch advisory. Source review
+confirms navigation/form behavior unchanged. No real mail or credentials were
+accessed during agent verification.
