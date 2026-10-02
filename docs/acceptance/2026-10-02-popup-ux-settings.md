@@ -74,3 +74,11 @@ it does not complete the real-account acceptance items above.
 The subsequent stale-success finding is fixed in `090be45` and covered by
 fresh results in the response-ordering record. The full suite now passes 286
 tests; real-account acceptance remains pending.
+
+## Owner smoke results and presentation refinement — 2026-10-02
+
+The owner reports working inbox navigation on all accounts, no Undo after
+Trash, and working polling settings. See [the smoke/refinement record](2026-10-02-popup-smoke-refinements.md)
+for evidence limits and fresh checks on `6788b89`, which removes address
+underlining and moves Mail checking after Sound. Earlier synthetic records
+retain their original section order; current specs follow the owner's revision.
