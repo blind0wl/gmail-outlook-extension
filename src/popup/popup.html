@@ -55,6 +55,24 @@
     </form>
     <ul id="account-controls"></ul>
   </section>
+  <section class="poll-settings" aria-labelledby="poll-title">
+    <h2 id="poll-title">Mail checking</h2>
+    <form id="poll-settings-form" novalidate>
+      <label for="poll-duration">Check mail every</label>
+      <div class="poll-controls">
+        <input id="poll-duration" type="number" min="0" step="any" inputmode="decimal" required aria-describedby="poll-help poll-error">
+        <select id="poll-unit" aria-label="Check interval unit">
+          <option value="seconds">Seconds</option>
+          <option value="minutes" selected>Minutes</option>
+          <option value="hours">Hours</option>
+        </select>
+        <button id="poll-save" type="submit">Save</button>
+      </div>
+      <p id="poll-help">30 seconds to 5 hours, for all enabled accounts. Checks may be delayed by the browser or mailbox service.</p>
+      <p id="poll-error" role="alert" hidden></p>
+      <p id="poll-status" role="status"></p>
+    </form>
+  </section>
     <section class="theme-settings" aria-labelledby="themes-title">
       <h2 id="themes-title">Themes</h2>
       <div role="radiogroup" aria-label="Theme">

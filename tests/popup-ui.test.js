@@ -2,9 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHTML } from "linkedom";
+// Linkedom exposes a getter-only select.value and does not model native selection.
+function popupDOM(html) {
+  const dom = parseHTML(html);
+  for (const select of dom.document.querySelectorAll('select')) Object.defineProperty(select,'value',{
+    get() { return this.querySelector('option[selected]')?.value ?? this.options[0]?.value; },
+    set(value) { for(const option of this.options) { if(option.value===value) option.setAttribute('selected',''); else option.removeAttribute('selected'); } },
+  });
+  return dom;
+}
 const tick = () => new Promise((r) => setTimeout(r, 0));
 test("popup lifecycle controls send worker messages and static previews never write cache", async () => {
-  const { window, document } = parseHTML(
+  const { window, document } = popupDOM(
     readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
   );
   globalThis.document = document;
@@ -183,7 +192,7 @@ test("notification is silent so mute governs all extension sound", async () => {
 
 let popupFixtureId = 0;
 async function workspaceFixture(overrides = {}) {
-  const { window, document } = parseHTML(
+  const { window, document } = popupDOM(
     readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
   );
   globalThis.document = document;
@@ -690,4 +699,41 @@ test('whole account headings open one active inbox tab and retain focus through 
   const modified=new window.Event('click',{bubbles:true,cancelable:true});modified.ctrlKey=true;
   document.activeElement.dispatchEvent(modified);await tick();assert.equal(tabs.length,3);assert.equal(modified.defaultPrevented,false);
   change({accounts:{newValue:[accounts[0]]}});assert.equal(document.activeElement.id,'refresh-mail');
+});
+
+test('global Mail checking form loads legacy precision and stays directly after Accounts',async()=>{
+  const {document}=await workspaceFixture({pollIntervalMs:60000.5,accounts:[],mailCache:[]});
+  assert.deepEqual([...document.querySelectorAll('#settings-view > section > h2')].map(h=>h.textContent).slice(0,3),['Accounts','Mail checking','Themes']);
+  assert.equal(document.getElementById('poll-duration').value,'60.0005');
+  assert.equal(document.getElementById('poll-unit').value,'seconds');
+});
+test('check frequency saves through worker, validates drafts and keeps pending status honest',async()=>{
+  const {document,window,messages,change,data}=await workspaceFixture();
+  const form=document.getElementById('poll-settings-form');assert.ok(form);
+  const duration=document.getElementById('poll-duration'),unit=document.getElementById('poll-unit'),save=document.getElementById('poll-save');
+  const edit=value=>{duration.value=value;duration.dispatchEvent(new window.Event('input'));};
+  const submit=()=>form.dispatchEvent(new window.Event('submit',{cancelable:true}));
+  edit('0.1');unit.value='seconds';submit();await tick();assert.equal(messages.length,0);assert.equal(duration.getAttribute('aria-invalid'),'true');
+  assert.match(document.getElementById('poll-error').textContent,/30 seconds.*5 hours.*whole seconds/);
+  edit('2');unit.value='minutes';let finish;
+  chrome.runtime.sendMessage=msg=>{messages.push(msg);return new Promise(resolve=>finish=resolve);};
+  duration.focus();submit();submit();assert.equal(messages.length,1);assert.equal(save.disabled,true);
+  change({pollIntervalMs:{newValue:120000},mailCache:{newValue:[]},popupTheme:{newValue:'signal'}});
+  assert.doesNotMatch(document.getElementById('poll-status').textContent,/Saved/);assert.equal(duration.value,'2');
+  data.pollIntervalMs=120000;finish({ok:true,pollIntervalMs:120000});await tick();assert.equal(save.disabled,false);assert.match(document.getElementById('poll-status').textContent,/Saved/);
+  const reopened=await workspaceFixture({pollIntervalMs:data.pollIntervalMs});assert.equal(reopened.document.getElementById('poll-duration').value,'2');
+});
+test('unrelated events preserve interval drafts and focus; worker failure permits retry',async()=>{
+  const {document,window,change}=await workspaceFixture();
+  const duration=document.getElementById('poll-duration');assert.ok(duration);
+  const unit=document.getElementById('poll-unit'),form=document.getElementById('poll-settings-form');
+  duration.value='3';duration.dispatchEvent(new window.Event('input'));duration.focus();
+  change({pollIntervalMs:{newValue:180000},mailCache:{newValue:[]},accounts:{newValue:[]},popupTheme:{newValue:'slate'}});
+  assert.equal(duration.value,'3');assert.equal(document.activeElement,duration);
+  chrome.runtime.sendMessage=async()=>({ok:false,code:'save-failed',uncertain:true});
+  form.dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();await tick();
+  assert.match(document.getElementById('poll-error').textContent,/could not be confirmed.*try again/i);
+  assert.equal(duration.value,'3');assert.equal(unit.value,'minutes');assert.equal(document.getElementById('poll-save').disabled,false);
+  chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+  form.dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();assert.match(document.getElementById('poll-status').textContent,/Saved/);
 });

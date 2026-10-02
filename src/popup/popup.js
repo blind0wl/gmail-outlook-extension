@@ -1,3 +1,4 @@
+import { initPollSettings } from "./poll-settings-form.js";
 // A v5 inbox popup. Reads the normalized cache from chrome.storage.local
 // key "mailCache" only (shape from src/store/cache.js):
 // { key, provider, account, from, subject, snippet, date, unread, localRead }
@@ -742,6 +743,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function init() {
+    var pollSettings = initPollSettings();
     initThemes();
     document.getElementById("open-settings").addEventListener("click", function () { showView(true); });
     document.getElementById("back-to-mail").addEventListener("click", function () { showView(false); });
@@ -868,6 +870,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
         if (area === "local" && changes) {
+          if (changes.pollIntervalMs) pollSettings.changed(changes.pollIntervalMs.newValue);
           if (changes.mailActions) {
             mailActionsRevision++;
             mailActions = changes.mailActions.newValue || {};

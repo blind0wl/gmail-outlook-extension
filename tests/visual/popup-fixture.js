@@ -71,7 +71,9 @@ globalThis.chrome = {
   runtime: {
     sendMessage: async (message, callback) => {
       messages.push(message);
-      const result = { ok: true };
+      const result = message.type === 'set-poll-interval'
+        ? {ok:true,pollIntervalMs:message.pollIntervalMs} : {ok:true};
+      if(message.type === 'set-poll-interval') await chrome.storage.local.set({pollIntervalMs:message.pollIntervalMs});
       callback?.(result);
       return result;
     },
@@ -88,5 +90,5 @@ document.body.replaceChildren(...template.body.childNodes);
 document.title = `Popup baseline: ${state} (synthetic data)`;
 await import("../../src/popup/popup.js");
 await new Promise(requestAnimationFrame);
-if (state === "expanded" || state === "long") document.querySelector(".card-summary").click();
+// Legacy expanded fixture now uses the always-visible production preview.
 document.documentElement.dataset.fixtureReady = state;
