@@ -70,3 +70,7 @@ The response-ordering P2 finding is fixed in `b76ef5c`; see
 [the fresh fix record](2026-10-02-poll-settings-response-order.md). The full
 suite now passes 285 tests. This adds regression/runtime evidence for the fix;
 it does not complete the real-account acceptance items above.
+
+The subsequent stale-success finding is fixed in `090be45` and covered by
+fresh results in the response-ordering record. The full suite now passes 286
+tests; real-account acceptance remains pending.

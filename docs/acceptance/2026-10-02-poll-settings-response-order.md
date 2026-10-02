@@ -33,3 +33,26 @@ the latest preference remains displayed and status is honest. Also verify normal
 Save/reopen. Existing real-account routing, Trash/recovery and live scheduling
 checks in [the feature record](2026-10-02-popup-ux-settings.md) remain pending.
 No real mail or credentials were accessed, and no mailbox writes occurred.
+
+## Follow-up: stale success after preference changes — 2026-10-02
+
+Candidate: `090be453bed4a2a87d4dbeff43254b692c4130ea`.
+A different effective preference arriving after successful Save now clears the
+old success status. A matching notification retains valid success feedback;
+pending submissions keep their Applying status until the worker response.
+
+Fresh verification:
+
+- The new regression failed on stale Saved text before the fix and passed after
+  it. It covers matching notifications, changed preferences and explicit re-save.
+- Node 24.19.0 `npm run verify`: all 286 tests passed; `git diff --check` passed.
+- T3 synthetic production popup at 320px: five checks passed for initial success,
+  matching-event success retention, updated value display, cleared stale success
+  and successful explicit re-save. Same Linux/Chromium preview environment above.
+- Source review confirmed clearing only on a changed effective value outside a
+  pending submission; previous draft and response-ordering regressions pass.
+
+Actual unpacked-extension acceptance for this candidate remains pending: after
+saving in one window, change the preference from another and verify that old
+success feedback clears before scheduling is confirmed. No real accounts or
+provider writes were used for these checks.
