@@ -34,12 +34,14 @@ export async function inspectOutlookMessage(token, id) {
 }
 
 export async function mutateOutlookMessage(token, id, action, folder = 'inbox', assertAuthorized = () => {}) {
-  if (!['read', 'trash', 'undo'].includes(action) || !id) throw new MailActionError('invalid-action');
+  // Gmail has no verified session opcode for unread, so its transport keeps
+  // rejecting the action; Outlook reuses the read PATCH with isRead false.
+  if (!['read', 'trash', 'undo', 'unread'].includes(action) || !id) throw new MailActionError('invalid-action');
   assertAuthorized();
-  const response = await request(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}${action === 'read' ? '' : '/move'}`, {
-    method: action === 'read' ? 'PATCH' : 'POST',
+  const response = await request(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(id)}${action === 'trash' || action === 'undo' ? '/move' : ''}`, {
+    method: action === 'trash' || action === 'undo' ? 'POST' : 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(action === 'read' ? { isRead: true } : { destinationId: action === 'trash' ? 'deleteditems' : folder }),
+    body: JSON.stringify(action === 'read' ? { isRead: true } : action === 'unread' ? { isRead: false } : { destinationId: action === 'trash' ? 'deleteditems' : folder }),
   }, true);
   try {
     const result = await response.json();

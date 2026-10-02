@@ -15,7 +15,13 @@ journal and existing Undo command.
 Gmail Trash and Undo require verified state for every member of the conversation.
 Existing unconfirmed recovery records remain saved until you check the mailbox
 and acknowledge them.
-**Open** still opens the provider and retains the extension’s local read flag.
+**Open** opens the provider and marks the item read locally in the extension;
+provider unread state is unchanged. The popup's unread counts follow this local
+state. **Mark read** changes the card immediately but keeps it available while
+hovered or keyboard focused. Leaving it starts a five-second grace period;
+clicking elsewhere commits immediately. **Mark unread** during the grace period
+cancels the read without a provider request, including for Gmail. Opening a
+staged card cancels its pending provider read and records only the local Open.
 Full-message reading inside the extension, compose/send, archive and search
 remain outside this change.
 
@@ -28,8 +34,9 @@ Unconfirmed-action recovery appears above the mail list. Saved unconfirmed actio
 counted row per account; check all those actions in the mailbox before using
 **I’ve checked** to unlock them. Completed deletions have no visible Undo feedback.
 Only the affected conversation or
-message is locked; other mail remains usable. After a confirmed Gmail read, the
-popup explains that an already-open Gmail page may need refreshing.
+message is locked; other mail remains usable. Reads stay silent on progress and
+success; only errors restore a recovery card and show feedback. Gmail provider
+unread remains unavailable after a read is committed.
 
 The Gmail confirmation and Undo fixes passed automated checks and owner-run
 real-account tests for repeated cycles, three-message conversations, mixed-folder

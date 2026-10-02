@@ -61,6 +61,23 @@ test('Gmail rejects ambiguous responses without claiming success or exposing pag
   assert.equal(posts,1);
 });
 
+test('Graph unread patches isRead false on the message path; Gmail unread stays rejected without a verified opcode', async () => {
+  const { mutateOutlookMessage, mutateGmailConversation } = await import('../src/providers/mail-actions.js');
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, ...options });
+    return { ok: true, json: async () => ({ id: 'one' }) };
+  };
+  await mutateOutlookMessage('token', 'abc', 'unread');
+  assert.equal(calls[0].method, 'PATCH');
+  assert.match(calls[0].url, /abc$/);
+  assert.deepEqual(JSON.parse(calls[0].body), { isRead: false });
+  await assert.rejects(
+    mutateGmailConversation('owner@example.test', 'abcdef123', 'unread'),
+    (e) => e.code === 'invalid-action',
+  );
+});
+
 test('Graph forbidden responses require sign-in and never leak provider body',async()=>{
   const {mutateOutlookMessage}=await import('../src/providers/mail-actions.js');
   globalThis.fetch=async()=>({ok:false,status:403,json:async()=>({private:'mail'})});

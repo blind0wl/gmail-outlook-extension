@@ -198,3 +198,43 @@ Trash reports “Moved to Trash.” without an extension Undo control. Worker
 journal/expiry/Undo command, provider restore transport, uncertainty recovery
 and provider-write scope remain unchanged. Restore mail through its owning
 provider UI when using the popup. Historical acceptance remains historical.
+
+
+## Read presentation superseded — 2026-10-02
+
+Owner direction in `HANDOFF-optimistic-read.md` replaces session-visible read
+cards and successful-read refresh guidance with immediate dismissal and silent
+background completion. Open dismisses immediately while persisting the existing
+local opened-here flag; it still does not mark provider mail read. Failed writes
+restore a popup recovery card and report only the error, including failures
+after cache updates. The earlier immediate inverse toggle on retained read cards
+is consequently unavailable. Gmail unread transport remains blocked, and
+Outlook unread transport and provider write scope are unchanged.
+Fresh candidate evidence and pending real-account acceptance are recorded in
+[optimistic-read acceptance](../../docs/acceptance/2026-10-02-optimistic-read.md).
+
+
+## Read grace period approved — 2026-10-02
+
+The owner smoke-tested immediate dismissal and requested time to reverse a read.
+The owner approved this replacement interaction in the current conversation:
+
+- Mark read changes the card's displayed read state and extension unread count
+  immediately. Keep the card while hovered or keyboard focused.
+- After leaving the card, wait five seconds before dismissal. Returning to the
+  card pauses dismissal; leaving again starts a fresh five seconds. Clicking
+  outside the card commits immediately, including actions on another card.
+- Defer the worker/provider read request until dismissal. Mark unread during
+  the grace period cancels locally without any provider mutation. This works
+  for Gmail without an unread opcode; committed Gmail unread remains blocked.
+- Opening the card keeps the existing provider-unchanged local-read behavior,
+  cancels any staged provider read on that card, and uses local read state in
+  the extension's counts. Read completion remains silent; errors restore cards.
+- Removing/disabling an account cancels its staged reads. Popup blur/pagehide
+  submits remaining staged reads once; live Chrome lifecycle acceptance is
+  required to confirm delivery before the popup is destroyed.
+
+This supersedes the immediate-dismissal read presentation above; Open still
+removes its card immediately after marking it opened locally. Fresh verification
+and real-account acceptance status are in
+[read grace-period acceptance](../../docs/acceptance/2026-10-02-read-grace-period.md).

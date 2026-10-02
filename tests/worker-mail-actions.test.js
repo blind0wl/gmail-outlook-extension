@@ -46,6 +46,20 @@ test('Gmail Trash preserves uncertainty locks and supports Trash and Undo after 
 
 });
 
+test('mailbox unread restores the unread flag through the provider mutation', async () => {
+  await ready;
+  fixture();
+  mergeMessages([{ ...item, unread: false }]);
+  const calls = [];
+  const result = await handleMailboxAction(
+    { key, action: 'unread' },
+    { ...deps, mutate: async (a, id, action) => { calls.push(action); return { id }; } },
+  );
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(calls, ['unread']);
+  assert.equal(getInbox().find((i) => i.key === key).unread, true);
+});
+
 test('mailbox Trash persists Undo with returned move ID and restores original folder',async()=>{
   await ready;
   const data=fixture();const calls=[];

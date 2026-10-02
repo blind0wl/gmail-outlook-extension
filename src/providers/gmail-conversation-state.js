@@ -40,6 +40,7 @@ function parseExactConversation(text, id) {
     allTrash: members.every(row => row[9].includes('^k') && !row[9].includes('^i')),
     allInbox: members.every(row => row[9].includes('^i') && !row[9].includes('^k')),
     allRead: members.every(row => !row[9].includes('^u')),
+    allUnread: members.every(row => row[9].includes('^u')),
   };
 }
 
@@ -80,7 +81,7 @@ export async function readGmailConversationMembers(account, session, id) {
 }
 
 export async function verifyGmailConversationState(account, session, id, action) {
-  if (!['read', 'trash', 'undo'].includes(action)) return false;
+  if (!['read', 'trash', 'undo', 'unread'].includes(action)) return false;
   const state = await readGmailConversationMembers(account, session, id);
-  return !!state && (action === 'trash' ? state.allTrash : action === 'undo' ? state.allInbox : state.allRead);
+  return !!state && (action === 'trash' ? state.allTrash : action === 'undo' ? state.allInbox : action === 'unread' ? state.allUnread : state.allRead);
 }
