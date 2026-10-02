@@ -233,6 +233,151 @@ async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
     } };
 }
 
+test("Gmail read can be reversed locally before any provider write", async () => {
+  const { document, messages } = await workspaceFixture();
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(document.querySelectorAll('.card.read').length, 1);
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-disabled'), 'false');
+  assert.equal(document.getElementById('unread-count').textContent, '');
+  assert.equal(messages.length, 0);
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(document.querySelectorAll('.card.read').length, 0);
+  assert.equal(document.getElementById('unread-count').textContent, '(1)');
+  document.getElementById('unread-count').click();
+  assert.equal(messages.length, 0, 'cancelled read never reaches the provider');
+});
+
+test("staged read commits after five seconds away from the card", async t => {
+  const { document, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('[data-mail-action="read"]').click();
+  t.mock.timers.tick(4999);
+  assert.equal(document.querySelectorAll('.card.read').length, 1);
+  assert.equal(messages.length, 0);
+  t.mock.timers.tick(1);
+  assert.equal(document.querySelectorAll('.card').length, 0);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'read');
+  await new Promise(setImmediate);
+  assert.equal(document.getElementById('lifecycle-message').textContent, '');
+});
+
+for (const interaction of ['hover', 'focus']) test(`staged read waits while ${interaction} remains on the card`, async t => {
+  const { document, window, messages, change, data } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const card = document.querySelector('.card');
+  if (interaction === 'hover') card.dispatchEvent(new window.Event('mouseenter'));
+  else card.querySelector('[data-mail-action="read"]').focus();
+  card.querySelector('[data-mail-action="read"]').click();
+  change({ mailCache: { newValue: data.mailCache } });
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0);
+  assert.equal(document.querySelectorAll('.card.read').length, 1);
+  const current = document.querySelector('.card');
+  if (interaction === 'hover') current.dispatchEvent(new window.Event('mouseleave'));
+  else {
+    document.getElementById('refresh-mail').focus();
+    current.dispatchEvent(new window.Event('focusout', { bubbles: true }));
+  }
+  await new Promise(setImmediate);
+  t.mock.timers.tick(4999);
+  assert.equal(messages.length, 0);
+  t.mock.timers.tick(1);
+  assert.equal(messages.length, 1);
+  await new Promise(setImmediate);
+});
+
+test("mouse focus does not prevent the five-second grace period after leaving", async t => {
+  const { document, window, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const card = document.querySelector('.card');
+  card.dispatchEvent(new window.Event('mouseenter'));
+  const read = card.querySelector('[data-mail-action="read"]');
+  read.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+  read.focus();
+  read.click();
+  document.querySelector('.card').dispatchEvent(new window.Event('mouseleave'));
+  t.mock.timers.tick(5000);
+  assert.equal(messages.length, 1);
+  await new Promise(setImmediate);
+});
+
+test("clicking outside commits staged reads immediately and silently", async () => {
+  const { document, messages } = await workspaceFixture();
+  document.querySelector('[data-mail-action="read"]').focus();
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(messages.length, 0);
+  document.getElementById('unread-count').click();
+  assert.equal(messages.length, 1);
+  assert.equal(document.querySelectorAll('.card').length, 0);
+  await tick();
+  assert.equal(document.getElementById('lifecycle-message').textContent, '');
+});
+
+test("popup dismissal commits staged reads once", async () => {
+  const { document, window, messages } = await workspaceFixture();
+  document.querySelector('[data-mail-action="read"]').click();
+  window.dispatchEvent(new window.Event('pagehide'));
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'read');
+  await tick();
+});
+
+test("clicking a locked action on another card commits the staged read", async () => {
+  const { document, data, messages, change } = await workspaceFixture();
+  const original = data.mailCache[0];
+  const locked = { ...original, key: 'gmail:work%40example.com:locked' };
+  change({ mailCache: { newValue: [original, locked] }, mailActions: { newValue: {
+    [locked.key]: { state: 'uncertain', item: locked },
+  } } });
+  document.querySelector(`[data-key="${original.key}"] [data-mail-action="read"]`).click();
+  document.querySelector(`[data-key="${locked.key}"] [data-mail-action="trash"]`).click();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].key, original.key);
+  assert.equal(messages[0].action, 'read');
+  await tick();
+});
+
+for (const disabled of [false, true]) test(`account ${disabled ? "disable" : "removal"} cancels its staged read`, async t => {
+  const { document, window, data, change, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('[data-mail-action="read"]').click();
+  change({ accounts: { newValue: disabled ? [{ ...data.accounts[0], enabled: false }] : [] } });
+  t.mock.timers.tick(5000);
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(messages.length, 0);
+  assert.equal(document.querySelectorAll('.card.read').length, 0);
+});
+
+test("moving outside after card replacement releases the hover grace period", async t => {
+  const { document, window, messages, data, change } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('.card').dispatchEvent(new window.Event('mouseenter'));
+  document.querySelector('[data-mail-action="read"]').click();
+  change({ mailCache: { newValue: data.mailCache } });
+  document.getElementById('unread-count').dispatchEvent(new window.Event('pointermove', { bubbles: true }));
+  t.mock.timers.tick(5000);
+  assert.equal(messages.length, 1);
+  await new Promise(setImmediate);
+});
+
+test("Open on a staged read performs only the extension-local Open", async t => {
+  const { document, window, messages, tabs } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('[data-mail-action="read"]').click();
+  document.querySelector('[data-mail-action="open"]').click();
+  window.dispatchEvent(new window.Event('blur'));
+  t.mock.timers.tick(5000);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, 'mark-read');
+  assert.equal(tabs.length, 1);
+  assert.equal(document.getElementById('unread-count').textContent, '');
+  assert.equal(document.querySelector('.account-count').textContent, '0 unread');
+  await new Promise(setImmediate);
+});
+
 test("workspace Settings isolates configuration and preserves Mail position and account drafts", async () => {
   const { document, change } = await workspaceFixture();
   const mail = document.getElementById("mail-view");
@@ -459,14 +604,15 @@ test("icon clicks act on mail without collapsing the card", async () => {
   assert.equal(card.classList.contains("expanded"), true);
   chrome.runtime.sendMessage = async (msg) => { messages.push(msg); return { ok: true }; };
   card.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   await tick();
   await tick();
   assert.equal(messages.length, 1);
   assert.equal(messages[0].action, "read");
-  assert.equal(document.querySelectorAll(".card").length, 0, "read card leaves instantly and stays gone");
+  assert.equal(document.querySelectorAll(".card").length, 0, "committed read card leaves and stays gone");
 });
 
-test("outlook read applies instantly and stays silent", async () => {
+test("outlook read commits on outside click and stays silent", async () => {
   const outlook = { provider: "outlook", account: "o@example.test" };
   const { document, messages } = await workspaceFixture({
     accounts: [outlook],
@@ -474,21 +620,23 @@ test("outlook read applies instantly and stays silent", async () => {
   });
   chrome.runtime.sendMessage = async (msg) => { messages.push(msg); return { ok: true }; };
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   await tick();
   await tick();
-  assert.equal(document.querySelectorAll(".card").length, 0, "outlook read leaves instantly");
+  assert.equal(document.querySelectorAll(".card").length, 0, "committed Outlook read leaves");
   assert.equal(messages.length, 1);
   assert.equal(messages[0].action, "read");
   assert.equal(document.getElementById("lifecycle-message").textContent, "", "reads stay silent");
 });
 
-test("gmail read applies instantly and the write runs in the background", async () => {
+test("gmail read commits on outside click and the write runs in the background", async () => {
   const { document, messages } = await workspaceFixture();
   chrome.runtime.sendMessage = async (msg) => { messages.push(msg); return { ok: true }; };
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   await tick();
   await tick();
-  assert.equal(document.querySelectorAll(".card").length, 0, "read card leaves instantly");
+  assert.equal(document.querySelectorAll(".card").length, 0, "committed read card leaves");
   assert.equal(document.getElementById("lifecycle-message").textContent, "", "no progress or success chatter");
   assert.equal(messages.length, 1, "provider write sent in background");
   assert.equal(messages[0].action, "read");
@@ -500,6 +648,7 @@ test("failed gmail read repopulates the card with the error only", async () => {
   chrome.runtime.sendMessage = () => new Promise((r) => { finish = r; });
   test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   assert.equal(document.querySelectorAll(".card").length, 0, "card leaves instantly");
   finish({ ok: false, code: "provider-error" });
   await tick();
@@ -544,6 +693,7 @@ for (const removed of [false, true]) test(`failed read restores the card after c
   let finish;
   chrome.runtime.sendMessage = () => new Promise(resolve => { finish = resolve; });
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   change({ mailCache: { newValue: removed ? [] : [{ ...cached, unread: false }] } });
   finish({ ok: false, code: 'check-mailbox' });
   await tick(); await tick();
@@ -576,6 +726,7 @@ test("successful opened-here persistence does not erase another action's error",
   const { document } = await workspaceFixture();
   chrome.runtime.sendMessage = async () => ({ ok: false, code: 'provider-error' });
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   await tick(); await tick();
   const error = document.getElementById('lifecycle-message').textContent;
   assert.ok(error);
@@ -647,9 +798,10 @@ test('hover actions use provider-specific labels and resist duplicate clicks', a
   let finish;
   chrome.runtime.sendMessage=async msg=>{messages.push(msg);await new Promise(r=>finish=r);return {ok:true};};
   read.focus();read.click();
+  document.getElementById('unread-count').click();
   read.click();
   await tick();
-  assert.equal(document.querySelectorAll('.card').length,0,'read hides instantly while the write runs');
+  assert.equal(document.querySelectorAll('.card').length,0,'committed read hides while the write runs');
   assert.equal(messages.length,1);
   assert.equal(messages[0].type,'mail-action');assert.equal(messages[0].action,'read');
   test.afterEach(() => { try { finish?.(); } catch {} });
@@ -664,7 +816,8 @@ test('mailbox feedback is immediate while worker is pending and rolls back a fai
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
   document.querySelector('[data-mail-action="read"]').click();
-  assert.equal(document.querySelectorAll('.card').length,0,'read card leaves instantly, no pending style shown');
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  assert.equal(document.querySelectorAll('.card').length,0,'committed read card leaves, no pending style shown');
   change({mailCache:{newValue:[{key,provider:'gmail',account:'work@example.com',subject:'new cache text',snippet:'text',date:Date.now(),unread:true}]}});
   assert.equal(document.querySelectorAll('.card').length,0,'stale cache cannot restore the card while the write runs');
   finish({ok:false,code:'provider-error'});await tick();
@@ -692,6 +845,7 @@ test('confirmed read feedback resists stale unread cache until reconciliation, t
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   finish({ok:true});await tick();
   assert.equal(document.querySelectorAll('.card').length,0);
   change({mailCache:{newValue:[cached]}});
@@ -712,8 +866,9 @@ test('read cache arriving before action response keeps the card hidden until fai
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
   test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   change({mailCache:{newValue:[{...cached,unread:false}]}});
-  assert.equal(document.querySelectorAll('.card').length,0,'read hides instantly even when cache lands first');
+  assert.equal(document.querySelectorAll('.card').length,0,'committed read hides even when cache lands first');
   finish({ok:true});await tick();
   assert.equal(document.querySelectorAll('.card').length,0,'confirmed read stays gone');
   assert.equal(document.getElementById('lifecycle-message').textContent,'','reads stay silent');
@@ -735,7 +890,9 @@ test('uncertain recovery precedes mail, names its scope and leaves unrelated act
   const usable=document.querySelector(`[data-key="${unrelated.key}"] [data-mail-action="read"]`);
   assert.equal(locked.getAttribute('aria-disabled'),'true');
   assert.equal(usable.getAttribute('aria-disabled'),'false');
-  usable.click();await tick();
+  usable.click();
+  document.getElementById("unread-count").click();
+  await tick();
   assert.equal(messages.at(-1).key,unrelated.key);
   document.querySelector('[data-recovery-account]').click();await tick();
   assert.equal(messages.at(-1).action,'acknowledge');
@@ -748,6 +905,7 @@ test('confirmed Gmail read stays silent and hidden even when cache arrives first
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   change({mailCache:{newValue:[]}});
   finish({ok:true});await tick();
   assert.equal(document.querySelectorAll('.card').length,0);
@@ -760,13 +918,17 @@ test('Gmail refresh guidance is not shown for failed reads and reads stay silent
   const {document}=await workspaceFixture();
   chrome.runtime.sendMessage=async()=>({ok:false,code:'check-mailbox'});
   document.querySelector('[data-mail-action="read"]').click();await tick();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
   const error=document.getElementById('lifecycle-message').textContent;
   assert.doesNotMatch(error,/Marked as read|open Gmail.*refresh/i);
   assert.match(error,/I’ve checked/);
   const outlook={provider:'outlook',account:'studio@example.test'};
   const fixture=await workspaceFixture({accounts:[outlook],mailCache:[{...outlook,key:'outlook:studio%40example.test:one',unread:true,date:Date.now()}]});
   fixture.document.querySelector('[data-mail-action="read"]').click();await tick();await tick();
-  assert.equal(fixture.document.querySelectorAll('.card').length,0,'outlook read leaves instantly');
+  fixture.document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
+  assert.equal(fixture.document.querySelectorAll('.card').length,0,'committed Outlook read leaves');
   assert.equal(fixture.document.getElementById('lifecycle-message').textContent,'','successful reads stay silent');
 });
 
@@ -841,6 +1003,8 @@ for (const code of ['unavailable','provider-error','pending','sign-in']) test(`m
   const {document}=await workspaceFixture();
   chrome.runtime.sendMessage=async()=>({ok:false,code});
   document.querySelector('[data-mail-action="read"]').click();await tick();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
   const text=document.getElementById('lifecycle-message').textContent;
   if (code==='sign-in') assert.match(text,/sign.in.*Settings/i);
   else assert.doesNotMatch(text,/sign.in|Settings/i);
@@ -862,6 +1026,8 @@ test('a stale action-state reread cannot replace a newer recovery storage event'
   let finish;
   chrome.storage.local.get=key=>key==='mailActions'?new Promise(resolve=>finish=resolve):get(key);
   document.querySelector('[data-mail-action="read"]').click();await tick();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
   const newer={state:'uncertain',item:{...item,account:'newer@example.test'},expiresAt:456};
   change({accounts:{newValue:[item,newer.item]},mailActions:{newValue:{newer}}});
   finish({mailActions:{one:record}});await tick();

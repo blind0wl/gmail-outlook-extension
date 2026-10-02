@@ -107,3 +107,15 @@ Synthetic verification passed; actual candidate acceptance is pending in
 [the dated record](docs/acceptance/2026-10-02-popup-ux-settings.md). Earlier staged
 and expanded-preview descriptions above are historical and do not own current
 scope; the current preview is always visible and capped at three lines.
+
+
+## Owner-approved reversible read interaction — 2026-10-02
+
+Mark read updates the displayed card/count immediately, keeps the card while
+hovered or keyboard focused, and commits after five seconds away or immediately
+on an outside click. Mark unread during this grace period cancels the staged
+read locally, including Gmail. Provider writes begin only at commitment and
+remain silent on progress/success; errors restore recovery cards. Committed
+Gmail unread stays unavailable. Open retains provider-unchanged local-read
+semantics and immediate dismissal; extension counts use local read state.
+Fresh Chrome acceptance is pending in the dated read grace-period record.

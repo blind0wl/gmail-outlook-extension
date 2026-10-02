@@ -241,28 +241,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     return sorted.filter(function (item) { return item.provider === filter; });
   }
 
-  // Counts report provider unread mail; locally opened mail is named
-  // separately so the numbers reconcile with the actual mailbox instead
-  // of silently dropping when opened here.
-  function providerUnread(list) {
-    return list.filter(function (item) { return item.unread === true; }).length;
-  }
-  function openedHereCount(list) {
-    return list.filter(function (item) { return item.unread === true && item.localRead === true; }).length;
+  // The extension counts its displayed unread state, including local opens.
+  function unreadCount(list) {
+    return list.filter(isUnread).length;
   }
   function countText(list) {
-    var unread = providerUnread(list);
-    var opened = openedHereCount(list);
-    if (unread === 0 && opened === 0) return "0 unread";
-    return unread + " unread" + (opened > 0 ? " \u00B7 " + opened + " opened here" : "");
+    return unreadCount(list) + " unread";
   }
 
   function renderHeader() {
     var keys = new Set(configuredAccounts.map(accountKey));
     var scoped = displayedItems().filter(function (item) { return keys.has(accountKey(item)); });
     var el = document.getElementById("unread-count");
-    el.textContent = providerUnread(scoped) > 0
-      ? "(" + providerUnread(scoped) + ")" + (openedHereCount(scoped) > 0 ? " \u00B7 " + openedHereCount(scoped) + " opened" : "")
+    el.textContent = unreadCount(scoped) > 0
+      ? "(" + unreadCount(scoped) + ")"
       : "";
   }
 
@@ -289,6 +281,53 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
   // Project pending actions over authoritative cache; never write optimistic mail state.
   var mailFeedback = new Map();
+  var stagedReads = new Map();
+  var hoveredCards = new Set();
+  var keyboardMode = true;
+  function pauseStagedRead(key) {
+    var staged = stagedReads.get(key);
+    if (staged?.timer != null) clearTimeout(staged.timer);
+    if (staged) staged.timer = null;
+  }
+  function scheduleStagedRead(key) {
+    var staged = stagedReads.get(key);
+    if (!staged) return;
+    if (hoveredCards.has(key) || (keyboardMode && document.activeElement?.closest?.('.card')?.dataset.key === key)) {
+      pauseStagedRead(key);
+    } else if (staged.timer == null) {
+      staged.timer = setTimeout(function () { commitStagedRead(key); }, 5000);
+    }
+  }
+  function commitStagedRead(key) {
+    var staged = stagedReads.get(key);
+    if (!staged) return;
+    pauseStagedRead(key);
+    stagedReads.delete(key);
+    hoveredCards.delete(key);
+    void actOnMail(key, "read", staged.item);
+  }
+  function commitOtherReads(key) {
+    Array.from(stagedReads.keys()).forEach(function (other) {
+      if (other !== key) commitStagedRead(other);
+    });
+  }
+  function cancelStagedRead(key) {
+    pauseStagedRead(key);
+    stagedReads.delete(key);
+    renderHeader();
+    renderList();
+  }
+  function stageRead(key) {
+    if (stagedReads.has(key) || pendingMailActions.has(key)) return;
+    var item = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; });
+    if (!item) return;
+    mailFeedback.delete(key);
+    delete mailErrors[key];
+    stagedReads.set(key, { item: { ...item }, timer: null });
+    renderHeader();
+    renderList();
+    scheduleStagedRead(key);
+  }
   function settleMailFeedback() {
     mailFeedback.forEach(function (feedback, key) {
       var current = items.find(function (item) { return item.key === key; });
@@ -300,19 +339,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     });
   }
   function displayedItems() {
-    // Read applies instantly: any read feedback (pending or confirmed)
-    // hides the card while the provider write runs in the background.
+    // Staged reads remain reversible; committed reads hide during the write.
     // Failed reads retain a recovery card even if the cache already changed.
     // Unread feedback still shows.
     var projected = items.filter(function (item) {
       var feedback = mailFeedback.get(item.key);
       if (pendingOpened.has(item.key)) return false;
+      if (stagedReads.has(item.key)) return true;
       if (feedback) return feedback.action === "unread" || feedback.action === "failed";
       // The worker preserves the local opened-here flag across polls.
       if (item.localRead === true) return false;
       return item.unread !== false;
     }).map(function (item) {
       var feedback = mailFeedback.get(item.key);
+      if (stagedReads.has(item.key)) return { ...item, unread: false, localRead: false };
       if (feedback && feedback.action === "failed") return { ...item, unread: feedback.item.unread, localRead: feedback.item.localRead };
       if (feedback && feedback.action === "unread") return { ...item, unread: true, localRead: false };
       return mailFeedback.has(item.key) ? { ...item, unread: false, localRead: false } : item;
@@ -322,6 +362,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     mailFeedback.forEach(function (feedback, key) {
       if (feedback.action === "failed" && !pendingOpened.has(key) && !projected.some(function (item) { return item.key === key; }))
         projected.push({ ...feedback.item });
+    });
+    stagedReads.forEach(function (staged, key) {
+      if (!projected.some(function (item) { return item.key === key; }))
+        projected.push({ ...staged.item, unread: false, localRead: false });
     });
     return projected;
   }
@@ -335,9 +379,9 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     svg.appendChild(path);
     return svg;
   }
-  async function actOnMail(key, action) {
+  async function actOnMail(key, action, snapshot) {
     if (pendingMailActions.has(key)) return;
-    var actionItem = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; }) || mailActions[key]?.item;
+    var actionItem = snapshot || mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; }) || mailActions[key]?.item;
     var unconfirmedMessage = "The result could not be confirmed. Check this action in your mailbox, then choose “I’ve checked” to unlock it. Other mail is still available.";
     pendingMailActions.add(key);
     delete mailErrors[key];
@@ -560,6 +604,18 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var card = document.createElement("li");
         card.className = "card" + (read ? " read" : "");
         card.setAttribute("data-key", item.key);
+        card.addEventListener("mouseenter", function () {
+          hoveredCards.add(item.key);
+          pauseStagedRead(item.key);
+        });
+        card.addEventListener("mouseleave", function () {
+          hoveredCards.delete(item.key);
+          scheduleStagedRead(item.key);
+        });
+        card.addEventListener("focusin", function () { scheduleStagedRead(item.key); });
+        card.addEventListener("focusout", function () {
+          queueMicrotask(function () { scheduleStagedRead(item.key); });
+        });
         if (!read) {
           var dot = document.createElement("span");
           dot.className = "unread-dot";
@@ -605,12 +661,12 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           var button = document.createElement("button");
           button.type = "button";
           // The read control is a toggle: unread mail sends read, mail marked
-          // read here sends unread. Gmail has no verified unread transport,
-          // so its read cards keep a disabled toggle instead of a doomed write.
+          // read here can be cancelled before commitment. Gmail reversal is
+          // local during that grace period; provider unread remains blocked.
           var isToggle = action === "read";
           var isOpen = action === "open";
-          var readState = item.unread !== true;
-          var gmailUnreadBlocked = isToggle && readState && item.provider === "gmail";
+          var readState = !isUnread(item);
+          var gmailUnreadBlocked = isToggle && readState && item.provider === "gmail" && !stagedReads.has(item.key);
           button.className = "card-icon" + (action === "trash" ? " card-trash" : "") + (isToggle && readState ? " card-icon-active" : "");
           button.dataset.mailAction = action;
           var label = isOpen
@@ -630,11 +686,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           button.addEventListener("click", function (event) {
             event.stopPropagation();
             if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            commitOtherReads(item.key);
             if (button.getAttribute("aria-disabled") === "true") return;
             if (isOpen) {
+              if (stagedReads.has(item.key)) cancelStagedRead(item.key);
               void markRead(item.key);
               openUrl(threadUrl(item));
-            } else void actOnMail(item.key, isToggle ? (readState ? "unread" : "read") : action);
+            } else if (isToggle && stagedReads.has(item.key) && readState) {
+              cancelStagedRead(item.key);
+            } else if (isToggle && !readState) {
+              stageRead(item.key);
+            } else {
+              if (stagedReads.has(item.key)) cancelStagedRead(item.key);
+              void actOnMail(item.key, isToggle ? "unread" : action);
+            }
           });
           icons.appendChild(button);
         });
@@ -693,6 +758,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         }
       });
     });
+    stagedReads.forEach(function (_, key) { scheduleStagedRead(key); });
     if (recoveryFocus) recoveryFocus.focus();
     else if (hadListFocus && !list.contains(document.activeElement)) document.getElementById("refresh-mail").focus();
   }
@@ -862,6 +928,31 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
 
   function init() {
+    // Reconcile hover from live pointer targets after cache renders replace cards.
+    document.addEventListener("pointermove", function (event) {
+      var key = event.target?.closest?.('.card')?.dataset.key;
+      hoveredCards.clear();
+      if (key) hoveredCards.add(key);
+      stagedReads.forEach(function (_, stagedKey) { scheduleStagedRead(stagedKey); });
+    });
+    document.addEventListener("pointerout", function (event) {
+      if (event.relatedTarget) return;
+      hoveredCards.clear();
+      stagedReads.forEach(function (_, key) { scheduleStagedRead(key); });
+    });
+    document.addEventListener("pointerdown", function () {
+      keyboardMode = false;
+      stagedReads.forEach(function (_, key) { scheduleStagedRead(key); });
+    });
+    document.addEventListener("keydown", function () {
+      keyboardMode = true;
+      stagedReads.forEach(function (_, key) { scheduleStagedRead(key); });
+    });
+    document.addEventListener("click", function (event) {
+      commitOtherReads(event.target?.closest?.('.card')?.dataset.key);
+    });
+    window.addEventListener("pagehide", function () { commitOtherReads(); });
+    window.addEventListener("blur", function () { commitOtherReads(); });
     var pollSettings = initPollSettings();
     initThemes();
     document.getElementById("open-settings").addEventListener("click", function () { showView(true); });
@@ -1013,6 +1104,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           if (changes[ACCOUNTS_KEY]) {
             var anext = changes[ACCOUNTS_KEY].newValue;
             configuredAccounts = Array.isArray(anext) ? anext.map(normalizeAccount) : [];
+            stagedReads.forEach(function (staged, key) {
+              if (!configuredAccounts.some(function (acct) { return acct.enabled !== false && accountKey(acct) === accountKey(staged.item); })) {
+                pauseStagedRead(key);
+                stagedReads.delete(key);
+                hoveredCards.delete(key);
+              }
+            });
             render();
           }
           if (changes[ACCOUNT_STATE_KEY]) {
