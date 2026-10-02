@@ -22,7 +22,11 @@ export function initPollSettings() {
   }
   function changed(value) {
     revision++;
-    effective = normalizePollInterval(value);
+    const next = normalizePollInterval(value);
+    // A different preference does not confirm its alarm has been applied.
+    // Preserve pending feedback until the worker replies to this submission.
+    if (next !== effective && !pending) status.textContent = '';
+    effective = next;
     if (!dirty && !pending) fill();
   }
   async function load() {

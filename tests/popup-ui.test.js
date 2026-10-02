@@ -773,3 +773,21 @@ test('a newer interval event survives an older successful Save response without 
   document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();
   assert.equal(duration.value,'3');assert.match(document.getElementById('poll-status').textContent,/Saved/);
 });
+
+test('a preference event after Save clears success only when the effective interval changes',async()=>{
+  const {document,window,change}=await workspaceFixture();
+  chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+  const duration=document.getElementById('poll-duration');
+  const status=document.getElementById('poll-status');
+  duration.value='2';duration.dispatchEvent(new window.Event('input'));
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  await tick();assert.match(status.textContent,/Saved/);
+  change({pollIntervalMs:{newValue:120000}});
+  assert.match(status.textContent,/Saved/,'the matching storage notification does not invalidate confirmed application');
+  change({pollIntervalMs:{newValue:180000}});
+  assert.equal(duration.value,'3');assert.equal(document.getElementById('poll-unit').value,'minutes');
+  assert.equal(status.textContent,'','a different persisted preference is not proof of successful scheduling');
+  assert.equal(document.getElementById('poll-save').disabled,false);
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  await tick();assert.match(status.textContent,/Saved/,'an explicit successful Save can confirm the updated value');
+});
