@@ -63,3 +63,10 @@ real Chrome storage/alarms/provider APIs.
 Run the candidate checklist in `tests/popup-checklist.md` and append fresh results
 with tested commit, browser version and environment. Do not record real mail,
 account addresses, credentials or tokens. This record does not authorize release.
+
+## Review fix candidate — 2026-10-02
+
+The response-ordering P2 finding is fixed in `b76ef5c`; see
+[the fresh fix record](2026-10-02-poll-settings-response-order.md). The full
+suite now passes 285 tests. This adds regression/runtime evidence for the fix;
+it does not complete the real-account acceptance items above.
