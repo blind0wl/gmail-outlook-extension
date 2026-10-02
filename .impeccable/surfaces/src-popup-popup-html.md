@@ -44,3 +44,7 @@ Undo; unconfirmed per-account recovery remains. Existing themes and composition
 remain the visual authority. Synthetic verification passes; fresh real-account
 routing, Trash and scheduling acceptance remain pending in the dated candidate
 record. These pending results supersede no historical acceptance.
+
+Owner refinement: whole-heading hover adds a 2px inset accent outline with no
+layout movement or address underline. All other smoke checks passed as reported
+by the owner; the new hover outline awaits owner confirmation.

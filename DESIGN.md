@@ -355,7 +355,8 @@ pending in docs/acceptance/2026-10-01-compact-undo-stack.md.
 
 Whole account headers are native links, including empty/paused/error accounts.
 They retain 12px/14px padding, all visible metadata, semantic headings and wrapped
-addresses. Hover highlights the whole header with the theme hover token; keyboard
+addresses. Hover highlights the whole header with the theme hover token and a 2px inset
+accent outline, without moving the heading or underlining its address; keyboard
 focus uses the accent inset outline. Account-key focus survives mailbox renders.
 Account routing is a compatibility candidate awaiting real-account acceptance.
 

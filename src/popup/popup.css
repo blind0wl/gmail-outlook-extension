@@ -150,7 +150,7 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 
 .account-heading:has(.account-inbox) { padding: 0; }
 .account-inbox { display: block; padding: 12px 14px; color: inherit; text-decoration: none; border-radius: inherit; }
-.account-inbox:hover { background: var(--hover); }
+.account-inbox:hover { background: var(--hover); outline: 2px solid var(--accent); outline-offset: -2px; }
 .account-inbox:focus-visible { outline-offset: -3px; }
 
 .poll-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; margin-top: 6px; }
@@ -158,3 +158,5 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 .poll-controls input { font-variant-numeric: tabular-nums; caret-color: var(--accent); }
 #poll-error { color: var(--danger); }
 #poll-status:empty { display: none; }
+
+@media (forced-colors: active) { .account-inbox:hover { outline-color: Highlight; } }
