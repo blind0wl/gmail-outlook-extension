@@ -36,7 +36,7 @@ button { font: inherit; font-weight: 600; min-height: 32px; padding: 6px 10px; b
 button:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--hover); }
 button:active:not(:disabled):not([aria-disabled="true"]) { border-color: var(--accent); }
 button:disabled, button[aria-disabled="true"] { color: var(--muted); cursor: default; }
-button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input { font: inherit; accent-color: var(--accent); }
 a { color: var(--accent); text-underline-offset: 3px; }
 ::selection { color: var(--on-accent); background: var(--accent); }
@@ -112,7 +112,7 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 :root[data-theme="signal"] .inbox-header { background: linear-gradient(#dce0e3, #cbd0d4); }
 @media (max-width: 340px) { .inbox-header { flex-wrap: wrap; } #mail-tools { margin-left: auto; } }
 @media (forced-colors: active) {
-  button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline-color: Highlight; }
+  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline-color: Highlight; }
   .account-section, #settings-view > section { border: 1px solid CanvasText; }
   .unread-dot { background: CanvasText; }
   .theme-swatch { forced-color-adjust: none; }
@@ -147,17 +147,15 @@ input[type="checkbox"], input[type="radio"] { flex-shrink: 0; width: 16px; heigh
 
 .card.read .card-sender, .card.read .card-subject { font-weight: 400; }
 
-/* Keep Undo above Mail without growing as more messages are deleted. */
 
 .account-heading:has(.account-inbox) { padding: 0; }
-.account-inbox { display: block; padding: 10px 14px; color: inherit; text-decoration: none; border-radius: inherit; }
+.account-inbox { display: block; padding: 12px 14px; color: inherit; text-decoration: none; border-radius: inherit; }
 .account-inbox:hover { background: var(--hover); }
 .account-inbox:hover h2 { text-decoration: underline; text-underline-offset: 3px; }
 .account-inbox:focus-visible { outline-offset: -3px; }
 
 .poll-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; margin-top: 6px; }
 .poll-controls input, .poll-controls select { min-width: 0; width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--muted); border-radius: 6px; background: var(--control); color: var(--text); font: inherit; }
-.poll-controls input { font-variant-numeric: tabular-nums; }
-.poll-controls select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.poll-controls input { font-variant-numeric: tabular-nums; caret-color: var(--accent); }
 #poll-error { color: var(--danger); }
 #poll-status:empty { display: none; }

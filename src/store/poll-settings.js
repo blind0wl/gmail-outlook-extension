@@ -17,7 +17,8 @@ export function validPollInterval(value) {
 export function durationToMs(text, unit) {
   const multiplier = Object.hasOwn(unitSeconds,unit) ? unitSeconds[unit] : null;
   if (!multiplier || typeof text !== 'string' || text.length > 80) return null;
-  const match = text.trim().match(/^\+?(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i);
+  const decimal = text.trim().replace(/^(\+?)\./, '$10.');
+  const match = decimal.match(/^\+?(\d+)(?:\.(\d*))?(?:e([+-]?\d+))?$/i);
   if (!match) return null;
   const exponent = Number(match[3] || 0) - (match[2] || '').length;
   if (Math.abs(exponent) > 80) return null;
