@@ -123,11 +123,34 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
   }
 
-  function markRead(key) {
-    for (var item of items) if (item.key === key) item.localRead = true;
-    // The worker serializes the mutation with poll commits and updates badge.
-    void sendAction({type: "mark-read", key: key});
+  var pendingOpened = new Set();
+  async function markRead(key) {
+    var item = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; });
+    if (!item) return;
+    var previousItem = { ...item };
+    item.localRead = true;
+    mailFeedback.delete(key);
+    pendingOpened.add(key);
     renderHeader();
+    renderList();
+    try {
+      // This records only the local opened-here flag; provider state is unchanged.
+      var result = await chrome.runtime.sendMessage({ type: "mark-read", key: key });
+      if (result?.ok) {
+        for (var current of items) if (current.key === key) current.localRead = true;
+        pendingOpened.delete(key);
+        renderHeader();
+        renderList();
+        return;
+      }
+    } catch { /* Restore the card and report only the failed local update. */ }
+    pendingOpened.delete(key);
+    for (var current of items) if (current.key === key) current.localRead = previousItem.localRead;
+    mailFeedback.set(key, { action: "failed", item: previousItem });
+    mailErrors[key] = "Could not save the opened-here state. Try opening the message again.";
+    setStatus(mailErrors[key], "error");
+    renderHeader();
+    renderList();
   }
 
   function renderAccounts() {
@@ -266,37 +289,39 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
   // Project pending actions over authoritative cache; never write optimistic mail state.
   var mailFeedback = new Map();
-  // Mail marked read here stays visible for this session with a pressed
-  // toggle, so unread can be restored without waiting for the next poll.
-  var sessionRead = new Set();
   function settleMailFeedback() {
     mailFeedback.forEach(function (feedback, key) {
       var current = items.find(function (item) { return item.key === key; });
       if (feedback.confirmed && feedback.action === "unread" && current && current.unread !== false) {
         mailFeedback.delete(key);
-        sessionRead.delete(key);
       } else if (feedback.confirmed && feedback.action === "read" && !(current && current.unread !== false)) {
         mailFeedback.delete(key);
       }
     });
-    sessionRead.forEach(function (key) {
-      if (!items.some(function (item) { return item.key === key; })) sessionRead.delete(key);
-    });
   }
   function displayedItems() {
+    // Read applies instantly: any read feedback (pending or confirmed)
+    // hides the card while the provider write runs in the background.
+    // Failed reads retain a recovery card even if the cache already changed.
+    // Unread feedback still shows.
     var projected = items.filter(function (item) {
       var feedback = mailFeedback.get(item.key);
-      if (feedback) return feedback.action === "unread" || (feedback.action === "read" && !feedback.confirmed);
-      return item.unread !== false || sessionRead.has(item.key);
+      if (pendingOpened.has(item.key)) return false;
+      if (feedback) return feedback.action === "unread" || feedback.action === "failed";
+      // The worker preserves the local opened-here flag across polls.
+      if (item.localRead === true) return false;
+      return item.unread !== false;
     }).map(function (item) {
       var feedback = mailFeedback.get(item.key);
+      if (feedback && feedback.action === "failed") return { ...item, unread: feedback.item.unread, localRead: feedback.item.localRead };
       if (feedback && feedback.action === "unread") return { ...item, unread: true, localRead: false };
       return mailFeedback.has(item.key) ? { ...item, unread: false, localRead: false } : item;
     });
-    // A storage event may arrive before the worker response. Keep pending read feedback visible.
+    // The worker may remove/cache-read mail before reporting an uncertain result.
+    // Retain a recovery card without writing optimistic state into storage.
     mailFeedback.forEach(function (feedback, key) {
-      if (feedback.action === "read" && !feedback.confirmed && !projected.some(function (item) { return item.key === key; }))
-        projected.push({ ...feedback.item, unread: false, localRead: false });
+      if (feedback.action === "failed" && !pendingOpened.has(key) && !projected.some(function (item) { return item.key === key; }))
+        projected.push({ ...feedback.item });
     });
     return projected;
   }
@@ -312,19 +337,24 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   }
   async function actOnMail(key, action) {
     if (pendingMailActions.has(key)) return;
-    var actionItem = items.find(function (item) { return item.key === key; }) || mailActions[key]?.item;
+    var actionItem = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; }) || mailActions[key]?.item;
     var unconfirmedMessage = "The result could not be confirmed. Check this action in your mailbox, then choose “I’ve checked” to unlock it. Other mail is still available.";
     pendingMailActions.add(key);
     delete mailErrors[key];
+    // Read applies instantly: mailFeedback hides the card while the provider
+    // write runs in the background. Only failures surface (card repopulates
+    // with the error). Success stays silent.
+    var optimisticRead = action === "read";
     if (action === "read" || action === "trash" || action === "unread") mailFeedback.set(key, { action: action, item: actionItem, confirmed: false });
-    setStatus(action === "read" ? "Marking as read…" : action === "unread" ? "Marking as unread…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
+    if (!optimisticRead) setStatus(action === "unread" ? "Marking as unread…" : action === "trash" ? "Moving to Trash…" : "Updating mailbox…", "progress");
     renderHeader();
     renderList();
     renderRecovery();
     try {
       var result = await chrome.runtime.sendMessage({ type: "mail-action", key: key, action: action });
       if (!result?.ok) {
-        mailFeedback.delete(key);
+        if (action === "read" && actionItem) mailFeedback.set(key, { action: "failed", item: actionItem });
+        else mailFeedback.delete(key);
         var code = result?.code;
         mailErrors[key] = code === "check-mailbox" ? unconfirmedMessage
           : code === "gmail-changed" ? "Gmail’s session interface changed. Open Gmail to manage this conversation."
@@ -336,19 +366,16 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       } else {
         if (mailFeedback.has(key)) mailFeedback.get(key).confirmed = true;
         if (action === "undo") mailFeedback.delete(key);
-        if (action === "read") sessionRead.add(key);
-        if (action === "unread") sessionRead.delete(key);
         settleMailFeedback();
-        var readMessage = actionItem?.provider === "gmail"
-          ? "Marked as read in Gmail. If an open Gmail page still shows unread, refresh that page."
-          : "Marked as read in your mailbox.";
         var unreadMessage = actionItem?.provider === "gmail"
           ? "Marked as unread in Gmail. If an open Gmail page still shows read, refresh that page."
           : "Marked as unread in your mailbox.";
-        setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "read" ? readMessage : action === "unread" ? unreadMessage : action === "trash" ? "Moved to Trash." : "Restored to your inbox.", "ok");
+        // Reads stay silent on success; other actions keep their feedback.
+        if (action !== "read") setStatus(action === "acknowledge" ? "This action is unlocked. Refresh to check your inbox." : action === "unread" ? unreadMessage : action === "trash" ? "Moved to Trash." : "Restored to your inbox.", "ok");
       }
     } catch {
-      mailFeedback.delete(key);
+      if (action === "read" && actionItem) mailFeedback.set(key, { action: "failed", item: actionItem });
+      else mailFeedback.delete(key);
       mailErrors[key] = unconfirmedMessage;
       setStatus(mailErrors[key], "error");
     } finally {
@@ -605,7 +632,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
             if (event.stopImmediatePropagation) event.stopImmediatePropagation();
             if (button.getAttribute("aria-disabled") === "true") return;
             if (isOpen) {
-              markRead(item.key);
+              void markRead(item.key);
               openUrl(threadUrl(item));
             } else void actOnMail(item.key, isToggle ? (readState ? "unread" : "read") : action);
           });
@@ -635,13 +662,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         snippet.textContent = item.snippet || "";
         toggle.appendChild(snippet);
         card.appendChild(toggle);
-        // One toggle surface: clicks on content expand/collapse, icon
-        // clicks are guarded. No nested buttons — the content area is a
-        // div with button role, icons are the only real buttons.
-        // Card content toggles expand/collapse. Icon buttons stop
-        // propagation in their own listeners, so only content clicks arrive.
-        // No nested buttons — the content area is a div with button role,
-        // icons are the only real buttons.
+        // One toggle surface: icon buttons stop propagation in their own
+        // listeners, so only content clicks arrive. No nested buttons —
+        // the content area is a div with button role, icons are the only
+        // real buttons.
         toggle.addEventListener("click", function () {
           toggleCard(card, toggle, item.key);
         });

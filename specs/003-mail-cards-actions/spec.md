@@ -198,3 +198,17 @@ Trash reports “Moved to Trash.” without an extension Undo control. Worker
 journal/expiry/Undo command, provider restore transport, uncertainty recovery
 and provider-write scope remain unchanged. Restore mail through its owning
 provider UI when using the popup. Historical acceptance remains historical.
+
+
+## Read presentation superseded — 2026-10-02
+
+Owner direction in `HANDOFF-optimistic-read.md` replaces session-visible read
+cards and successful-read refresh guidance with immediate dismissal and silent
+background completion. Open dismisses immediately while persisting the existing
+local opened-here flag; it still does not mark provider mail read. Failed writes
+restore a popup recovery card and report only the error, including failures
+after cache updates. The earlier immediate inverse toggle on retained read cards
+is consequently unavailable. Gmail unread transport remains blocked, and
+Outlook unread transport and provider write scope are unchanged.
+Fresh candidate evidence and pending real-account acceptance are recorded in
+[optimistic-read acceptance](../../docs/acceptance/2026-10-02-optimistic-read.md).
