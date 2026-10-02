@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T00:00:00Z",
+  "generatedAt": "2026-10-02T05:35:54.620140+00:00",
   "title": "Design System: Gmail plus Outlook",
   "extensions": {
     "colorMeta": {
@@ -538,7 +538,8 @@
         "name": "title-row",
         "value": "240px"
       }
-    ]
+    ],
+    "popupSettingsUpdate": "2026-10-02: whole native account heading links; Accounts \u2192 Mail checking \u2192 Themes \u2192 Notifications \u2192 Sound. Retained duration/unit/Save form, theme-native controls and accessible pending/error/success. Completed Trash has no visible Undo; recovery remains. Synthetic 320/480px all-theme checks passed; fresh real-account acceptance pending."
   },
   "components": [
     {

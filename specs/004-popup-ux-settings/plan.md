@@ -1,7 +1,8 @@
 # Implementation Plan: Popup UX and global check frequency
 
 **Date**: 2026-10-02
-**Status**: Proposed plan for owner review; no implementation started.
+**Status**: Owner-approved plan; implementation candidate completed 2026-10-02,
+automated/synthetic checks passed, real-account acceptance pending.
 **Specifications**: [scope map](spec.md) and its three approved module specs.
 **Task list target**: [tasks.md](tasks.md), explicitly selected by the owner.
 Preserve `tasks/plan.md` and `tasks/todo.md`; their Gmail follow-ups are separate.
@@ -201,4 +202,17 @@ alarm persistence flags when querying/recreating the existing alarm suffices.
 No unresolved product question. Exact inbox-routing compatibility is a bounded
 technical verification task. The owner-selected document paths supersede the
 skill's default paths for this initiative. Review this plan and `tasks.md`
-before implementation; the original no-implementation instruction remains live.
+before implementation. The owner approved the specifications/plan and invoked
+`/build auto`; that authorization superseded the earlier inspection-only
+restriction. Build resumed from the handoff without repeating approvals.
+
+## Execution notes — 2026-10-02
+
+Tasks 2–7 implemented and verified; review recorded in the candidate acceptance
+file. Task 1's real-provider routing evidence and Task 8's actual extension
+acceptance remain pending. Task 3 proceeded as a candidate with explicit routing
+uncertainty, without treating synthetic URLs as proven provider selection.
+The retained Settings form lives in `src/popup/poll-settings-form.js` to avoid
+adding form state to mailbox rendering. The fixture's obsolete expanded-preview
+click was removed because production previews are always visible. A select-value
+shim is limited to Linkedom tests; production uses native select semantics.

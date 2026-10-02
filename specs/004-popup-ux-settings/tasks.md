@@ -1,10 +1,13 @@
 # Tasks: Popup UX and global check frequency
 
 **Date**: 2026-10-02
-**Status**: Proposed tasks for owner review; none started.
+**Status**: Build authorized; implementation and automated/synthetic verification
+complete 2026-10-02. Task 1 real-provider routing and Task 8 actual extension
+acceptance remain pending.
 **Plan**: [plan.md](plan.md). **Specs**: [spec.md](spec.md).
 This is the owner-selected task list target; preserve existing `tasks/` files.
-All source changes below are future work, not authorization to implement now.
+The owner approved the specs/plan and invoked `/build auto`, superseding the
+earlier inspection-only restriction.
 
 ## Task 1: Establish account inbox routing
 
@@ -15,7 +18,7 @@ read-only browser navigation before changing the popup.
 **Acceptance criteria:**
 - [ ] Each provider selects the owning inbox in both directions with two accounts.
 - [ ] Missing-session behavior is recorded; no default-account shortcut substitutes for correct routing.
-- [ ] Evidence is synthetic or sanitized and explicitly distinguishes URL tests from real-account results.
+- [x] Evidence is synthetic or sanitized and explicitly distinguishes URL tests from real-account results.
 
 **Verification:** Read-only webmail navigation; record browser/version and date.
 Do not mutate mail or store addresses/session data in artifacts.
@@ -30,9 +33,9 @@ Do not mutate mail or store addresses/session data in artifacts.
 uncertainty recovery and the existing worker action lifecycle.
 
 **Acceptance criteria:**
-- [ ] Trash hides the card and reports success without an Undo tray, button or promotional copy, including after reopen.
-- [ ] Failed/uncertain deletion retains card restoration, locks and “I’ve checked” recovery.
-- [ ] Worker journal, restore command and provider behavior remain unchanged.
+- [x] Trash hides the card and reports success without an Undo tray, button or promotional copy, including after reopen.
+- [x] Failed/uncertain deletion retains card restoration, locks and “I’ve checked” recovery.
+- [x] Worker journal, restore command and provider behavior remain unchanged.
 
 **Verification:** `node --test tests/popup-ui.test.js tests/worker-mail-actions.test.js`;
 focused regression tests fail before the UI change and pass afterward; synthetic
@@ -44,9 +47,9 @@ mixed-state journal/reopen check.
 
 ## Checkpoint A: Baseline behavior preserved
 
-- [ ] `npm run verify` passes under Node 24; unchanged worker/provider tests remain.
-- [ ] Synthetic recovery works without Undo; account routing evidence or its blocker is explicit.
-- [ ] Review changes against approved specs before continuing.
+- [x] `npm run verify` passes under Node 24; unchanged worker/provider tests remain.
+- [x] Synthetic recovery works without Undo; account routing evidence or its blocker is explicit.
+- [x] Review changes against approved specs before continuing.
 
 ## Task 3: Make account headings inbox links
 
@@ -55,9 +58,9 @@ mixed-state journal/reopen check.
 preserving heading content and focused account identity across rerenders.
 
 **Acceptance criteria:**
-- [ ] Pointer/keyboard activation opens one owning-inbox tab and performs no mailbox action/cache write.
-- [ ] Empty/paused/error accounts, provider filters and same-provider accounts retain correct independent links.
-- [ ] Hover/focus feedback, accessible names and surviving keyboard focus work in all themes.
+- [ ] Pointer/keyboard activation opens one owning-inbox tab and performs no mailbox action/cache write. Synthetic activation passes; provider selection pending.
+- [x] Empty/paused/error accounts, provider filters and same-provider accounts retain correct independent links.
+- [x] Hover/focus feedback, accessible names and surviving keyboard focus work in all themes.
 
 **Verification:** `node --test tests/popup-links.test.js tests/popup-ui.test.js`;
 synthetic native link/tab interaction and focus checks.
@@ -73,9 +76,9 @@ synthetic native link/tab interaction and focus checks.
 contract, including serialized saves, rollback and alarm reconciliation.
 
 **Acceptance criteria:**
-- [ ] Valid saves persist and replace one named alarm; invalid input affects neither storage nor scheduling.
-- [ ] Matching alarms survive worker wake without countdown reset; missing/mismatched alarms reconcile to the saved interval.
-- [ ] Failed storage/scheduling and repeated saves return honest results; polls, mutation locks, backoff and notification baselines remain intact.
+- [x] Valid saves persist and replace one named alarm; invalid input affects neither storage nor scheduling.
+- [x] Matching alarms survive worker wake without countdown reset; missing/mismatched alarms reconcile to the saved interval.
+- [x] Failed storage/scheduling and repeated saves return honest results; polls, mutation locks, backoff and notification baselines remain intact.
 
 **Verification:** `node --test tests/poll-settings.test.js tests/worker-poll-settings.test.js tests/notify.test.js tests/worker-mail-actions.test.js`.
 Use API doubles and fresh-worker imports to verify restart, failure and race paths;
@@ -88,9 +91,9 @@ no actual provider calls from setting changes.
 
 ## Checkpoint B: Navigation and scheduling contracts
 
-- [ ] `npm run verify` passes; inbox activation and setting changes make no provider writes.
-- [ ] Worker restart and partial failure tests prove the intended schedule/persistence behavior.
-- [ ] Inspect native header links in the synthetic browser before adding Settings UI.
+- [x] `npm run verify` passes; inbox activation and setting changes make no provider writes.
+- [x] Worker restart and partial failure tests prove the intended schedule/persistence behavior.
+- [x] Inspect native header links in the synthetic browser before adding Settings UI.
 
 ## Task 5: Expose check frequency in Settings
 
@@ -99,9 +102,9 @@ no actual provider calls from setting changes.
 effective interval and saving through the worker contract.
 
 **Acceptance criteria:**
-- [ ] Duration/units/Save support the approved range and default, persisted values, no-accounts state and successful reopen.
-- [ ] Invalid input and failed application show accessible errors; pending Save prevents duplicates and never falsely confirms success.
-- [ ] Unrelated updates preserve unsaved input/focus; manual Refresh, disabled accounts and theme behavior remain unchanged.
+- [x] Duration/units/Save support the approved range and default, persisted values, no-accounts state and successful reopen.
+- [x] Invalid input and failed application show accessible errors; pending Save prevents duplicates and never falsely confirms success.
+- [x] Unrelated updates preserve unsaved input/focus; manual Refresh, disabled accounts and theme behavior remain unchanged.
 
 **Verification:** `node --test tests/poll-settings.test.js tests/worker-poll-settings.test.js tests/popup-ui.test.js`;
 synthetic form save/reopen, validation, failure and draft-preservation flows.
@@ -117,9 +120,9 @@ synthetic form save/reopen, validation, failure and draft-preservation flows.
 manual checks without editing historical acceptance evidence.
 
 **Acceptance criteria:**
-- [ ] README explains recoverable deletion without extension Undo, heading navigation and global check frequency.
-- [ ] Manual checklist covers both-account routing directions, retained recovery, schedule/save failures and manual Refresh.
-- [ ] The prior action spec records that this approved feature supersedes visible Undo only; provider scope stays unchanged.
+- [x] README explains recoverable deletion without extension Undo, heading navigation and global check frequency.
+- [x] Manual checklist covers both-account routing directions, retained recovery, schedule/save failures and manual Refresh.
+- [x] The prior action spec records that this approved feature supersedes visible Undo only; provider scope stays unchanged.
 
 **Verification:** Cross-check documentation against all three specs and inspect
 links/whitespace with `git diff --check`.
@@ -130,9 +133,9 @@ links/whitespace with `git diff --check`.
 
 ## Checkpoint C: Complete candidate
 
-- [ ] Node 24 `npm ci`, `npm run verify` and `git diff --check` pass.
-- [ ] T3 browser batch checks 320px/480px across all three themes, keyboard navigation and zoom.
-- [ ] Run Impeccable detector on changed popup files; address concrete defects in one batch and confirm once.
+- [x] Node 24 `npm ci`, `npm run verify` and `git diff --check` pass.
+- [x] T3 browser batch checks 320px/480px across all three themes, Tab identity and CSS zoom. Focused-host focus rings/native zoom remain pending.
+- [x] Run Impeccable detector on changed popup files; address concrete defects in one batch and confirm once.
 
 ## Task 7: Align current design records
 
@@ -141,9 +144,9 @@ links/whitespace with `git diff --check`.
 popup behavior and approved visual treatment, retaining historical records.
 
 **Acceptance criteria:**
-- [ ] Product/design records describe heading links, removed Undo presentation and the global Settings control.
-- [ ] Current surface guidance retains account ownership, themes and cache-only operation.
-- [ ] Design artifacts identify synthetic verification separately from real-account acceptance.
+- [x] Product/design records describe heading links, removed Undo presentation and the global Settings control.
+- [x] Current surface guidance retains account ownership, themes and cache-only operation.
+- [x] Design artifacts identify synthetic verification separately from real-account acceptance.
 
 **Verification:** Compare documents with the inspected candidate; check local
 links and `git diff --check`. Follow installed Impeccable documentation mechanisms
@@ -160,9 +163,9 @@ for metadata it owns rather than hand-inventing generated fields.
 for the actual unpacked extension candidate.
 
 **Acceptance criteria:**
-- [ ] Review finds no unresolved correctness, privacy, accessibility or scope defects.
+- [ ] Review finds no unresolved correctness, privacy, accessibility or scope defects. Source review passes; provider routing and focused-host accessibility acceptance pending.
 - [ ] Fresh dated results cover unchanged Gmail/Outlook Trash and recovery, correct account inbox selection, and global checking/persistence/manual Refresh.
-- [ ] Candidate commit, Chrome version and environment are recorded; unperformed checks remain pending and no historical pass is reused.
+- [x] Candidate commit, Chrome version and environment are recorded; unperformed checks remain pending and no historical pass is reused.
 
 **Verification:** Apply code-review-and-quality and the project Definition of Done;
 owner runs real-account acceptance or uses an explicitly authorized disposable
@@ -175,7 +178,12 @@ fixture. Review is not authorization to merge, publish or deploy.
 
 ## Final checkpoint
 
-- [ ] Every module success criterion has tests or fresh runtime evidence.
-- [ ] Required checks pass and docs match the resulting behavior.
-- [ ] Real-account acceptance is complete or explicitly pending; no unsupported completion claim.
-- [ ] Owner reviewed the plan/tasks before implementation. Original no-implementation instruction must be explicitly lifted before code work.
+- [ ] Every module success criterion has tests or fresh runtime evidence. Owning-inbox routing/real scheduling still pending.
+- [x] Required checks pass and docs match the resulting behavior.
+- [x] Real-account acceptance is complete or explicitly pending; no unsupported completion claim.
+- [x] Owner reviewed the plan/tasks and authorized `/build auto`, lifting the earlier no-implementation instruction.
+
+Execution evidence: [candidate acceptance](../../docs/acceptance/2026-10-02-popup-ux-settings.md)
+and [routing research](research.md). Checked items describe implementation or
+synthetic/API-double verification; unchecked items require actual provider/Chrome
+acceptance. No merge, push, publish or release was performed.

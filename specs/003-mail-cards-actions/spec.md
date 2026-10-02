@@ -189,3 +189,12 @@ The owner confirmed every message was back in Gmail Inbox. This accepts the
 reported Gmail batch scenario; the earlier failure's exact cause remains unknown.
 Both operations were described as slow. No timing measurement or performance
 optimization is implied. See docs/acceptance/2026-10-01-undo-queue-follow-up.md.
+
+## Presentation superseded — 2026-10-02
+
+The owner-approved [delete feedback spec](../004-popup-ux-settings/SPEC-delete-feedback.md)
+supersedes this document's visible Undo button/tray requirements. Completed
+Trash reports “Moved to Trash.” without an extension Undo control. Worker
+journal/expiry/Undo command, provider restore transport, uncertainty recovery
+and provider-write scope remain unchanged. Restore mail through its owning
+provider UI when using the popup. Historical acceptance remains historical.

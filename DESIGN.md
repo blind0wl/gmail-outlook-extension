@@ -239,7 +239,7 @@ column. Toolbar tools wrap at 340px; at 240px the title occupies its own row.
 Back to mail remains a single-line label. Native thin scrollbars use theme colors.
 
 The popup has Mail and Settings views. Settings leads with Accounts, then
-Themes, Notifications and Sound sections. Back restores the Mail scroll position;
+Mail checking, Themes, Notifications and Sound sections. Back restores the Mail scroll position;
 storage updates retain surviving focus and account drafts. Detailed surface
 composition remains in `.impeccable/surfaces/src-popup-popup-html.md`.
 
@@ -291,7 +291,8 @@ Hover/focus actions use authored 18px stroke SVGs on 34px buttons, currentColor
 and theme danger for Trash. Gmail labels explicitly name conversation actions;
 Outlook labels name individual-message actions. Pending buttons stay focusable
 with aria-disabled and resist duplicate clicks; errors display safe recovery text.
-Undo records live below the list and survive popup close for ten minutes.
+Completed Trash has no visible Undo control. Worker restore records survive
+popup close for ten minutes; only unconfirmed recovery is presented.
 Uncertain responses present “I’ve checked” after the user inspects their mailbox.
 Open retains its existing provider link and opened-here behavior. Real-account
 acceptance is pending; Gmail’s private session interface can change independently.
@@ -333,14 +334,14 @@ Mailbox feedback: Trash hides the card on click. Mark-read removes heading
 emphasis immediately, keeps the card while pending, then clears it after
 confirmation. Failures restore the authoritative cached state. Provider-read mail
 is omitted, and later unread replies can reappear after reconciliation.
-Recovery and Undo appear before the mail list; uncertainty copy names the
+Unconfirmed recovery appears before the mail list; uncertainty copy names the
 explicit “I’ve checked” step and explains that other mail remains usable.
 Unconfirmed actions use one row per account with a count and one acknowledgement
-button, including a busy state. Undo stays separate for each completed Trash.
+button, including a busy state. Completed Trash reports “Moved to Trash.”.
 Confirmed Gmail read feedback includes guidance to refresh a stale open Gmail page.
 
 
-## Compact Undo tray — 2026-10-01
+## Historical compact Undo tray — 2026-10-01 (superseded 2026-10-02)
 
 Undo sits immediately below the toolbar, outside the scrolling Mail surface.
 The native disclosure can collapse; its open list has a fixed 112px viewport
@@ -349,3 +350,20 @@ retain subject/account accessibility labels. Existing panel, line, text and
 control tokens apply across Midnight, Slate and Signal. Recovery locks remain
 in Mail. Synthetic 480px and 320px checks passed; real extension acceptance is
 pending in docs/acceptance/2026-10-01-compact-undo-stack.md.
+
+## Popup UX candidate — 2026-10-02
+
+Whole account headers are native links, including empty/paused/error accounts.
+They retain 12px/14px padding, all visible metadata, semantic headings and wrapped
+addresses. Hover uses the theme hover token and underlines the address; keyboard
+focus uses the accent inset outline. Account-key focus survives mailbox renders.
+Account routing is a compatibility candidate awaiting real-account acceptance.
+
+Mail checking follows Accounts in Settings. Native duration input, unit select
+and Save share an 8px-gap grid; input and select use control/text/muted tokens,
+6px corners and 8px padding. Numeric values use tabular numerals and accent
+carets. Errors use danger and role=alert; application status uses role=status.
+Pending Save prevents duplicate submissions. The retained form preserves drafts
+and focus across unrelated renders. Synthetic checks cover all three themes at
+320px/480px and 200% CSS zoom; they do not establish real-account acceptance.
+The old compact Undo tray section above is retained as a historical record only.

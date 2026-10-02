@@ -30,7 +30,7 @@ Implemented popup workspace (2026-09-30; owner production acceptance pending):
 
 - Stack one full-address account header and only its messages, then the next
   account. Empty and paused accounts retain sections; filters preserve identity.
-- Mail and Settings are separate views. Settings contains Themes, Accounts,
+- Mail and Settings are separate views. Settings contains Accounts, Mail checking, Themes,
   Notifications and Sound. Back restores Mail position; drafts survive updates.
 - Expanding a preview displays cached text without marking it read. Open retains
   the existing extension-local read flag and exact provider message link.
@@ -91,3 +91,19 @@ browser session; Outlook requests Mail.ReadWrite. A worker-owned ten-minute Undo
 journal survives popup close; uncertain results require checking the mailbox.
 Actual provider acceptance is pending, especially private Gmail session/Undo
 compatibility. No send, permanent-delete, backend, analytics or popup API calls.
+
+## Popup UX and global checking candidate — 2026-10-02
+
+Approved specifications and automatic build authorization supersede the prior
+visible-Undo presentation. Completed Trash has concise success feedback, with
+no Undo tray/button/countdown. The worker restore journal and uncertainty
+recovery remain. Account headings open account-hinted webmail inboxes; routing
+still needs fresh two-account acceptance. Settings adds one Mail checking form
+immediately after Accounts: duration, seconds/minutes/hours, explicit Save;
+1-minute default, 30-second–5-hour range, whole seconds. Saves update storage and
+the shared alarm, with rollback on failure and preserved matching alarms on wake.
+The popup stays cache-only. Unsaved settings drafts survive unrelated updates.
+Synthetic verification passed; actual candidate acceptance is pending in
+[the dated record](docs/acceptance/2026-10-02-popup-ux-settings.md). Earlier staged
+and expanded-preview descriptions above are historical and do not own current
+scope; the current preview is always visible and capped at three lines.
