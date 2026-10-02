@@ -44,8 +44,9 @@ and durable uncertainty locks; there is no automatic provider mutation retry.
 
 ## Real-account Chrome acceptance
 
-Pending for this candidate. T3 preview status and background preview opening
-returned `available:false`. No real mail or credentials were accessed and no
+Owner-reported smoke acceptance passed for `ca193e3`; see the dated update
+below. During agent verification, T3 preview status and background preview
+opening returned `available:false`. No real mail or credentials were accessed and no
 live provider mutations were performed during automated verification.
 Historical results are not reused.
 
@@ -67,3 +68,16 @@ Smoke checks for the owner:
    worker received one read and mailbox state matches. Chrome popup teardown
    may differ from synthetic blur/pagehide dispatch; this delivery check is
    still required before claiming lifecycle acceptance.
+
+
+## Owner smoke acceptance — 2026-10-02
+
+Candidate: `ca193e3` — Keep read cards reversible until grace-period dismissal.
+After receiving this candidate for reload/testing, the owner reported:
+“smoke test pass”. This records fresh owner acceptance of the revised read-card
+interaction. It supersedes the pending smoke status above for this candidate.
+
+Browser version, provider/account coverage and individual checklist results
+were not supplied. The report does not establish separate detailed lifecycle,
+failure/recovery or keyboard protocol results; those remain unverified unless
+confirmed explicitly. The agent did not access real mail or credentials.

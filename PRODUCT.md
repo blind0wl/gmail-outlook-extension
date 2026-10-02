@@ -118,4 +118,5 @@ read locally, including Gmail. Provider writes begin only at commitment and
 remain silent on progress/success; errors restore recovery cards. Committed
 Gmail unread stays unavailable. Open retains provider-unchanged local-read
 semantics and immediate dismissal; extension counts use local read state.
-Fresh Chrome acceptance is pending in the dated read grace-period record.
+The owner reported smoke acceptance passed for candidate `ca193e3` on
+2026-10-02; coverage details are recorded in the dated read grace-period record.
