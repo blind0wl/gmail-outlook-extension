@@ -231,6 +231,19 @@ async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
     } };
 }
 
+test('header unread pill exposes accessible unread name', async () => {
+  const { document } = await workspaceFixture();
+  const el = document.getElementById('unread-count');
+  assert.equal(el.getAttribute('aria-label'), '1 unread');
+});
+
+test('icon Remove exposes hover tooltip', async () => {
+  const { document } = await workspaceFixture();
+  const remove = document.querySelector('button[data-action="remove-account"]');
+  assert.equal(remove.getAttribute('title'), 'Remove work@example.com');
+  assert.equal(remove.getAttribute('aria-describedby'), 'account-remove-note');
+});
+
 test("Gmail read can be reversed locally before any provider write", async () => {
   const { document, messages } = await workspaceFixture();
   document.querySelector('[data-mail-action="read"]').click();
@@ -373,6 +386,7 @@ test("Open on a staged read performs only the extension-local Open", async t => 
   assert.equal(tabs.length, 1);
   assert.equal(document.getElementById('unread-count').textContent, '');
   assert.equal(document.querySelector('.account-count').getAttribute('aria-label'), '0 unread');
+  assert.equal(document.getElementById('unread-count').getAttribute('aria-label'), '0 unread');
   await new Promise(setImmediate);
 });
 

@@ -201,7 +201,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           ? entry[1] === "sign-in" ? "Signing in…" : "Working…" : entry[0];
         button.title = entry[1] === "sign-in" ? "Connects " + acct.account
           : entry[1] === "sign-out" ? "Pauses polling for " + acct.account
-          : "Deletes the local entry only; provider mail is unchanged";
+          : "Remove " + acct.account;
         button.setAttribute("aria-label", entry[0] + " " + acct.account);
         if (entry[1] === "remove-account") button.setAttribute("aria-describedby", "account-remove-note");
         button.addEventListener("click", function () {
@@ -273,6 +273,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var el = document.getElementById("unread-count");
     el.textContent = unreadCount(scoped) > 0 ? String(unreadCount(scoped)) : "";
     el.title = unreadCount(scoped) + " unread";
+    el.setAttribute("aria-label", unreadCount(scoped) + " unread");
   }
 
   function renderPills() {
