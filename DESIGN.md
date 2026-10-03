@@ -430,3 +430,8 @@ acceptance record is `docs/acceptance/2026-10-03-polish-v2.md`.
   the bottom edge. Derived tokens use `color-mix` over the existing twelve roles.
 
 Synthetic checks only; real-account acceptance is pending.
+
+2026-10-03 count refinement: account and toolbar counts have a 22px minimum
+width and 22px height, with centred text and line-height 1. Single digits are
+circular; larger counts widen into pills without clipping. Account counts align
+to the end of their grid cell rather than stretching.
