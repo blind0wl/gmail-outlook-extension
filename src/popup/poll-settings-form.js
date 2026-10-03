@@ -2,7 +2,7 @@ import {POLL_INTERVAL_KEY, normalizePollInterval, durationToMs, intervalDraft} f
 
 // Retain the form DOM independently of mailbox renders. Storage events update
 // the effective baseline; only the worker response can confirm application.
-export function initPollSettings() {
+export function initPollSettings({ onFill = () => {} } = {}) {
   const form = document.getElementById('poll-settings-form');
   const duration = document.getElementById('poll-duration');
   const unit = document.getElementById('poll-unit');
@@ -14,6 +14,7 @@ export function initPollSettings() {
     const draft = intervalDraft(effective);
     duration.value = draft.value;
     unit.value = draft.unit;
+    onFill();
   }
   function showError(message, invalid = false) {
     error.textContent = message;

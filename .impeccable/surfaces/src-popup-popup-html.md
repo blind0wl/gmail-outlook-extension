@@ -29,8 +29,9 @@ First account's newest mail leads; later accounts remain in vertical order.
 Settings opens Accounts, Themes, Notifications, Sound and Mail checking; Back returns to Mail.
 
 FORM: Owner-approved account panels; original concept seed ee0c2e51, index7
-Midnight desk, alongside approved Slate workspace and Signal panel. Code-led;
-synthetic comparison is the composition/palette reference, no raster comp.
+Midnight desk, alongside approved Slate workspace and Signal panel. The shipped
+composition, palettes and interactions are implemented in `src/popup/` and
+documented in `DESIGN.md`; no raster comp.
 Signature interaction: native theme choice updates every surface immediately
 without discarding focus or account drafts. Motion grammar: immediate state
 changes, no entrance/ambient animation or theme-transition motion.

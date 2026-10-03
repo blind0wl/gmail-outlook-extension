@@ -231,6 +231,19 @@ async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
     } };
 }
 
+test('header unread pill exposes accessible unread name', async () => {
+  const { document } = await workspaceFixture();
+  const el = document.getElementById('unread-count');
+  assert.equal(el.getAttribute('aria-label'), '1 unread');
+});
+
+test('icon Remove exposes hover tooltip', async () => {
+  const { document } = await workspaceFixture();
+  const remove = document.querySelector('button[data-action="remove-account"]');
+  assert.equal(remove.getAttribute('title'), 'Remove work@example.com');
+  assert.equal(remove.getAttribute('aria-describedby'), 'account-remove-note');
+});
+
 test("Gmail read can be reversed locally before any provider write", async () => {
   const { document, messages } = await workspaceFixture();
   document.querySelector('[data-mail-action="read"]').click();
@@ -373,6 +386,7 @@ test("Open on a staged read performs only the extension-local Open", async t => 
   assert.equal(tabs.length, 1);
   assert.equal(document.getElementById('unread-count').textContent, '');
   assert.equal(document.querySelector('.account-count').getAttribute('aria-label'), '0 unread');
+  assert.equal(document.getElementById('unread-count').getAttribute('aria-label'), '0 unread');
   await new Promise(setImmediate);
 });
 
@@ -456,7 +470,15 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
 
 test("workspace themes persist without replacing focused controls or draft form input", async () => {
   const { document, window, data, change } = await workspaceFixture({ popupTheme: "slate" });
+  const assertSelectedThemeMirrorsRadios = expected => {
+    for (const choice of document.querySelectorAll(".theme-choice")) {
+      const radio = choice.querySelector('input[name="popup-theme"]');
+      assert.equal(radio.checked, radio.value === expected, `${radio.value} radio selection`);
+      assert.equal(choice.getAttribute("data-selected"), String(radio.checked), `${radio.value} selected styling state`);
+    }
+  };
   assert.equal(document.documentElement.dataset.theme, "slate");
+  assertSelectedThemeMirrorsRadios("slate");
   document.getElementById("open-settings").click();
   document.getElementById("add-gmail").click();
   const draft = document.getElementById("add-account-email");
@@ -466,14 +488,20 @@ test("workspace themes persist without replacing focused controls or draft form 
   signal.dispatchEvent(new window.Event("change", { bubbles: true }));
   await tick();
   assert.equal(document.documentElement.dataset.theme, "signal");
+  assertSelectedThemeMirrorsRadios("signal");
   assert.equal(document.activeElement, signal);
   assert.equal(draft.value, "unfinished@example.com");
   assert.equal(data.popupTheme, "signal");
   change({ popupTheme: { newValue: "slate" } });
   assert.equal(document.documentElement.dataset.theme, "slate");
+  assertSelectedThemeMirrorsRadios("slate");
   assert.equal(document.activeElement, signal, "external preference update preserves focus");
   const next = await workspaceFixture({ popupTheme: data.popupTheme });
   assert.equal(next.document.documentElement.dataset.theme, "signal", "reopen loads saved choice");
+  for (const choice of next.document.querySelectorAll(".theme-choice")) {
+    const radio = choice.querySelector('input[name="popup-theme"]');
+    assert.equal(choice.getAttribute("data-selected"), String(radio.checked), `${radio.value} selected styling state after reopen`);
+  }
 });
 
 test("workspace failed theme save reports recovery while retaining usable selected appearance", async () => {
@@ -1152,4 +1180,128 @@ test('a preference event after Save clears success only when the effective inter
   assert.equal(document.getElementById('poll-save').disabled,false);
   document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
   await tick();assert.match(status.textContent,/Saved/,'an explicit successful Save can confirm the updated value');
+});
+
+function presetStates(document) {
+  return [...document.querySelectorAll('.poll-presets button')].map(button => button.getAttribute('aria-pressed'));
+}
+
+test('poll presets fill fields without saving', async () => {
+  const { document, window, messages, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  const form = document.getElementById('poll-settings-form');
+  const fiveMinutes = document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]');
+  fiveMinutes.click();
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+  assert.deepEqual(messages, [], 'choosing a preset only fills the form');
+
+  change({ pollIntervalMs: { newValue: 60000 } });
+  assert.equal(duration.value, '5', 'external storage changes preserve a dirty preset draft');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+
+  chrome.runtime.sendMessage = async message => {
+    messages.push(message);
+    return { ok: true, pollIntervalMs: message.pollIntervalMs };
+  };
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await tick();
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+});
+
+test('preset highlight follows initial asynchronous load', async () => {
+  let resolveRead;
+  const pendingRead = new Promise(resolve => { resolveRead = resolve; });
+  const { document } = await workspaceFixture({}, chrome => {
+    const get = chrome.storage.local.get;
+    chrome.storage.local.get = key => key === 'pollIntervalMs' ? pendingRead : get(key);
+  });
+  resolveRead({ pollIntervalMs: 300000 });
+  await tick();
+  assert.equal(document.getElementById('poll-duration').value, '5');
+  assert.equal(document.getElementById('poll-unit').value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+});
+
+test('preset highlight tracks manual duration and unit edits', async () => {
+  const { document, window } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]').click();
+
+  duration.value = '7';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert.deepEqual(presetStates(document), ['false', 'false', 'false', 'false', 'false']);
+
+  duration.value = '5';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  unit.value = 'seconds';
+  unit.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.deepEqual(presetStates(document), ['false', 'false', 'false', 'false', 'false']);
+});
+
+test('preset highlight follows clean storage refill', async () => {
+  const { document, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  assert.deepEqual(presetStates(document), ['false', 'true', 'false', 'false', 'false']);
+  change({ pollIntervalMs: { newValue: 300000 } });
+  assert.equal(document.getElementById('poll-duration').value, '5');
+  assert.equal(document.getElementById('poll-unit').value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+});
+
+test('successful Save normalizes fields and highlight without storage event', async () => {
+  const { document, window, messages } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  let finishSave;
+  chrome.runtime.sendMessage = message => {
+    messages.push(message);
+    return new Promise(resolve => { finishSave = resolve; });
+  };
+  test.afterEach(() => { try { finishSave?.({ ok: false, code: 'teardown' }); } catch {} });
+
+  duration.value = '300';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  unit.value = 'seconds';
+  unit.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await tick();
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
+  finishSave({ ok: true, pollIntervalMs: 300000 });
+  await Promise.resolve();
+
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+  assert.match(document.getElementById('poll-status').textContent, /Saved/);
+});
+
+test('pending Save preserves draft until response', async () => {
+  const { document, window, messages, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  const form = document.getElementById('poll-settings-form');
+  let finishSave;
+  chrome.runtime.sendMessage = message => {
+    messages.push(message);
+    return new Promise(resolve => { finishSave = resolve; });
+  };
+  test.afterEach(() => { try { finishSave?.({ ok: false, code: 'teardown' }); } catch {} });
+
+  document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]').click();
+  form.dispatchEvent(new window.Event('submit', { cancelable: true }));
+  change({ pollIntervalMs: { newValue: 60000 } });
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+
+  finishSave({ ok: true, pollIntervalMs: 300000 });
+  await Promise.resolve();
+  assert.equal(duration.value, '1');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'true', 'false', 'false', 'false']);
+  assert.match(document.getElementById('poll-status').textContent, /changed while saving/i);
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
 });

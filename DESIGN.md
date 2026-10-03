@@ -171,12 +171,13 @@ Signal panel apply the same component grammar through their own palettes.
 Normal-case native typography and crisp authored icons keep the interface direct.
 
 This is the implementation record extracted on 2026-09-30 from
-`src/popup/popup.css`, `popup.html`, `popup.js` and `themes.js`. It replaces the
-former white A v5 world. Historical screenshots and reproduction provenance stay
-in `docs/ui-baseline/`; they are historical evidence, not current tokens.
-Current synthetic verification is in `docs/ui-workspace/`. The 2026-10-03
-visual-polish candidate is recorded in `docs/acceptance/2026-10-03-visual-polish.md`;
-fresh real-account acceptance for that candidate remains pending.
+`src/popup/popup.css`, `popup.html`, `popup.js` and `themes.js`; `src/popup/` is
+the production visual authority. It replaces the former white A v5 world.
+Historical screenshots and reproduction provenance stay in `docs/ui-baseline/`;
+they are historical evidence, not current tokens. Current synthetic verification
+is in `docs/ui-workspace/`. The 2026-10-03 visual-polish candidate is recorded in
+`docs/acceptance/2026-10-03-visual-polish.md`; fresh real-account acceptance for
+that candidate remains pending.
 
 **Key Characteristics:**
 
@@ -393,17 +394,21 @@ The old compact Undo tray section above is retained as a historical record only.
 
 ## Owner-approved visual polish — 2026-10-03
 
-Approved from docs/design/visual-polish: stronger subjects, quieter sender/time
-metadata, wrapping transparent account headings, softer card/button lines,
-compact Settings account actions and miniature theme previews. All three themes,
-Settings order and mailbox action semantics remain. Removal guidance is shared
-below Accounts; account-local reconnection guidance remains visible when needed.
+Implemented in `src/popup/` (visual polish, 2026-10-03): stronger subjects,
+quieter sender/time metadata, wrapping transparent account headings, softer
+card/button lines, compact Settings account actions and miniature theme previews.
+All three themes, Settings order and mailbox action semantics remain. Removal
+guidance is shared below Accounts; account-local reconnection guidance remains
+visible when needed.
 This record supersedes older visual measurements above where they conflict.
+Fresh real-account acceptance remains pending in
+`docs/acceptance/2026-10-03-visual-polish.md`.
 
 ## Owner-approved polish v2 — 2026-10-03
 
-Approved from docs/design/polish-v2/ and implemented in src/popup. Supersedes
-the card footer, account-heading, Settings account-row and control details above.
+Implemented in `src/popup/` (polish v2, 2026-10-03). Supersedes the card footer,
+account-heading, Settings account-row and control details above. The owner
+acceptance record is `docs/acceptance/2026-10-03-polish-v2.md`.
 
 - Cards: sender and time share one row. Hover/focus actions float over the time
   (absolute, 28px buttons); no footer row on pointer devices. With `hover: none`

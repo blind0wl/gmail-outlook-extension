@@ -123,8 +123,8 @@ The owner reported smoke acceptance passed for candidate `ca193e3` on
 
 ## Owner-approved visual polish — 2026-10-03
 
-The owner approved the interactive proposal in docs/design/visual-polish/ and
-requested implementation. Mail now uses stronger primary-color two-line
+The owner approved the visual-polish proposal on 2026-10-03, and it is
+implemented in `src/popup/`. Mail now uses stronger primary-color two-line
 subjects, quieter 12px sender text and regular 11px timestamps, slimmer wrapping
 account headings, softer surfaces and a separate footer for hover/focus actions.
 This supersedes the earlier bold-sender/one-line-subject visual prescription.
@@ -134,4 +134,5 @@ Midnight panel is #253948; the three themes and mailbox semantics remain.
 The footer layout also restores native Enter/Space activation of mail actions.
 Cached preview expansion already exists and is preserved; its discrepancy with
 the older no-expansion requirement is recorded in the dated acceptance record.
-Fresh real-account acceptance for this visual candidate is pending.
+Fresh real-account acceptance for this visual candidate is pending in
+`docs/acceptance/2026-10-03-visual-polish.md`.
