@@ -492,7 +492,12 @@ export async function getGraphTokenForAccount(
   const key = sessionKeyFor(account);
   // Epoch for the whole operation, fixed before any await.
   const generation = capture(guardKey(key));
-  await checkSignedOut(guardKey(key), interactive);
+  try {
+    await checkSignedOut(guardKey(key), interactive);
+  } catch (err) {
+    if (err?.message === "auth needs sign in") throw needsSignIn("signed-out");
+    throw asTransient(new Error("microsoft sign-out state unavailable"));
+  }
   const cached = await readSessionRecord(key);
   assertCurrent(guardKey(key), generation);
   if (isFresh(cached)) return cached.accessToken;
@@ -511,7 +516,8 @@ export async function getGraphTokenForAccount(
     // A transient refresh failure stays transient: the grant may be fine
     // and must not surface as needs-sign-in.
     if (refreshErr?.transient) throw refreshErr;
-    throw new Error("microsoft auth needs sign in");
+    if (refreshErr) throw needsSignIn("refresh-failed", refreshErr);
+    throw needsSignIn("missing-record");
   }
   return signInMicrosoft(resolvedId, generation, {
     loginHint: account || undefined,
@@ -520,9 +526,24 @@ export async function getGraphTokenForAccount(
   });
 }
 
-function authRequiredError() {
+function authRequiredError(reason) {
   const err = new Error("microsoft auth needs sign in");
   err.code = "AUTH_REQUIRED";
+  if (reason) err.reason = reason;
+  return err;
+}
+
+// Stable silent-failure reasons for #20 diagnosis. Fixed strings only: they
+// distinguish missing credentials, failed renewal, and explicit sign-out
+// without carrying tokens, mail, or provider text. Status/code are copied
+// from the underlying endpoint failure when present (numbers and the
+// tokenErrorDetail identifiers); the poll sanitizer allowlists them again
+// before anything is persisted or displayed.
+function needsSignIn(reason, extra = {}) {
+  const err = new Error("microsoft auth needs sign in");
+  err.reason = reason;
+  if (typeof extra.status === "number") err.status = extra.status;
+  if (typeof extra.code === "string" && extra.code) err.code = extra.code;
   return err;
 }
 
@@ -577,11 +598,17 @@ export async function renewGraphToken(
       return fresh;
     } catch (err) {
       const classified = classifyRenewalError(err);
-      if (!classified.transient)
+      if (!classified.transient) {
+        if (!classified.reason) classified.reason = "refresh-failed";
+        if (typeof err?.status === "number") classified.status ??= err.status;
+        // Keep the endpoint rejection instead of the generic AUTH_REQUIRED
+        // classification; the recovery message still identifies auth failure.
+        if (typeof err?.code === "string" && err.code) classified.code = err.code;
         await enqueueSessionOp(async () => {
           assertCurrent(guardKey(key), generation);
           await evictSessionRecord(key);
         });
+      }
       throw classified;
     }
   }
@@ -590,7 +617,7 @@ export async function renewGraphToken(
     assertCurrent(guardKey(key), generation);
     await evictSessionRecord(key);
   });
-  throw authRequiredError();
+  throw authRequiredError("missing-record");
 }
 
 // Primary entry matching the worker's token shape: getGraphToken(interactive).
@@ -603,7 +630,12 @@ export async function getGraphToken(interactive = true, { clientId } = {}) {
   const resolvedId = resolveClientId(clientId);
   // Epoch for the whole operation, fixed before any await.
   const generation = capture(guardKey(key));
-  await checkSignedOut(guardKey(), interactive);
+  try {
+    await checkSignedOut(guardKey(), interactive);
+  } catch (err) {
+    if (err?.message === "auth needs sign in") throw needsSignIn("signed-out");
+    throw asTransient(new Error("microsoft sign-out state unavailable"));
+  }
   const cached = await readSessionRecord();
   assertCurrent(guardKey(), generation);
   if (isFresh(cached)) return cached.accessToken;
@@ -617,7 +649,8 @@ export async function getGraphToken(interactive = true, { clientId } = {}) {
   }
   if (!interactive) {
     if (refreshErr?.transient) throw refreshErr;
-    throw new Error("microsoft auth needs sign in");
+    if (refreshErr) throw needsSignIn("refresh-failed", refreshErr);
+    throw needsSignIn("missing-record");
   }
   return signInMicrosoft(resolvedId, generation);
 }

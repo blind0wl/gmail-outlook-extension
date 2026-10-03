@@ -29,7 +29,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   var ACCOUNTS_KEY = "accounts";
   var configuredAccounts = [];
   // Per-account error flags persisted by the worker under ACCOUNT_STATE_KEY
-  // ({ needsSignIn, offline, backedOff, retryAt, status } per
+  // ({ needsSignIn, offline, backedOff, retryAt, status, code, reason } per
   // "provider:address"). Rendered as address-plus-code lines only — never
   // subject, snippet, or body. One failed account never hides the others.
   var ACCOUNT_STATE_KEY = "accountState";
