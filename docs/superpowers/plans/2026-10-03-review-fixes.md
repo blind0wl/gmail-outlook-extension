@@ -41,7 +41,7 @@
 - Consumes: existing `unreadCount(list)`, `countText(list)` in popup.js
 - Produces: `#unread-count` carries `aria-label="<N> unread"` matching `.account-count` pattern
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 test('header unread pill exposes accessible unread name', async () => {
@@ -51,21 +51,21 @@ test('header unread pill exposes accessible unread name', async () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test tests/popup-ui.test.js`
 Expected: FAIL with `Expected: '1 unread', Actual: null` (no aria-label yet)
 
-- [ ] **Step 3: Implement `renderHeader` aria-label in `src/popup/popup.js`**
+- [x] **Step 3: Implement `renderHeader` aria-label in `src/popup/popup.js`**
 
 Set `el.setAttribute('aria-label', unreadCount(scoped) + ' unread')` alongside existing `textContent`/`title`. Empty (zero) state keeps `textContent === ''` and `:empty { display:none }` CSS hides it; keep aria-label set to "0 unread" for consistency with account pills.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test tests/popup-ui.test.js`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/popup/popup.js tests/popup-ui.test.js
@@ -85,7 +85,7 @@ git commit -m "fix(popup): expose header unread total to assistive tech"
 - Produces: `initPollSettings({ onFill = () => {} } = {})` still returns `{ changed(value) }`; synchronous `onFill()` runs after both fields are assigned in every `fill()` invocation, including initial defaults, asynchronous load, storage updates and successful Save.
 - Consumes: popup initializes `pollPresets` first, then calls `initPollSettings({ onFill: () => pollPresets?.sync() })`. Existing storage calls to `pollSettings.changed()` remain the single baseline-update path.
 
-- [ ] **Step 1: Add contract and regression tests**
+- [x] **Step 1: Add contract and regression tests**
 
 Use `workspaceFixture(overrides, configureChrome)` and its DOM event constructors. Assert:
 
@@ -98,20 +98,20 @@ Use `workspaceFixture(overrides, configureChrome)` and its DOM event constructor
 
 Use deferred promises and `tick()` to settle asynchronous boundaries, rather than arbitrary ten-millisecond waits. Existing fixture defaults do not confirm Save; configure the worker fake with the matching interval response. Keep these tests and the fix in one task/commit.
 
-- [ ] **Step 2: Run tests and confirm the regression failures**
+- [x] **Step 2: Run tests and confirm the regression failures**
 
 Run: `node --test tests/popup-ui.test.js`
 Expected: initial-load/storage-refill/Save-normalization tests fail on highlight assertions. Existing click/manual-edit behavior can pass as baseline contract coverage; distinguish assertion failures from fixture errors.
 
-- [ ] **Step 3: Implement `initPollPresets()` synchronization**
+- [x] **Step 3: Implement `initPollPresets()` synchronization**
 
 Keep click-to-fill and dirty-marking input dispatch. Use the DOM's event constructor for that dispatch (`document.defaultView.Event`) so the real browser and linkedom fixture share the event contract. Run `sync()` directly on input/change. Remove mouseover, focusin, submit and timer-based synchronization; return `{ sync }` after initial sync.
 
-- [ ] **Step 4: Notify synchronization from every `fill()` and wire initialization**
+- [x] **Step 4: Notify synchronization from every `fill()` and wire initialization**
 
 Add the `onFill` option to `initPollSettings()` and invoke it after both field assignments inside `fill()`. Initialize presets before poll settings in popup.js. Do not rely on storage events for initial load or Save normalization, and retain the form's dirty/pending/revision safeguards.
 
-- [ ] **Step 5: Verify and commit the green deliverable**
+- [x] **Step 5: Verify and commit the green deliverable**
 
 Run: `node --test tests/popup-ui.test.js`, then `npm run verify`.
 Expected: all tests pass; no failing/flaky baseline is accepted as completion.
@@ -131,7 +131,7 @@ git commit -m "fix(popup): synchronize presets after every interval refill"
 - Consumes: existing `button.title` pattern for sign-in/sign-out
 - Produces: remove button has `title="Remove <account>"` matching its aria-label
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 test('icon Remove exposes hover tooltip', async () => {
@@ -141,23 +141,23 @@ test('icon Remove exposes hover tooltip', async () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test tests/popup-ui.test.js`
 Expected: FAIL with the existing title `'Deletes the local entry only; provider mail is unchanged'`.
 
 Decision: shorten the existing tooltip to `Remove <account>`. The shared `account-remove-note` remains the explanation that provider mail is unchanged; retain `aria-describedby` and assert it in the test.
 
-- [ ] **Step 3: Implement title in `src/popup/popup.js`**
+- [x] **Step 3: Implement title in `src/popup/popup.js`**
 
 Set remove-button `title` to `"Remove " + acct.account` (keep `aria-label` and `aria-describedby="account-remove-note"` unchanged).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test tests/popup-ui.test.js`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/popup/popup.js tests/popup-ui.test.js
@@ -177,33 +177,33 @@ git commit -m "fix(popup): clarify icon Remove tooltip"
 - Produces: `.theme-choice[data-selected="true"]` mirrors its radio's checked state; existing theme selection/persistence remains intact.
 - Produces: solid derived tokens outside `@supports`; advanced values only inside `@supports (color: color-mix(in srgb, black, white))`. Missing `:has()` still yields heading layout, selected-theme styling and visible keyboard focus.
 
-- [ ] **Step 1: Write selected-state regression tests**
+- [x] **Step 1: Write selected-state regression tests**
 
 Extend the existing theme tests to assert each label's `data-selected` is `'true'` exactly when its radio is checked, after initial saved theme load, user selection and external theme storage updates. Retain radio focus and saved-preference assertions.
 
 Run: `node --test tests/popup-ui.test.js`
 Expected: FAIL on missing selected-state attributes.
 
-- [ ] **Step 2: Implement feature-gated color values**
+- [x] **Step 2: Implement feature-gated color values**
 
 Define fallback tokens unconditionally: `--accent-soft: var(--hover)`, `--accent-line: var(--accent)`, `--line-soft: var(--line)`, `--muted-soft: var(--muted)`. Place the existing four color-mix token values inside `@supports (color: color-mix(in srgb, black, white))`. Keep the swatch's existing border width/style with `var(--muted)` as its base color; gate the existing mixed border color with the same support query.
 
 An unsupported function is still accepted as a custom-property token stream; an unconditional later custom-property declaration would override the fallback and fail when consumed. Do not use paired custom-property declarations as a compatibility mechanism. Reference: https://www.w3.org/TR/css-variables-1/#invalid-variables.
 
-- [ ] **Step 3: Implement layout, selected-state and focus fallbacks**
+- [x] **Step 3: Implement layout, selected-state and focus fallbacks**
 
 Split `.account-inbox` into a standalone grid rule so an unsupported selector cannot invalidate its comma-separated rule. Use `.account-heading` as the fallback grid only inside `@supports not selector(:has(*))`; retain the existing modern no-link heading rule inside the positive support branch. Avoid making a linked heading and its child link both grids in supported Chrome.
 
 In `applyTheme(theme)`, update each radio's enclosing `.theme-choice` with `data-selected=String(radio.checked)`. Use that selector for the current selected border/background/shadow. Use `.theme-choice:focus-within` only inside the negative `:has()` support branch, retaining the current `:has(input:focus-visible)` outline in the positive branch. Keep native radios and their keyboard behavior.
 
-- [ ] **Step 4: Verify in DOM tests and a CSS-capable browser**
+- [x] **Step 4: Verify in DOM tests and a CSS-capable browser**
 
 Run: `node --test tests/popup-ui.test.js`, then `npm run verify`.
 Expected: all checks pass. These commands do not validate CSS rendering.
 
 Use the T3 collaborative preview and the production-backed fixture documented in `docs/ui-workspace/README.md`. Compare current Chrome rendering against the fresh baseline for all three themes, Mail and Settings, with matched fixture data/viewport. For fallback inspection, use a temporary fixture stylesheet with the positive feature branches disabled and the negative branches enabled; this exercises fallback rules in a modern engine, not an actual older-Chromium compatibility claim. Inspect valid computed colors, linked and unlinked heading grids, selected theme indication and keyboard focus on the invisible native radios. Record the exact method and limitations in Task 7; a CSS regex is not rendering evidence.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/popup/popup.css src/popup/popup.js tests/popup-ui.test.js
@@ -222,7 +222,7 @@ git commit -m "fix(popup): gate advanced CSS and preserve theme focus fallbacks"
 - Produces: successful recovery persists only the matching account as enabled, polls an enabled in-memory record immediately, and uses the updated list for reconciliation/badge calculation. Later polls load the enabled record from storage.
 - Failure contract: interactive-auth rejection or provider `needsSignIn` does not persistently enable a previously paused account. Concurrent Sign out/Remove supersedes recovery, and removed accounts are never recreated.
 
-- [ ] **Step 1: Add paused recovery tests with existing storage fakes**
+- [x] **Step 1: Add paused recovery tests with existing storage fakes**
 
 Use `memoryStores({ accounts: [paused, other] })`, `installChrome()` and `restoreChrome()` with cleanup in `finally`. Import `loadAccounts()` from the account store where needed. Provider fetchers return arrays (for example `[]`), not `{ items: [] }`.
 
@@ -236,20 +236,20 @@ Assert for Gmail and Outlook:
 Run: `node --test tests/account-tokens.test.js`
 Expected: successful paused-recovery tests fail because the provider fetch is skipped. Failure tests pin the intended contract.
 
-- [ ] **Step 2: Add concurrent lifecycle tests**
+- [x] **Step 2: Add concurrent lifecycle tests**
 
 In `tests/auth-signout.test.js`, use deferred authentication/provider promises to interleave recovery with explicit Sign out and Remove. Exercise both an auth flow and a provider fetch in flight. Assert Sign out prevents resumed polling/stale recovery state, and Remove leaves no stored account/cache restored by recovery. Include an unrelated account mutation during recovery and assert its saved settings survive.
 
 Run: `node --test tests/auth-signout.test.js`
 Expected: existing protections may already pass; record baseline. Keep new regression failures uncommitted until the fix passes.
 
-- [ ] **Step 3: Implement resume without stale records or storage races**
+- [x] **Step 3: Implement resume without stale records or storage races**
 
 Preserve `handleSignIn(accounts, target, deps = {})` and the existing interactive-auth/token flow. After interactive authentication and generation validation, use an enabled copy of the target for the queued `signInPoll` and an updated in-memory list; persisting alone cannot change the paused object already passed to `pollAccount`.
 
 For a previously paused account, persist `enabled: true` only after a successful provider result (`items` is an array without an error/needsSignIn/offline/skipped result). Within the existing serialized `write()` commit, recheck generation, reload current accounts, require that the target still exists, and merge only its enabled flag into the fresh record. Preserve fresh settings for every account and use that fresh list for badge calculation. Keep provider polling on `pollTail`; do not hold `write()` across network/auth awaits. Existing enabled-account recovery retains its behavior. Recheck generation before fetch and before state/cache/account commits so Sign out/Remove wins.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run: `node --test tests/account-tokens.test.js tests/auth-signout.test.js`, then `npm run verify`.
 Expected: all checks pass, including actual fetching, failure retention, account isolation and lifecycle races.
@@ -272,29 +272,29 @@ git commit -m "fix(auth): resume paused polling after successful recovery"
 - Consumes: nothing (deletion + prose)
 - Produces: `docs/design/` removed; DESIGN.md/PRODUCT.md/design.json reference `src/popup/` as the visual authority
 
-- [ ] **Step 1: Verify no code depends on docs/design**
+- [x] **Step 1: Verify no code depends on docs/design**
 
 Confirm the tracked inventory with `git ls-files docs/design` before deletion; the listed counts are a planning snapshot.
 
 Run: `rg -n "docs/design|design/(polish-v2|visual-polish|popup-directions)" src tests scripts manifest.json package.json .github`
 Expected: no runtime/test/tool references (rg exit 1 means no matches). Inspect documentation references separately with `rg -n "docs/design" DESIGN.md PRODUCT.md .impeccable`; historical records may retain provenance.
 
-- [ ] **Step 2: Delete prototype directories**
+- [x] **Step 2: Delete prototype directories**
 
 ```bash
 git rm -r docs/design/polish-v2 docs/design/visual-polish docs/design/popup-directions
 ```
 
-- [ ] **Step 3: Rewrite prose references**
+- [x] **Step 3: Rewrite prose references**
 
 DESIGN.md: replace `Approved from docs/design/visual-polish:` with `Implemented in src/popup/ (visual polish, 2026-10-03):` etc.; keep behavior bullets. PRODUCT.md: same. design.json: change `"reference": "docs/design/visual-polish/"` to `"reference": "src/popup/"`. Acceptance records stay untouched (they correctly say "Source was docs/design/…" as history).
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `npm run verify`
 Expected: PASS (docs are not syntax-checked). Also run `git status --short` to confirm only intended deletions + prose edits.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add DESIGN.md PRODUCT.md .impeccable/design.json .impeccable/surfaces/src-popup-popup-html.md
@@ -312,12 +312,12 @@ git commit -m "chore: remove shipped prototype copies, src/popup is visual autho
 - Consumes: completed Tasks 1–6 and the production-backed fixture in `docs/ui-workspace/`.
 - Produces: a reviewable candidate with fresh automated/browser evidence; real-account acceptance status reflects checks actually performed.
 
-- [ ] **Step 1: Run final automated verification**
+- [x] **Step 1: Run final automated verification**
 
 Run under Node 24: `npm run verify`.
 Expected: syntax/identity checks and all tests pass. Record Node version, command, actual test count and tested commit. Inspect `git diff --check` and `git status --short` for unintended changes.
 
-- [ ] **Step 2: Complete the bounded synthetic browser comparison**
+- [x] **Step 2: Complete the bounded synthetic browser comparison**
 
 Reuse Task 4's browser evidence and inspect remaining conditions in one batched pass; fix observed defects in one batch and allow at most one confirmation pass. Use Mail and Settings in Midnight, Slate and Signal at 480px, plus 320px/200% zoom layout and hover:none action visibility. Match baseline content, states and viewport sizes. Record any clock-dependent capture differences. Confirm full addresses, header counts, keyboard focus, theme selection, preset load/edit/Save highlighting and unchanged modern-browser layout/colors/spacing. Include fallback rules' computed styles and selection/focus evidence from Task 4. Emulated hover/zoom or enabled fallback branches must be labeled as synthetic evidence.
 
@@ -327,11 +327,11 @@ Run the Impeccable mechanical detector once over the changed popup UI files at t
 
 Review the diff against this plan and the referenced specs. Resolve correctness issues before candidate completion. Check CSS support gates and selector separation, every form refill callback, dirty/pending behavior, both provider recovery paths, lifecycle generations, serialized account writes and prototype-reference inventory. Preserve the chosen implementation/review workflow rather than reopening design approval.
 
-- [ ] **Step 4: Record fresh real-account Chrome acceptance**
+- [x] **Step 4: Record fresh real-account Chrome acceptance status**
 
 In the new dated record, list tested commit, browser version, date, results, evidence paths and outstanding items. Fresh acceptance covers Gmail and Outlook paused-account Sign in, immediate cache updates, later automatic polling, Sign out/Remove during recovery, popup reopen and worker restart. Mark each check pending until actually performed on the candidate; never copy historical ticks or claim synthetic fixtures validate extension authentication/lifecycle. If real-account access is unavailable, the candidate remains pending real-account acceptance and must not be presented as fully accepted for shipping.
 
-- [ ] **Step 5: Commit evidence**
+- [x] **Step 5: Commit evidence**
 
 Run: `git diff --check`.
 Expected: no whitespace errors; the record distinguishes automated, synthetic and real-account results.
