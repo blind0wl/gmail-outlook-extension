@@ -9,7 +9,7 @@
 html { width: 480px; max-width: 100%; background: var(--bg); }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; height: 600px; display: flex; flex-direction: column; font: 13px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg); }
+body { margin: 0; max-height: 600px; display: flex; flex-direction: column; font: 13px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg); }
 body[data-theme-loading] { visibility: hidden; }
 p { overflow-wrap: anywhere; }
 h2 { margin: 0; font-size: 14px; font-weight: 650; }

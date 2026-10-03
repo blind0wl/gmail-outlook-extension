@@ -1,6 +1,6 @@
 // Browser-only synthetic fixture. Never reads a real account or extension store.
 const state = new URLSearchParams(location.search).get("state") ?? "populated";
-if (!["empty", "populated", "expanded", "signed-out", "error", "long", "undo"].includes(state)) {
+if (!["empty", "caught-up", "populated", "expanded", "signed-out", "error", "long", "undo"].includes(state)) {
   throw new Error("Unknown popup fixture state");
 }
 
@@ -31,7 +31,7 @@ if (state === "long") {
 }
 const data = {
   accounts: state === "empty" ? [] : accounts,
-  mailCache: state === "empty" ? [] : mail,
+  mailCache: ["empty", "caught-up"].includes(state) ? [] : mail,
   soundSettings: { masterMuted: false, volume: 0.5, mutedAccounts: {} },
   skipFocusedProvider: false,
   accountState: state === "signed-out"
