@@ -18,8 +18,8 @@ function member(id, labels) {
 }
 const reply = records => JSON.stringify([records, 'synthetic-trailer']);
 const state = (records, id = TARGET) => parseGmailConversationState(reply(records), id);
-const expected = (allTrash, allInbox, allRead, messages = 2) =>
-  ({ recognized: true, messages, allTrash, allInbox, allRead });
+const expected = (allTrash, allInbox, allRead, allUnread = false, messages = 2) =>
+  ({ recognized: true, messages, allTrash, allInbox, allRead, allUnread });
 const frame = value => `${new TextEncoder().encode(value).length}&${value}`;
 
 test('an older trashed message cannot confirm Trash while another member remains in Inbox', () => {
@@ -56,7 +56,7 @@ test('read confirmation checks unread labels on every member', () => {
 test('exact state recognizes one-member and complete length-framed responses', () => {
   const text = reply([summary(['aa01']), member('aa01', ['^k'])]);
   for (const input of [text, ")]}'\n" + text, frame(text), ")]}'\n" + frame(text)]) {
-    assert.deepEqual(parseGmailConversationState(input, TARGET), expected(true, false, true, 1));
+    assert.deepEqual(parseGmailConversationState(input, TARGET), expected(true, false, true, false, 1));
   }
 });
 
@@ -109,7 +109,7 @@ test('mail fields cannot impersonate root conversation or member records', () =>
   assert.deepEqual(state([row]), { recognized: false });
   row[4] = JSON.stringify([summary(['aa01']), member('aa01', ['^k'])]);
   assert.deepEqual(state([row]), { recognized: false });
-  assert.deepEqual(state([summary(['aa01']), row]), expected(true, false, true, 1));
+  assert.deepEqual(state([summary(['aa01']), row]), expected(true, false, true, false, 1));
 });
 
 test('unsupported, malformed, ambiguous and oversized replies fail closed', () => {
@@ -127,4 +127,29 @@ test('a member target resolves its complete conversation without accepting unrel
   assert.deepEqual(state(records, 'AA02'), expected(true, false, false));
   assert.deepEqual(state(records, 'aa03'), { recognized: false });
   assert.deepEqual(state([summary(), member('aa01', ['^k'])], 'aa01'), { recognized: false });
+});
+
+test('unread state requires every member to carry the unread label', () => {
+  assert.deepEqual(state([summary(), member('aa01', ['^i', '^u']), member('aa02', ['^i', '^u'])]),
+    expected(false, true, false, true));
+  assert.deepEqual(state([summary(), member('aa01', ['^i', '^u']), member('aa02', ['^i'])]),
+    expected(false, true, false, false));
+  assert.deepEqual(state([summary(), member('aa01', ['^i']), member('aa02', ['^i'])]),
+    expected(false, true, true, false));
+});
+
+test('unread verification passes only on complete unread state and rejects unknown actions', async () => {
+  const { verifyGmailConversationState } = await import('../src/providers/gmail-conversation-state.js');
+  const session = { base: 'https://mail.google.com/mail/u/0/', key: 'k' };
+  const feed = '<feed><title>Gmail - Inbox for owner@example.test</title></feed>';
+  const cv = (labels) => JSON.stringify([[summary(), member('aa01', labels[0]), member('aa02', labels[1])], 'synthetic-trailer']);
+  let labels = [['^i', '^u'], ['^i', '^u']];
+  globalThis.fetch = async (url) => ({
+    ok: true,
+    text: async () => String(url).includes('view=cv') ? cv(labels) : feed,
+  });
+  assert.equal(await verifyGmailConversationState('owner@example.test', session, 'abc123', 'unread'), true);
+  labels = [['^i', '^u'], ['^i']];
+  assert.equal(await verifyGmailConversationState('owner@example.test', session, 'abc123', 'unread'), false);
+  assert.equal(await verifyGmailConversationState('owner@example.test', session, 'abc123', 'bogus'), false);
 });

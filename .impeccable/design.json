@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T00:00:00Z",
+  "generatedAt": "2026-10-03T03:33:33.048012+00:00",
   "title": "Design System: Gmail plus Outlook",
   "extensions": {
     "colorMeta": {
@@ -22,14 +22,14 @@
         "role": "neutral",
         "displayName": "Midnight panel",
         "tonalRamp": [
-          "oklch(15% 0.03579 244.41)",
-          "oklch(26.43% 0.03579 244.41)",
-          "oklch(37.86% 0.03579 244.41)",
-          "oklch(49.29% 0.03579 244.41)",
-          "oklch(60.71% 0.03579 244.41)",
-          "oklch(72.14% 0.03579 244.41)",
-          "oklch(83.57% 0.03579 244.41)",
-          "oklch(95% 0.03579 244.41)"
+          "oklch(15% 0.03693 241.62)",
+          "oklch(26.43% 0.03693 241.62)",
+          "oklch(37.86% 0.03693 241.62)",
+          "oklch(49.29% 0.03693 241.62)",
+          "oklch(60.71% 0.03693 241.62)",
+          "oklch(72.14% 0.03693 241.62)",
+          "oklch(83.57% 0.03693 241.62)",
+          "oklch(95% 0.03693 241.62)"
         ]
       },
       "midnight-header": {
@@ -78,14 +78,14 @@
         "role": "neutral",
         "displayName": "Midnight line",
         "tonalRamp": [
-          "oklch(15% 0.03900 246.04)",
-          "oklch(26.43% 0.03900 246.04)",
-          "oklch(37.86% 0.03900 246.04)",
-          "oklch(49.29% 0.03900 246.04)",
-          "oklch(60.71% 0.03900 246.04)",
-          "oklch(72.14% 0.03900 246.04)",
-          "oklch(83.57% 0.03900 246.04)",
-          "oklch(95% 0.03900 246.04)"
+          "oklch(15% 0.03725 245.87)",
+          "oklch(26.43% 0.03725 245.87)",
+          "oklch(37.86% 0.03725 245.87)",
+          "oklch(49.29% 0.03725 245.87)",
+          "oklch(60.71% 0.03725 245.87)",
+          "oklch(72.14% 0.03725 245.87)",
+          "oklch(83.57% 0.03725 245.87)",
+          "oklch(95% 0.03725 245.87)"
         ]
       },
       "midnight-hover": {
@@ -246,14 +246,14 @@
         "role": "neutral",
         "displayName": "Slate line",
         "tonalRamp": [
-          "oklch(15% 0.01786 253.35)",
-          "oklch(26.43% 0.01786 253.35)",
-          "oklch(37.86% 0.01786 253.35)",
-          "oklch(49.29% 0.01786 253.35)",
-          "oklch(60.71% 0.01786 253.35)",
-          "oklch(72.14% 0.01786 253.35)",
-          "oklch(83.57% 0.01786 253.35)",
-          "oklch(95% 0.01786 253.35)"
+          "oklch(15% 0.02269 254.40)",
+          "oklch(26.43% 0.02269 254.40)",
+          "oklch(37.86% 0.02269 254.40)",
+          "oklch(49.29% 0.02269 254.40)",
+          "oklch(60.71% 0.02269 254.40)",
+          "oklch(72.14% 0.02269 254.40)",
+          "oklch(83.57% 0.02269 254.40)",
+          "oklch(95% 0.02269 254.40)"
         ]
       },
       "slate-hover": {
@@ -414,14 +414,14 @@
         "role": "neutral",
         "displayName": "Signal line",
         "tonalRamp": [
-          "oklch(15% 0.01140 243.68)",
-          "oklch(26.43% 0.01140 243.68)",
-          "oklch(37.86% 0.01140 243.68)",
-          "oklch(49.29% 0.01140 243.68)",
-          "oklch(60.71% 0.01140 243.68)",
-          "oklch(72.14% 0.01140 243.68)",
-          "oklch(83.57% 0.01140 243.68)",
-          "oklch(95% 0.01140 243.68)"
+          "oklch(15% 0.01224 239.95)",
+          "oklch(26.43% 0.01224 239.95)",
+          "oklch(37.86% 0.01224 239.95)",
+          "oklch(49.29% 0.01224 239.95)",
+          "oklch(60.71% 0.01224 239.95)",
+          "oklch(72.14% 0.01224 239.95)",
+          "oklch(83.57% 0.01224 239.95)",
+          "oklch(95% 0.01224 239.95)"
         ]
       },
       "signal-hover": {
@@ -525,6 +525,14 @@
       "metadata": {
         "displayName": "Metadata",
         "purpose": "Timestamps and theme default label."
+      },
+      "sender": {
+        "displayName": "Sender",
+        "purpose": "Muted sender identity above the subject."
+      },
+      "help": {
+        "displayName": "Help",
+        "purpose": "Readable explanatory copy in compact views."
       }
     },
     "shadows": [],
@@ -538,7 +546,15 @@
         "name": "title-row",
         "value": "240px"
       }
-    ]
+    ],
+    "popupSettingsUpdate": "2026-10-02: whole native account heading links; Accounts \u2192 Themes \u2192 Notifications \u2192 Sound \u2192 Mail checking. Retained duration/unit/Save form, theme-native controls and accessible pending/error/success. Completed Trash has no visible Undo; recovery remains. Synthetic 320/480px all-theme checks passed; fresh real-account acceptance pending. Owner smoke-test refinement: whole-header hover without address underline.",
+    "visualPolishUpdate": {
+      "date": "2026-10-03",
+      "reference": "src/popup/",
+      "mail": "Slim full-address account headings, two-line primary subjects, three-line cached previews and separate flow-based action footers.",
+      "settings": "Compact account actions, shared removal note, local reconnection hints and miniature theme previews.",
+      "acceptance": "Fresh unpacked-extension acceptance pending in docs/acceptance/2026-10-03-visual-polish.md."
+    }
   },
   "components": [
     {
@@ -547,7 +563,7 @@
       "refersTo": "button",
       "description": "Account and settings native action.",
       "html": "<button class=\"ds-button\">Add Gmail</button>",
-      "css": ".ds-button { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted);  } .ds-button:hover:not(:disabled) { background: var(--hover); } .ds-button:active:not(:disabled) { border-color: var(--accent); } .ds-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-button:disabled { color: var(--muted); cursor: default; }"
+      "css": ".ds-button { font: 500 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--line);  } .ds-button:hover:not(:disabled) { background: var(--hover); } .ds-button:active:not(:disabled) { border-color: var(--accent); } .ds-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-button:disabled { color: var(--muted); cursor: default; }"
     },
     {
       "name": "Primary submit",
@@ -555,7 +571,7 @@
       "refersTo": "button-primary",
       "description": "Accent action for account submission.",
       "html": "<button class=\"ds-submit\">Add account</button>",
-      "css": ".ds-submit { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: var(--accent); color: var(--on-accent); border-color: transparent; } .ds-submit:hover:not(:disabled) { background: var(--hover); } .ds-submit:active:not(:disabled) { border-color: var(--accent); } .ds-submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-submit:disabled { color: var(--muted); cursor: default; } .ds-submit:hover:not(:disabled) { background: var(--accent); }"
+      "css": ".ds-submit { font: 500 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--line); background: var(--accent); color: var(--on-accent); border-color: transparent; } .ds-submit:hover:not(:disabled) { background: var(--hover); } .ds-submit:active:not(:disabled) { border-color: var(--accent); } .ds-submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-submit:disabled { color: var(--muted); cursor: default; } .ds-submit:hover:not(:disabled) { background: var(--accent); }"
     },
     {
       "name": "Open message",
@@ -563,7 +579,7 @@
       "refersTo": "button-open",
       "description": "Sibling action opens the provider and retains local read behavior.",
       "html": "<button class=\"ds-open\">Open</button>",
-      "css": ".ds-open { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; margin-top: 8px; margin-left: -8px; } .ds-open:hover:not(:disabled) { background: var(--hover); } .ds-open:active:not(:disabled) { border-color: var(--accent); } .ds-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-open:disabled { color: var(--muted); cursor: default; }"
+      "css": ".ds-open { font: 500 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--line); background: transparent; color: var(--accent); border-color: transparent; padding: 4px 8px; margin-top: 8px; margin-left: -8px; } .ds-open:hover:not(:disabled) { background: var(--hover); } .ds-open:active:not(:disabled) { border-color: var(--accent); } .ds-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-open:disabled { color: var(--muted); cursor: default; }"
     },
     {
       "name": "Provider filters",
@@ -571,7 +587,7 @@
       "refersTo": "provider-filter",
       "description": "Pressed state identifies the selected provider.",
       "html": "<nav class=\"ds-filters\" aria-label=\"Provider filter\"><button aria-pressed=\"true\">All</button><button aria-pressed=\"false\">Gmail</button><button aria-pressed=\"false\">Outlook</button></nav>",
-      "css": ".ds-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 12px; } .ds-filters button { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); border-radius: 999px; padding-inline: 14px; background: transparent; border-color: transparent; color: var(--muted); } .ds-filters button:hover { background: var(--hover); } .ds-filters button[aria-pressed=\"true\"], .ds-filters button[aria-pressed=\"true\"]:hover { background: var(--accent); color: var(--on-accent); } .ds-filters button:active { border-color: var(--accent); } .ds-filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+      "css": ".ds-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 12px; } .ds-filters button { font: 500 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding-inline: 14px; background: transparent; border-color: transparent; color: var(--muted); } .ds-filters button:hover { background: var(--hover); } .ds-filters button[aria-pressed=\"true\"], .ds-filters button[aria-pressed=\"true\"]:hover { background: var(--accent); color: var(--on-accent); } .ds-filters button:active { border-color: var(--accent); } .ds-filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
     },
     {
       "name": "Provider badge",
@@ -579,23 +595,23 @@
       "refersTo": "provider-badge",
       "description": "Noninteractive provider identity inside an account header.",
       "html": "<span class=\"ds-badge\">Gmail</span>",
-      "css": ".ds-badge { font: 600 11px/1.5 system-ui, sans-serif; padding: 2px 6px; border-radius: 4px; background: var(--tag); color: var(--text); }"
+      "css": ".ds-badge { font: 400 11px/1.5 system-ui, sans-serif; color: var(--muted); background: transparent; }"
     },
     {
-      "name": "Account panel",
+      "name": "Account heading",
       "kind": "card",
       "refersTo": "account-panel",
-      "description": "One full address owns one panel.",
-      "html": "<section class=\"ds-account\"><header class=\"ds-account-header\"><span class=\"ds-account-badge\">Outlook</span><h2>desk@example.com</h2></header><p class=\"ds-account-empty\">No messages to show.</p></section>",
-      "css": ".ds-account { font: 13px/1.5 system-ui, sans-serif; background: var(--panel); color: var(--text); border-radius: 12px; overflow: hidden; } .ds-account-header { padding: 12px 14px; background: var(--header); } .ds-account-header h2 { margin: 6px 0 0; font-size: 14px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; } .ds-account-badge { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--tag); } .ds-account-empty { margin: 0; padding: 12px 14px; color: var(--muted); overflow-wrap: anywhere; }"
+      "description": "Slim full-address account heading above its own messages.",
+      "html": "<section class=\"ds-account\"><header class=\"ds-account-header\"><h2>desk@example.test</h2><span class=\"ds-account-badge\">Outlook \u00b7 2 unread</span></header></section>",
+      "css": ".ds-account { font: 13px/1.5 system-ui, sans-serif; color: var(--text); } .ds-account-header { padding: 4px 2px 8px; background: transparent; } .ds-account-header h2 { margin: 0 0 4px; font-size: 13px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; } .ds-account-badge { font-size: 11px; font-weight: 400; color: var(--muted); }"
     },
     {
       "name": "Mail card",
       "kind": "custom",
       "refersTo": "mail-row",
-      "description": "Separate rounded email card with bold headings, a three-line preview and hover/focus actions.",
-      "html": "<article class=\"ds-row\"><strong>Reading room</strong><strong>Your weekly reading list</strong><p>A few details to catch up on for the week ahead.</p><button>Open</button></article>",
-      "css": ".ds-row { position: relative; font: 13px/1.5 system-ui, sans-serif; padding: 12px 14px 10px 20px; background: var(--panel); color: var(--text); } .ds-dot { position: absolute; left: 8px; top: 20px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); } .ds-summary { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); display: block; width: 100%; min-width: 0; padding: 0; border: 0; background: var(--panel); color: inherit; font-weight: 400; text-align: left; } .ds-summary:hover { background: var(--hover); } .ds-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; } .ds-sender { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-time { font-size: 11px; color: var(--muted); flex-shrink: 0; font-variant-numeric: tabular-nums; } .ds-subject, .ds-snippet { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-subject { font-size: 14px; font-weight: 600; } .ds-snippet { color: var(--muted); margin-top: 3px; } .ds-row-open { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); background: var(--panel); color: var(--accent); border-color: transparent; padding: 4px 8px; margin-top: 8px; margin-left: -8px; } .ds-row-open:hover:not(:disabled) { background: var(--hover); } .ds-row-open:active:not(:disabled) { border-color: var(--accent); } .ds-row-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-row-open:disabled { color: var(--muted); cursor: default; } .ds-row { border: 1px solid var(--line); border-radius: 12px; } .ds-row strong { display: block; font-weight: 600; } .ds-row p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }"
+      "description": "Rounded message with a strong subject, muted sender, three-line cached preview and separate action footer.",
+      "html": "<article class=\"ds-row\"><span class=\"ds-sender\">Reading room</span><strong class=\"ds-subject\">Your weekly reading list</strong><p>A few details to catch up on for the week ahead.</p><footer><time>10:30 AM</time><button aria-label=\"Open message\">Open</button></footer></article>",
+      "css": ".ds-row { font: 13px/1.45 system-ui, sans-serif; padding: 14px 16px 8px 18px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; } .ds-sender { font-size: 12px; font-weight: 500; color: var(--muted); } .ds-subject { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 15px; font-weight: 650; line-height: 1.4; margin-top: 5px; } .ds-row p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; color: var(--muted); margin: 6px 0 0; } .ds-row footer { display: flex; align-items: center; justify-content: space-between; min-height: 32px; margin-top: 6px; } .ds-row time { font-size: 11px; color: var(--muted); } .ds-row button { font: inherit; color: var(--accent); background: transparent; border: 0; min-height: 32px; } .ds-row button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
     },
     {
       "name": "Email field",
@@ -603,7 +619,7 @@
       "refersTo": "email-input",
       "description": "Native account address field with themed caret and placeholder.",
       "html": "<label class=\"ds-field\">Your email address<input type=\"email\" placeholder=\"you@example.com\" autocomplete=\"email\"></label>",
-      "css": ".ds-field { display: block; font: 13px/1.5 system-ui, sans-serif; color: var(--text); } .ds-field input { display: block; width: 100%; font: inherit; padding: 8px; margin-top: 4px; border: 1px solid var(--muted); border-radius: 6px; color: var(--text); background: var(--control); caret-color: var(--accent); } .ds-field input::placeholder { color: var(--muted); opacity: 1; } .ds-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+      "css": ".ds-field { display: block; font: 13px/1.5 system-ui, sans-serif; color: var(--text); } .ds-field input { display: block; width: 100%; font: inherit; padding: 8px; margin-top: 4px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--control); caret-color: var(--accent); } .ds-field input::placeholder { color: var(--muted); opacity: 1; } .ds-field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
     },
     {
       "name": "Settings toolbar icon",
@@ -611,17 +627,17 @@
       "refersTo": "toolbar-icon",
       "description": "Authored SVG replaces glyph icons.",
       "html": "<button class=\"ds-icon\" aria-label=\"Settings\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 7h16M4 17h16\"/><circle cx=\"9\" cy=\"7\" r=\"3\"/><circle cx=\"15\" cy=\"17\" r=\"3\"/></svg></button>",
-      "css": ".ds-icon { font: 600 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--muted); display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 6px; border-color: transparent; background: transparent; } .ds-icon:hover:not(:disabled) { background: var(--hover); } .ds-icon:active:not(:disabled) { border-color: var(--accent); } .ds-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-icon:disabled { color: var(--muted); cursor: default; } .ds-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .ds-icon svg circle { fill: var(--bg); }"
+      "css": ".ds-icon { font: 500 13px/1.5 system-ui, sans-serif; min-height: 32px; padding: 6px 10px; border-radius: 6px; cursor: pointer; background: var(--control); color: var(--text); border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 6px; border-color: transparent; background: transparent; } .ds-icon:hover:not(:disabled) { background: var(--hover); } .ds-icon:active:not(:disabled) { border-color: var(--accent); } .ds-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-icon:disabled { color: var(--muted); cursor: default; } .ds-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .ds-icon svg circle { fill: var(--bg); }"
     }
   ],
   "narrative": {
     "northStar": "Midnight desk",
-    "overview": "The approved world is a compact, calm desk for checking personal mail. Blue-grey\nsurfaces and a pale teal accent make Midnight the default; Slate workspace and\nSignal panel apply the same component grammar through their own palettes.\nNormal-case native typography and crisp authored icons keep the interface direct.\n\nThis is the implementation record extracted on 2026-09-30 from\n`src/popup/popup.css`, `popup.html`, `popup.js` and `themes.js`. It replaces the\nformer white A v5 world. Historical screenshots and reproduction provenance stay\nin `docs/ui-baseline/`; they are historical evidence, not current tokens.\nCurrent synthetic verification is in `docs/ui-workspace/`; real-account owner\nacceptance of this candidate remains pending.",
+    "overview": "Owner-approved visual polish implemented in src/popup/ on 2026-10-03. Midnight desk remains the default alongside Slate workspace and Signal panel. Subjects lead, account identity wraps, native actions occupy a separate footer and Settings controls are quieter. Fresh real-account acceptance remains pending for this candidate.",
     "keyCharacteristics": [
-      "Three complete palettes with Midnight as the remembered-preference fallback.",
-      "Separate rounded message cards beneath account headers.",
-      "Normal-case system typography and authored SVG toolbar icons.",
-      "Immediate state changes without ambient or theme-transition motion."
+      "Three remembered palettes with Midnight as fallback.",
+      "Separate rounded mail cards beneath slim full-address account headings.",
+      "Normal-case system typography, authored SVG icons and quiet timestamp metadata.",
+      "Immediate state changes without ambient motion."
     ],
     "rules": [
       {
@@ -635,8 +651,8 @@
         "section": "typography"
       },
       {
-        "name": "The Flat Row Rule",
-        "body": "Give each account one enclosing panel; separate its messages with dividers rather than independent raised cards.",
+        "name": "Account ownership",
+        "body": "Keep one full-address heading per account and separate rounded messages beneath it; never combine mailboxes.",
         "section": "elevation & depth"
       }
     ],
@@ -652,6 +668,6 @@
       "Don't add later-stage mailbox write controls to the Stage 1 component set.",
       "Don't treat synthetic screenshots as real-account acceptance."
     ],
-    "cardActionsUpdate": "2026-10-01: 480px popup, three-line static preview, 600-weight unread headings and 400 pending-read headings. Immediate read/Trash feedback with rollback; provider-read mail omitted. Unknown Gmail responses reconcile complete owning unread feed while preserving write uncertainty. Real-account bug-candidate retest pending."
+    "cardActionsUpdate": "2026-10-01: 480px popup, three-line static preview, 600-weight unread headings and 400 pending-read headings. Immediate read/Trash feedback with rollback; provider-read mail omitted. Unknown Gmail responses reconcile complete owning unread feed while preserving write uncertainty. Real-account bug-candidate retest pending.\n2026-10-03 owner-approved visual polish supersedes prior static/bold measurements: primary-color 15px/650 subjects wrap to two lines; muted senders are 12px/500; timestamps are 11px/400. Cached expansion is preserved from the incumbent runtime and recorded as a discrepancy. Native 32px action buttons occupy a separate flow footer. Fresh candidate acceptance pending."
   }
 }

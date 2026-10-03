@@ -9,11 +9,19 @@ The popup groups cached mail under each account in separate rounded cards, with
 bold sender/subject and an automatic preview capped at three lines. Hover or
 keyboard focus reveals mark-as-read and Trash actions. Gmail uses the existing
 browser login and acts on **whole conversations**; Outlook acts on individual
-messages through Graph. Trash is recoverable through Undo for ten minutes.
+messages through Graph. Trash remains recoverable in the owning mailbox; the
+popup has no Undo tray or button. The worker retains its ten-minute restore
+journal and existing Undo command.
 Gmail Trash and Undo require verified state for every member of the conversation.
 Existing unconfirmed recovery records remain saved until you check the mailbox
 and acknowledge them.
-**Open** still opens the provider and retains the extension’s local read flag.
+**Open** opens the provider and marks the item read locally in the extension;
+provider unread state is unchanged. The popup's unread counts follow this local
+state. **Mark read** changes the card immediately but keeps it available while
+hovered or keyboard focused. Leaving it starts a five-second grace period;
+clicking elsewhere commits immediately. **Mark unread** during the grace period
+cancels the read without a provider request, including for Gmail. Opening a
+staged card cancels its pending provider read and records only the local Open.
 Full-message reading inside the extension, compose/send, archive and search
 remain outside this change.
 
@@ -22,12 +30,13 @@ complete conversation membership and labels; Undo uses fresh session metadata
 and the current Sync restore operation.
 Unrecognized responses never report success; check your mailbox, then use
 **I’ve checked** to unlock further actions. No automatic mutation retry occurs.
-Recovery and Undo appear above the mail list. Saved unconfirmed actions use one
+Unconfirmed-action recovery appears above the mail list. Saved unconfirmed actions use one
 counted row per account; check all those actions in the mailbox before using
-**I’ve checked** to unlock them. Individual Undo remains separate.
+**I’ve checked** to unlock them. Completed deletions have no visible Undo feedback.
 Only the affected conversation or
-message is locked; other mail remains usable. After a confirmed Gmail read, the
-popup explains that an already-open Gmail page may need refreshing.
+message is locked; other mail remains usable. Reads stay silent on progress and
+success; only errors restore a recovery card and show feedback. Gmail provider
+unread remains unavailable after a read is committed.
 
 The Gmail confirmation and Undo fixes passed automated checks and owner-run
 real-account tests for repeated cycles, three-message conversations, mixed-folder
@@ -98,7 +107,7 @@ framework, bundler, or production npm dependencies.
 | `src/auth/` | Personal Microsoft OAuth/PKCE, renewal, and session invalidation. |
 | `src/store/` | Account normalization and the bounded mail cache. |
 | `src/popup/` | Cache-only rendering, provider links, and actions sent to the worker. |
-| `src/notify/` | Notifications, mute/volume settings, and offscreen Web Audio chime. |
+| `src/notify/` | Notifications, mute/volume settings, and offscreen MP3 chime. |
 | `tests/` | Automated regressions, fixtures, and the popup acceptance procedure. |
 | `.dev/`, `.specify/` | Historical workflow records and specification tooling; not an active ai-dev-system workflow. |
 
@@ -143,8 +152,21 @@ mail content, or sensitive diagnostics in the repository.
 
 Mail shows one section per configured account, including empty or paused
 accounts. All/Gmail/Outlook filters retain separate account ownership. Settings
-contains Themes, Accounts, Notifications and Sound; Back returns to the prior
+contains Accounts, Themes, Notifications, Sound and Mail checking; Back returns to the prior
 Mail scroll position. Account drafts survive cache updates and theme changes.
+
+Click an account heading to open its webmail inbox in one new active tab.
+Heading navigation does not mark mail read or refresh the cache. The encoded
+Gmail/Outlook account hints still require fresh two-account compatibility
+acceptance for this candidate; see the [candidate record](docs/acceptance/2026-10-02-popup-ux-settings.md).
+
+Under **Settings → Mail checking**, enter a duration, choose seconds/minutes/hours,
+and press **Save**. One preference applies to all enabled accounts. The default
+is 1 minute; the supported range is 30 seconds–5 hours, in whole seconds.
+Save applies the running schedule without fetching mail. Checks may be delayed
+by the browser or provider; paused accounts and provider backoff still apply.
+Manual Refresh remains available. Unrelated updates preserve unsaved drafts;
+a failed Save retains your choice for retry and does not report success.
 
 **Midnight desk** is the default for new or unset profiles. Choose **Slate
 workspace** or **Signal panel** under Settings → Themes; the `popupTheme` local
@@ -188,3 +210,11 @@ for product scope. [DESIGN.md](DESIGN.md) documents the existing visual system;
 captures; [the workspace fixture](docs/ui-workspace/README.md) reuses current
 production files with synthetic accounts. The original implementation plan is historical context;
 current source and dated acceptance records describe the implemented behavior.
+
+## Acknowledgements
+
+[Checker Plus for Gmail](https://jasonsavard.com/CheckerPlusForGmail/), created
+by Jason Savard, inspired me to build my own Gmail and Outlook extension.
+This project uses its `sounds/chime.mp3` notification sound, bundled here as
+`src/notify/sounds/chime.mp3` from Checker Plus for Gmail version 36.5.2.
+The source extension's copyright notice reads: “Copyright Jason Savard”.

@@ -23,6 +23,7 @@ import {
 } from "../src/background/service-worker.js";
 import { fetchGmailMessages } from "../src/providers/gmail.js";
 import { getInbox, mergeMessages } from "../src/store/cache.js";
+import { loadAccounts, saveAccounts } from "../src/store/accounts.js";
 import { accountStatusLabel, readAccountState } from "../src/notify/notify.js";
 
 const MS_TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
@@ -570,6 +571,189 @@ test("gmail sign-in polls first and opens a tab only when auth is missing", asyn
     assert.equal(failing.needsSignIn, true);
     assert.ok(opened.includes("https://mail.google.com/"), "login tab opened");
     assert.equal(needsSignInFor(acct), true);
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+test("sign-in recovers a paused Gmail account and later polling stays enabled", async () => {
+  const target = { provider: "gmail", account: "paused-recovery@gmail.com", enabled: false, notify: false };
+  const other = { provider: "outlook", account: "recovery-other@o.c", enabled: true, notify: false, clientId: "other-entra-id" };
+  const otherState = { needsSignIn: false, baseline: true, seen: ["untouched"], marker: "keep" };
+  const stores = memoryStores({
+    accounts: [target, other],
+    accountState: { "outlook:recovery-other@o.c": otherState },
+  });
+  const prev = installChrome(stores.chrome);
+  try {
+    const calls = [];
+    const deps = {
+      interactiveGet: async () => null,
+      getToken: async () => null,
+      fetchers: {
+        gmail: async (_token, _since, account) => {
+          calls.push(`gmail:${account}`);
+          return [];
+        },
+        outlook: async (_token, _since, account) => {
+          calls.push(`outlook:${account}`);
+          return [];
+        },
+      },
+      setBadge: async () => {},
+    };
+    const recovered = await handleSignIn([target, other], target, deps);
+    assert.ok(Array.isArray(recovered.items), "immediate result contains provider items");
+    assert.equal(recovered.skipped, undefined);
+    assert.deepEqual(calls, ["gmail:paused-recovery@gmail.com"]);
+    assert.deepEqual(await loadAccounts(), [
+      { ...target, enabled: true },
+      other,
+    ]);
+    assert.deepEqual((await readAccountState())["outlook:recovery-other@o.c"], otherState);
+
+    const persisted = await loadAccounts();
+    const later = await pollAll([persisted[0]], {
+      ...deps,
+      interactiveGet: undefined,
+    });
+    assert.equal(later.succeeded.includes("gmail:paused-recovery@gmail.com"), true);
+    assert.deepEqual(calls, [
+      "gmail:paused-recovery@gmail.com",
+      "gmail:paused-recovery@gmail.com",
+    ]);
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+test("sign-in recovers a paused Outlook account without changing other settings", async () => {
+  const target = { provider: "outlook", account: "paused-recovery@o.c", enabled: false, notify: false, clientId: "target-entra-id" };
+  const other = { provider: "outlook", account: "recovery-other@o.c", enabled: true, notify: false, clientId: "other-entra-id" };
+  const otherState = { needsSignIn: false, baseline: true, seen: ["untouched"], marker: "keep" };
+  const tokenKey = sessionKeyFor(target.account);
+  const stores = memoryStores({
+    accounts: [target, other],
+    accountState: { "outlook:recovery-other@o.c": otherState },
+  }, {
+    [tokenKey]: {
+      accessToken: "paused-outlook-token",
+      refreshToken: null,
+      expiresAt: Date.now() + 3600_000,
+      account: target.account,
+    },
+  });
+  const prev = installChrome(stores.chrome);
+  try {
+    const calls = [];
+    const deps = {
+      interactiveGet: async (acct) => {
+        assert.equal(acct.account, target.account);
+        return "paused-outlook-token";
+      },
+      fetchers: {
+        outlook: async (token, _since, account) => {
+          assert.equal(token, "paused-outlook-token");
+          calls.push(account);
+          return [];
+        },
+      },
+      setBadge: async () => {},
+    };
+    const recovered = await handleSignIn([target, other], target, deps);
+    assert.ok(Array.isArray(recovered.items), "immediate result contains provider items");
+    assert.equal(recovered.skipped, undefined);
+    assert.deepEqual(calls, [target.account]);
+    assert.deepEqual(await loadAccounts(), [
+      { ...target, enabled: true },
+      other,
+    ]);
+    assert.deepEqual((await readAccountState())["outlook:recovery-other@o.c"], otherState);
+
+    const persisted = await loadAccounts();
+    const later = await pollAll([persisted[0]], {
+      getToken: async () => "paused-outlook-token",
+      fetchers: deps.fetchers,
+      setBadge: async () => {},
+    });
+    assert.equal(later.succeeded.includes("outlook:paused-recovery@o.c"), true);
+    assert.deepEqual(calls, [target.account, target.account]);
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+test("paused recovery merges a concurrent settings change to another account", async () => {
+  const target = { provider: "gmail", account: "concurrent-recovery@gmail.com", enabled: false, notify: true };
+  const other = { provider: "outlook", account: "concurrent-other@o.c", enabled: true, notify: true, clientId: "old-client-id" };
+  const updatedOther = { ...other, notify: false, clientId: "new-client-id" };
+  const stores = memoryStores({ accounts: [target, other] });
+  const prev = installChrome(stores.chrome);
+  let releaseFetch;
+  let fetchStartedResolve;
+  const fetchStarted = new Promise((resolve) => { fetchStartedResolve = resolve; });
+  const fetchGate = new Promise((resolve) => { releaseFetch = resolve; });
+  try {
+    const recovery = handleSignIn([target, other], target, {
+      interactiveGet: async () => null,
+      fetchers: {
+        gmail: async () => {
+          fetchStartedResolve();
+          await fetchGate;
+          return [];
+        },
+        outlook: async () => { assert.fail("unrelated provider must not be polled"); },
+      },
+    });
+    await fetchStarted;
+    await saveAccounts([target, updatedOther]);
+    releaseFetch();
+    const result = await recovery;
+    assert.ok(Array.isArray(result.items));
+    assert.deepEqual(await loadAccounts(), [
+      { ...target, enabled: true },
+      updatedOther,
+    ]);
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+test("rejected interactive recovery leaves a paused account disabled and unpolled", async () => {
+  const target = { provider: "outlook", account: "rejected-recovery@o.c", enabled: false, notify: true, clientId: "rejected-client-id" };
+  const stores = memoryStores({ accounts: [target] });
+  const prev = installChrome(stores.chrome);
+  try {
+    let fetchCount = 0;
+    const result = await handleSignIn([target], target, {
+      interactiveGet: async () => { throw new Error("cancelled or failed"); },
+      fetchers: { outlook: async () => { fetchCount += 1; return []; } },
+    });
+    assert.equal(result.needsSignIn, true);
+    assert.equal(fetchCount, 0);
+    assert.deepEqual(await loadAccounts(), [target]);
+  } finally {
+    restoreChrome(prev);
+  }
+});
+
+test("paused Gmail stays disabled when its recovery poll receives 401", async () => {
+  const target = { provider: "gmail", account: "paused-401@gmail.com", enabled: false, notify: true };
+  const stores = memoryStores({ accounts: [target] });
+  let opened = 0;
+  const prev = installChrome({
+    ...stores.chrome,
+    tabs: { create: async () => { opened += 1; } },
+  });
+  try {
+    let fetchCount = 0;
+    const result = await handleSignIn([target], target, {
+      fetchers: { gmail: async () => { fetchCount += 1; throw err401(); } },
+    });
+    assert.equal(result.needsSignIn, true);
+    assert.equal(fetchCount, 2, "one forced Gmail retry follows the 401");
+    assert.equal(opened, 1);
+    assert.deepEqual(await loadAccounts(), [target]);
   } finally {
     restoreChrome(prev);
   }

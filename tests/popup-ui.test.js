@@ -2,9 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseHTML } from "linkedom";
+// Linkedom exposes a getter-only select.value and does not model native selection.
+function popupDOM(html) {
+  const dom = parseHTML(html);
+  for (const select of dom.document.querySelectorAll('select')) Object.defineProperty(select,'value',{
+    get() { return this.querySelector('option[selected]')?.value ?? this.options[0]?.value; },
+    set(value) { for(const option of this.options) { if(option.value===value) option.setAttribute('selected',''); else option.removeAttribute('selected'); } },
+  });
+  return dom;
+}
 const tick = () => new Promise((r) => setTimeout(r, 0));
 test("popup lifecycle controls send worker messages and static previews never write cache", async () => {
-  const { window, document } = parseHTML(
+  const { window, document } = popupDOM(
     readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
   );
   globalThis.document = document;
@@ -52,14 +61,15 @@ test("popup lifecycle controls send worker messages and static previews never wr
   assert.equal(card.querySelector(".card-summary"), null, "no preview toggle");
   assert.equal(card.querySelector(".card-preview"), null, "no expanded content");
   assert.equal(card.querySelector(".card-snippet").textContent, cached.snippet);
-  assert.ok(card.querySelector(".card-head .card-subject"));
+  assert.ok(card.querySelector(".card-toggle .card-subject"));
   assert.equal(card.querySelector("script"), null, "mail remains plain text");
   assert.equal(writes, 0);
   assert.equal(messages.length, 0, "displaying preview never marks read");
-  const open = card.querySelector(".card-open");
+  const open = card.querySelector('[data-mail-action="open"]');
+  assert.ok(open, "open is an icon action");
   open.focus();
   storageListener({ mailCache: { newValue: [cached] } }, "local");
-  assert.equal(document.activeElement, document.querySelector(".card-open"));
+  assert.equal(document.activeElement, document.querySelector('[data-mail-action="open"]'));
   const chime = document.querySelector("#sound-accounts input");
   chime.focus();
   storageListener({ soundSettings: { newValue: {
@@ -115,14 +125,13 @@ test("popup lifecycle controls send worker messages and static previews never wr
   signout.click();
   await tick();
   assert.equal(messages.at(-1).type, "sign-out");
-  const remove = [...document.querySelectorAll("button")].find(
-    (b) => b.textContent === "Remove",
-  );
+  const remove = document.querySelector('button[data-action="remove-account"]');
   remove.click();
   await tick();
   assert.equal(messages.at(-1).type, "remove-account");
   let finishAction;
   let pendingRequests = 0;
+  test.afterEach(() => { try { finishAction?.({ ok: false, code: "teardown" }); } catch {} });
   chrome.runtime.sendMessage = () => {
     pendingRequests++;
     return new Promise(resolve => { finishAction = resolve; });
@@ -182,8 +191,8 @@ test("notification is silent so mute governs all extension sound", async () => {
 });
 
 let popupFixtureId = 0;
-async function workspaceFixture(overrides = {}) {
-  const { window, document } = parseHTML(
+async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
+  const { window, document } = popupDOM(
     readFileSync(new URL("../src/popup/popup.html", import.meta.url), "utf8"),
   );
   globalThis.document = document;
@@ -212,6 +221,7 @@ async function workspaceFixture(overrides = {}) {
       onChanged: { addListener: callback => { listener = callback; } },
     },
   };
+  configureChrome(globalThis.chrome);
   await import(`../src/popup/popup.js?workspace=${++popupFixtureId}`);
   await tick(); await tick();
   return { document, window, data, messages, tabs,
@@ -220,6 +230,165 @@ async function workspaceFixture(overrides = {}) {
       listener(changes, "local");
     } };
 }
+
+test('header unread pill exposes accessible unread name', async () => {
+  const { document } = await workspaceFixture();
+  const el = document.getElementById('unread-count');
+  assert.equal(el.getAttribute('aria-label'), '1 unread');
+});
+
+test('icon Remove exposes hover tooltip', async () => {
+  const { document } = await workspaceFixture();
+  const remove = document.querySelector('button[data-action="remove-account"]');
+  assert.equal(remove.getAttribute('title'), 'Remove work@example.com');
+  assert.equal(remove.getAttribute('aria-describedby'), 'account-remove-note');
+});
+
+test("Gmail read can be reversed locally before any provider write", async () => {
+  const { document, messages } = await workspaceFixture();
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(document.querySelectorAll('.card.read').length, 1);
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-disabled'), 'false');
+  assert.equal(document.getElementById('unread-count').textContent, '');
+  assert.equal(messages.length, 0);
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(document.querySelectorAll('.card.read').length, 0);
+  assert.equal(document.getElementById('unread-count').textContent, '1');
+  document.getElementById('unread-count').click();
+  assert.equal(messages.length, 0, 'cancelled read never reaches the provider');
+});
+
+test("staged read commits after five seconds away from the card", async t => {
+  const { document, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('[data-mail-action="read"]').click();
+  t.mock.timers.tick(4999);
+  assert.equal(document.querySelectorAll('.card.read').length, 1);
+  assert.equal(messages.length, 0);
+  t.mock.timers.tick(1);
+  assert.equal(document.querySelectorAll('.card').length, 0);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'read');
+  await new Promise(setImmediate);
+  assert.equal(document.getElementById('lifecycle-message').textContent, '');
+});
+
+for (const interaction of ['hover', 'focus']) test(`staged read waits while ${interaction} remains on the card`, async t => {
+  const { document, window, messages, change, data } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const card = document.querySelector('.card');
+  if (interaction === 'hover') card.dispatchEvent(new window.Event('mouseenter'));
+  else card.querySelector('[data-mail-action="read"]').focus();
+  card.querySelector('[data-mail-action="read"]').click();
+  change({ mailCache: { newValue: data.mailCache } });
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0);
+  assert.equal(document.querySelectorAll('.card.read').length, 1);
+  const current = document.querySelector('.card');
+  if (interaction === 'hover') current.dispatchEvent(new window.Event('mouseleave'));
+  else {
+    document.getElementById('refresh-mail').focus();
+    current.dispatchEvent(new window.Event('focusout', { bubbles: true }));
+  }
+  await new Promise(setImmediate);
+  t.mock.timers.tick(4999);
+  assert.equal(messages.length, 0);
+  t.mock.timers.tick(1);
+  assert.equal(messages.length, 1);
+  await new Promise(setImmediate);
+});
+
+test("mouse focus does not prevent the five-second grace period after leaving", async t => {
+  const { document, window, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const card = document.querySelector('.card');
+  card.dispatchEvent(new window.Event('mouseenter'));
+  const read = card.querySelector('[data-mail-action="read"]');
+  read.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+  read.focus();
+  read.click();
+  document.querySelector('.card').dispatchEvent(new window.Event('mouseleave'));
+  t.mock.timers.tick(5000);
+  assert.equal(messages.length, 1);
+  await new Promise(setImmediate);
+});
+
+test("clicking outside commits staged reads immediately and silently", async () => {
+  const { document, messages } = await workspaceFixture();
+  document.querySelector('[data-mail-action="read"]').focus();
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(messages.length, 0);
+  document.getElementById('unread-count').click();
+  assert.equal(messages.length, 1);
+  assert.equal(document.querySelectorAll('.card').length, 0);
+  await tick();
+  assert.equal(document.getElementById('lifecycle-message').textContent, '');
+});
+
+test("popup dismissal commits staged reads once", async () => {
+  const { document, window, messages } = await workspaceFixture();
+  document.querySelector('[data-mail-action="read"]').click();
+  window.dispatchEvent(new window.Event('pagehide'));
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'read');
+  await tick();
+});
+
+test("clicking a locked action on another card commits the staged read", async () => {
+  const { document, data, messages, change } = await workspaceFixture();
+  const original = data.mailCache[0];
+  const locked = { ...original, key: 'gmail:work%40example.com:locked' };
+  change({ mailCache: { newValue: [original, locked] }, mailActions: { newValue: {
+    [locked.key]: { state: 'uncertain', item: locked },
+  } } });
+  document.querySelector(`[data-key="${original.key}"] [data-mail-action="read"]`).click();
+  document.querySelector(`[data-key="${locked.key}"] [data-mail-action="trash"]`).click();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].key, original.key);
+  assert.equal(messages[0].action, 'read');
+  await tick();
+});
+
+for (const disabled of [false, true]) test(`account ${disabled ? "disable" : "removal"} cancels its staged read`, async t => {
+  const { document, window, data, change, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('[data-mail-action="read"]').click();
+  change({ accounts: { newValue: disabled ? [{ ...data.accounts[0], enabled: false }] : [] } });
+  t.mock.timers.tick(5000);
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(messages.length, 0);
+  assert.equal(document.querySelectorAll('.card.read').length, 0);
+});
+
+test("moving outside after card replacement releases the hover grace period", async t => {
+  const { document, window, messages, data, change } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('.card').dispatchEvent(new window.Event('mouseenter'));
+  document.querySelector('[data-mail-action="read"]').click();
+  change({ mailCache: { newValue: data.mailCache } });
+  document.getElementById('unread-count').dispatchEvent(new window.Event('pointermove', { bubbles: true }));
+  t.mock.timers.tick(5000);
+  assert.equal(messages.length, 1);
+  await new Promise(setImmediate);
+});
+
+test("Open on a staged read performs only the extension-local Open", async t => {
+  const { document, window, messages, tabs } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('[data-mail-action="read"]').click();
+  document.querySelector('[data-mail-action="open"]').click();
+  window.dispatchEvent(new window.Event('blur'));
+  t.mock.timers.tick(5000);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, 'mark-read');
+  assert.equal(tabs.length, 1);
+  assert.equal(document.getElementById('unread-count').textContent, '');
+  assert.equal(document.querySelector('.account-count').getAttribute('aria-label'), '0 unread');
+  assert.equal(document.getElementById('unread-count').getAttribute('aria-label'), '0 unread');
+  await new Promise(setImmediate);
+});
 
 test("workspace Settings isolates configuration and preserves Mail position and account drafts", async () => {
   const { document, change } = await workspaceFixture();
@@ -277,8 +446,8 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
   assert.equal(document.querySelector('[data-key*="orphan"]'), null);
   assert.ok(sections[0].querySelector(".card-snippet"));
   assert.equal(messages.length, 0, "preview is visible without interaction");
-  assert.equal(sections[0].querySelector(".account-count").textContent, "2 unread");
-  sections[0].querySelector(".card-open").click();
+  assert.equal(sections[0].querySelector(".account-count").getAttribute("aria-label"), "2 unread");
+  sections[0].querySelector('[data-mail-action="open"]').click();
   await tick();
   assert.equal(messages.at(-1).type, "mark-read", "Open keeps existing local behavior");
   assert.match(tabs[0].url, /authuser=work%40example.com/);
@@ -293,7 +462,7 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
   assert.equal(messages.length, before, "Mail recovery navigates; Settings starts sign-in explicitly");
   document.getElementById("back-to-mail").click();
   document.querySelector('[data-filter="all"]').click();
-  const remaining = document.querySelector('.card-open');
+  const remaining = document.querySelector('[data-mail-action="open"]');
   remaining.focus();
   change({ mailCache: { newValue: [] } });
   assert.equal(document.activeElement, document.getElementById("refresh-mail"), "removed mail focus returns to Mail control");
@@ -301,7 +470,15 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
 
 test("workspace themes persist without replacing focused controls or draft form input", async () => {
   const { document, window, data, change } = await workspaceFixture({ popupTheme: "slate" });
+  const assertSelectedThemeMirrorsRadios = expected => {
+    for (const choice of document.querySelectorAll(".theme-choice")) {
+      const radio = choice.querySelector('input[name="popup-theme"]');
+      assert.equal(radio.checked, radio.value === expected, `${radio.value} radio selection`);
+      assert.equal(choice.getAttribute("data-selected"), String(radio.checked), `${radio.value} selected styling state`);
+    }
+  };
   assert.equal(document.documentElement.dataset.theme, "slate");
+  assertSelectedThemeMirrorsRadios("slate");
   document.getElementById("open-settings").click();
   document.getElementById("add-gmail").click();
   const draft = document.getElementById("add-account-email");
@@ -311,14 +488,20 @@ test("workspace themes persist without replacing focused controls or draft form 
   signal.dispatchEvent(new window.Event("change", { bubbles: true }));
   await tick();
   assert.equal(document.documentElement.dataset.theme, "signal");
+  assertSelectedThemeMirrorsRadios("signal");
   assert.equal(document.activeElement, signal);
   assert.equal(draft.value, "unfinished@example.com");
   assert.equal(data.popupTheme, "signal");
   change({ popupTheme: { newValue: "slate" } });
   assert.equal(document.documentElement.dataset.theme, "slate");
+  assertSelectedThemeMirrorsRadios("slate");
   assert.equal(document.activeElement, signal, "external preference update preserves focus");
   const next = await workspaceFixture({ popupTheme: data.popupTheme });
   assert.equal(next.document.documentElement.dataset.theme, "signal", "reopen loads saved choice");
+  for (const choice of next.document.querySelectorAll(".theme-choice")) {
+    const radio = choice.querySelector('input[name="popup-theme"]');
+    assert.equal(choice.getAttribute("data-selected"), String(radio.checked), `${radio.value} selected styling state after reopen`);
+  }
 });
 
 test("workspace failed theme save reports recovery while retaining usable selected appearance", async () => {
@@ -370,34 +553,223 @@ for (const outcome of [{ ok: true }, { ok: false, code: "SIGNED_OUT" }]) test(`a
   assert.equal(document.getElementById("add-account-error").hidden, true);
 });
 
-test("opened mail keeps provider counts with an opened-here marker", async () => {
+test("opened mail leaves the list and follows saved local state", async () => {
   const now = Date.now();
   const mail = (id, extra = {}) => ({ key: `gmail:work%40example.com:${id}`, provider: "gmail",
     account: "work@example.com", from: "Sender", subject: id, snippet: "text",
     date: now, unread: true, ...extra });
-  const { document, change } = await workspaceFixture({
+  const { document, change, messages, tabs } = await workspaceFixture({
     mailCache: [mail("one"), mail("two")],
   });
-  assert.equal(document.querySelector(".account-count").textContent, "2 unread");
-  assert.equal(document.getElementById("unread-count").textContent, "(2)");
-  document.querySelector(".card-open").click();
+  assert.equal(document.querySelector(".account-count").getAttribute("aria-label"), "2 unread");
+  document.querySelector('[data-mail-action="open"]').click();
   await tick();
-  assert.equal(document.getElementById("unread-count").textContent, "(2) \u00B7 1 opened");
+  assert.equal(document.querySelectorAll(".card").length, 1, "opened card leaves instantly");
+  assert.equal(messages.at(-1).type, "mark-read");
+  assert.match(tabs[0].url, /authuser=work%40example.com/);
   change({ mailCache: { newValue: [mail("one", { localRead: true }), mail("two")] } });
-  assert.equal(document.querySelector(".account-count").textContent, "2 unread \u00B7 1 opened here");
-  assert.equal(document.querySelector(".opened-tag")?.textContent, "Opened here");
-  assert.match(document.querySelector(".card-open").getAttribute("aria-label"), /opened here/);
+  assert.equal(document.querySelectorAll(".card").length, 1, "stays gone while opened locally");
+  change({ mailCache: { newValue: [mail("one"), mail("two")] } });
+  assert.equal(document.querySelectorAll(".card").length, 2, "clearing saved local state returns the unread card");
 });
 
-test("cards show automatic plain-text previews without expansion or content click actions", async () => {
+test("cards expand in place on toggle without changing mailbox state", async () => {
   const { document, messages, tabs } = await workspaceFixture();
   const card = document.querySelector(".card");
-  assert.ok(card.querySelector(".card-snippet"));
-  assert.equal(card.querySelector(".preview-cue"), null);
-  assert.equal(card.querySelector("[aria-expanded]"), null);
-  card.click();
-  assert.equal(messages.length, 0);
-  assert.equal(tabs.length, 0, "in-extension reading is deferred");
+  const toggle = card.querySelector(".card-toggle");
+  assert.ok(toggle, "card content is a toggle control");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.equal(card.classList.contains("expanded"), false);
+  const icons = card.querySelector(".card-icons");
+  assert.ok(icons, "open/read/delete icon actions are available");
+  assert.equal(icons.querySelector('[data-mail-action="read"]')?.getAttribute("aria-label")?.includes("conversation as read"), true);
+  toggle.click();
+  assert.equal(card.classList.contains("expanded"), true);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.equal(messages.length, 0, "expanding never writes to the mailbox");
+  assert.equal(tabs.length, 0, "expanding never opens provider tabs");
+  card.querySelector(".card-sender").click();
+  assert.equal(card.classList.contains("expanded"), false, "clicking the card again collapses");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+});
+
+test("expanding a second card collapses the first (accordion)", async () => {
+  const now = Date.now();
+  const mail = (id) => ({ key: "gmail:work%40example.com:" + id, provider: "gmail",
+    account: "work@example.com", from: "Sender", subject: id, snippet: "text",
+    date: now, unread: true });
+  const { document } = await workspaceFixture({ mailCache: [mail("one"), mail("two")] });
+  const cards = [...document.querySelectorAll(".card")];
+  assert.equal(cards.length, 2);
+  cards[0].querySelector(".card-toggle").click();
+  assert.equal(cards[0].classList.contains("expanded"), true);
+  cards[1].querySelector(".card-toggle").click();
+  assert.equal(cards[1].classList.contains("expanded"), true);
+  assert.equal(cards[0].classList.contains("expanded"), false, "only one card stays expanded");
+  assert.equal(cards[0].querySelector(".card-toggle").getAttribute("aria-expanded"), "false");
+});
+
+test("mail action keys remain available to native buttons without expanding the preview", async () => {
+  const { document, window, messages } = await workspaceFixture();
+  const card = document.querySelector('.card');
+  for (const action of ['open', 'read', 'trash']) {
+    for (const key of ['Enter', ' ']) {
+      const event = new window.Event('keydown', { bubbles: true, cancelable: true });
+      event.key = key;
+      card.querySelector(`[data-mail-action="${action}"]`).dispatchEvent(event);
+      assert.equal(event.defaultPrevented, false, `${action} must retain native ${key} activation`);
+      assert.equal(card.classList.contains('expanded'), false, 'action keys never expand cached text');
+    }
+  }
+  assert.equal(messages.length, 0, 'keydown alone does not write mail');
+  const expand = new window.Event('keydown', { bubbles: true, cancelable: true });
+  expand.key = 'Enter';
+  card.querySelector('.card-toggle').dispatchEvent(expand);
+  assert.equal(expand.defaultPrevented, true, 'preview handles its own key');
+  assert.equal(card.classList.contains('expanded'), true);
+});
+
+test("icon clicks act on mail without collapsing the card", async () => {
+  const outlook = { provider: "outlook", account: "o@example.test" };
+  const { document, messages } = await workspaceFixture({
+    accounts: [outlook],
+    mailCache: [{ ...outlook, key: "outlook:o%40example.test:1", from: "Sender", subject: "Icon", snippet: "text", date: Date.now(), unread: true }],
+  });
+  const card = document.querySelector(".card");
+  card.querySelector(".card-toggle").click();
+  assert.equal(card.classList.contains("expanded"), true);
+  chrome.runtime.sendMessage = async (msg) => { messages.push(msg); return { ok: true }; };
+  card.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick();
+  await tick();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, "read");
+  assert.equal(document.querySelectorAll(".card").length, 0, "committed read card leaves and stays gone");
+});
+
+test("outlook read commits on outside click and stays silent", async () => {
+  const outlook = { provider: "outlook", account: "o@example.test" };
+  const { document, messages } = await workspaceFixture({
+    accounts: [outlook],
+    mailCache: [{ ...outlook, key: "outlook:o%40example.test:1", from: "Sender", subject: "Hello", snippet: "text", date: Date.now(), unread: true }],
+  });
+  chrome.runtime.sendMessage = async (msg) => { messages.push(msg); return { ok: true }; };
+  document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick();
+  await tick();
+  assert.equal(document.querySelectorAll(".card").length, 0, "committed Outlook read leaves");
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, "read");
+  assert.equal(document.getElementById("lifecycle-message").textContent, "", "reads stay silent");
+});
+
+test("gmail read commits on outside click and the write runs in the background", async () => {
+  const { document, messages } = await workspaceFixture();
+  chrome.runtime.sendMessage = async (msg) => { messages.push(msg); return { ok: true }; };
+  document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick();
+  await tick();
+  assert.equal(document.querySelectorAll(".card").length, 0, "committed read card leaves");
+  assert.equal(document.getElementById("lifecycle-message").textContent, "", "no progress or success chatter");
+  assert.equal(messages.length, 1, "provider write sent in background");
+  assert.equal(messages[0].action, "read");
+});
+
+test("failed gmail read repopulates the card with the error only", async () => {
+  const { document } = await workspaceFixture();
+  let finish;
+  chrome.runtime.sendMessage = () => new Promise((r) => { finish = r; });
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
+  document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  assert.equal(document.querySelectorAll(".card").length, 0, "card leaves instantly");
+  finish({ ok: false, code: "provider-error" });
+  await tick();
+  assert.ok(document.querySelector(".card"), "card repopulates after failure");
+  assert.match(document.getElementById("lifecycle-message").textContent, /unavailable|rejected/i);
+});
+
+test("opened mail leaves instantly and stays gone across saved local-state updates", async () => {
+  const now = Date.now();
+  const mail = (id, extra = {}) => ({ key: `gmail:work%40example.com:${id}`, provider: "gmail",
+    account: "work@example.com", from: "Sender", subject: id, snippet: "text",
+    date: now, unread: true, ...extra });
+  const { document, change, messages } = await workspaceFixture({
+    mailCache: [mail("one"), mail("two")],
+  });
+  document.querySelector('[data-mail-action="open"]').click();
+  await tick();
+  assert.equal(document.querySelectorAll(".card").length, 1, "opened card leaves instantly");
+  assert.equal(document.getElementById("lifecycle-message").textContent, "", "no chatter");
+  change({ mailCache: { newValue: [mail("one", { localRead: true }), mail("two")] } });
+  assert.equal(document.querySelectorAll(".card").length, 1, "stays gone across provider refresh");
+  assert.equal(messages.at(-1).type, "mark-read");
+});
+
+test("pending opened-here dismissal survives an older cache snapshot", async () => {
+  const { document, data, change } = await workspaceFixture();
+  const cached = { ...data.mailCache[0] };
+  let finish;
+  chrome.runtime.sendMessage = () => new Promise(resolve => { finish = resolve; });
+  document.querySelector('[data-mail-action="open"]').click();
+  change({ mailCache: { newValue: [cached] } });
+  assert.equal(document.querySelectorAll('.card').length, 0);
+  finish({ ok: true });
+  await tick(); await tick();
+  assert.equal(document.querySelectorAll('.card').length, 0);
+  assert.equal(document.getElementById('lifecycle-message').textContent, '');
+});
+
+for (const removed of [false, true]) test(`failed read restores the card after cache ${removed ? "removal" : "read commit"}`, async () => {
+  const { document, data, change } = await workspaceFixture();
+  const cached = { ...data.mailCache[0] };
+  let finish;
+  chrome.runtime.sendMessage = () => new Promise(resolve => { finish = resolve; });
+  document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  change({ mailCache: { newValue: removed ? [] : [{ ...cached, unread: false }] } });
+  finish({ ok: false, code: 'check-mailbox' });
+  await tick(); await tick();
+  assert.equal(document.querySelectorAll('.card').length, 1);
+  assert.match(document.querySelector('.card-error').textContent, /could not be confirmed/i);
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute('aria-disabled'), 'false');
+  document.querySelector('[data-mail-action="open"]').click();
+  finish({ ok: false });
+  await tick(); await tick();
+  assert.equal(document.querySelectorAll('.card').length, 1, 'failed Open retains the recovery card');
+});
+
+for (const rejects of [false, true]) test(`failed opened-here persistence restores the card (${rejects ? "transport" : "worker"} failure)`, async () => {
+  const { document, messages } = await workspaceFixture();
+  chrome.runtime.sendMessage = async msg => {
+    messages.push(msg);
+    if (rejects) throw new Error("private storage detail");
+    return { ok: false };
+  };
+  document.querySelector('[data-mail-action="open"]').click();
+  assert.equal(document.querySelectorAll('.card').length, 0);
+  await tick(); await tick();
+  assert.equal(document.querySelectorAll('.card').length, 1);
+  assert.match(document.getElementById('lifecycle-message').textContent, /could not.*opened/i);
+  assert.doesNotMatch(document.body.textContent, /private storage detail/);
+  assert.equal(messages[0].type, 'mark-read');
+});
+
+test("successful opened-here persistence does not erase another action's error", async () => {
+  const { document } = await workspaceFixture();
+  chrome.runtime.sendMessage = async () => ({ ok: false, code: 'provider-error' });
+  document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
+  const error = document.getElementById('lifecycle-message').textContent;
+  assert.ok(error);
+  chrome.runtime.sendMessage = async () => ({ ok: true });
+  document.querySelector('[data-mail-action="open"]').click();
+  await tick(); await tick();
+  assert.equal(document.getElementById('lifecycle-message').textContent, error);
 });
 
 test("settings leads with accounts before themes", async () => {
@@ -462,14 +834,16 @@ test('hover actions use provider-specific labels and resist duplicate clicks', a
   let finish;
   chrome.runtime.sendMessage=async msg=>{messages.push(msg);await new Promise(r=>finish=r);return {ok:true};};
   read.focus();read.click();
-  const pending=document.querySelector('[data-mail-action="read"]');
-  assert.equal(pending.getAttribute('aria-disabled'),'true');
-  pending.click();assert.equal(messages.length,1);
+  document.getElementById('unread-count').click();
+  read.click();
+  await tick();
+  assert.equal(document.querySelectorAll('.card').length,0,'committed read hides while the write runs');
+  assert.equal(messages.length,1);
   assert.equal(messages[0].type,'mail-action');assert.equal(messages[0].action,'read');
+  test.afterEach(() => { try { finish?.(); } catch {} });
   finish();await tick();
   change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com',subject:'Test'}}}}});
-  assert.equal(document.getElementById('undo-tray').hidden,false);
-  assert.match(document.querySelector('[data-undo-key]').getAttribute('aria-label'),/Restore Test/);
+  assert.ok(!document.querySelector('[data-undo-key]'));
 });
 
 test('mailbox feedback is immediate while worker is pending and rolls back a failed action',async()=>{
@@ -478,15 +852,17 @@ test('mailbox feedback is immediate while worker is pending and rolls back a fai
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
   document.querySelector('[data-mail-action="read"]').click();
-  assert.ok(document.querySelector('.card').classList.contains('read'),'read style changes before worker response');
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  assert.equal(document.querySelectorAll('.card').length,0,'committed read card leaves, no pending style shown');
   change({mailCache:{newValue:[{key,provider:'gmail',account:'work@example.com',subject:'new cache text',snippet:'text',date:Date.now(),unread:true}]}});
-  assert.ok(document.querySelector('.card').classList.contains('read'),'stale cache cannot restore unread while pending');
+  assert.equal(document.querySelectorAll('.card').length,0,'stale cache cannot restore the card while the write runs');
   finish({ok:false,code:'provider-error'});await tick();
+  assert.ok(document.querySelector('.card'),'failure repopulates the card');
   assert.equal(document.querySelector('.card').classList.contains('read'),false,'failure restores unread card');
   const outlook={provider:'outlook',account:'outlook@example.test'};
   change({accounts:{newValue:[outlook]},mailCache:{newValue:[{key:'outlook:outlook%40example.test:1',...outlook,date:Date.now(),unread:true}]}});
   document.querySelector('[data-mail-action="trash"]').click();
-  assert.equal(document.querySelector('.card'),null,'Trash hides card before worker response');
+  assert.equal(document.querySelectorAll('.card').length,0,'Trash hides card before worker response');
   finish({ok:false,code:'provider-error'});await tick();
   assert.ok(document.querySelector('.card'),'failed Trash restores card');
 });
@@ -495,7 +871,7 @@ test('provider-read cards are filtered out',async()=>{
   const {document,change}=await workspaceFixture();
   const key=document.querySelector('.card').dataset.key;
   change({mailCache:{newValue:[{key,provider:'gmail',account:'work@example.com',date:Date.now(),unread:false}]}});
-  assert.equal(document.querySelector('.card'),null,'server-read mail is no longer needed in popup');
+  assert.equal(document.querySelectorAll('.card').length,0,'server-read mail is no longer needed in popup');
 });
 
 
@@ -505,27 +881,35 @@ test('confirmed read feedback resists stale unread cache until reconciliation, t
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   finish({ok:true});await tick();
-  assert.equal(document.querySelector('.card'),null);
+  assert.equal(document.querySelectorAll('.card').length,0);
   change({mailCache:{newValue:[cached]}});
-  assert.equal(document.querySelector('.card'),null,'stale unread snapshot cannot undo confirmed feedback');
+  assert.equal(document.querySelectorAll('.card').length,0,'stale unread snapshot cannot undo confirmed feedback');
   change({mailCache:{newValue:[{...cached,unread:false}]}});
   change({mailCache:{newValue:[{...cached,date:Date.now()+1000}]}});
   assert.ok(document.querySelector('.card'),'a later unread reply in the same conversation can appear');
 });
 
-test('read cache arriving before action response settles feedback and allows later unread mail',async()=>{
-  const {document,change,data}=await workspaceFixture();
-  const cached=data.mailCache[0];
+test('read cache arriving before action response keeps the card hidden until failure or new unread mail',async()=>{
+  const outlook={provider:'outlook',account:'o@example.test'};
+  const {document,change}=await workspaceFixture({
+    accounts:[outlook],
+    mailCache:[{...outlook,key:'outlook:o%40example.test:1',from:'Sender',subject:'Session',snippet:'text',date:Date.now(),unread:true}],
+  });
+  const cached={...outlook,key:'outlook:o%40example.test:1',from:'Sender',subject:'Session',snippet:'text',date:Date.now(),unread:true};
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   change({mailCache:{newValue:[{...cached,unread:false}]}});
-  assert.ok(document.querySelector('.card.read'),'pending feedback stays visible through storage event');
+  assert.equal(document.querySelectorAll('.card').length,0,'committed read hides even when cache lands first');
   finish({ok:true});await tick();
-  assert.equal(document.querySelector('.card'),null);
+  assert.equal(document.querySelectorAll('.card').length,0,'confirmed read stays gone');
+  assert.equal(document.getElementById('lifecycle-message').textContent,'','reads stay silent');
   change({mailCache:{newValue:[cached]}});
-  assert.ok(document.querySelector('.card'),'future unread state can appear after cache/response handoff');
+  assert.ok(document.querySelector('.card'),'a later unread reply can reappear');
 });
 
 test('uncertain recovery precedes mail, names its scope and leaves unrelated actions usable',async()=>{
@@ -542,38 +926,46 @@ test('uncertain recovery precedes mail, names its scope and leaves unrelated act
   const usable=document.querySelector(`[data-key="${unrelated.key}"] [data-mail-action="read"]`);
   assert.equal(locked.getAttribute('aria-disabled'),'true');
   assert.equal(usable.getAttribute('aria-disabled'),'false');
-  usable.click();await tick();
+  usable.click();
+  document.getElementById("unread-count").click();
+  await tick();
   assert.equal(messages.at(-1).key,unrelated.key);
   document.querySelector('[data-recovery-account]').click();await tick();
   assert.equal(messages.at(-1).action,'acknowledge');
   assert.equal(messages.at(-1).key,original.key);
 });
 
-test('confirmed Gmail read explains open-page refresh even when cache arrives first',async()=>{
+test('confirmed Gmail read stays silent and hidden even when cache arrives first',async()=>{
   const {document,change,data,tabs}=await workspaceFixture();
   const cached=data.mailCache[0];
   let finish;
   chrome.runtime.sendMessage=()=>new Promise(r=>finish=r);
   document.querySelector('[data-mail-action="read"]').click();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
   change({mailCache:{newValue:[]}});
   finish({ok:true});await tick();
-  assert.equal(document.querySelector('.card'),null);
-  assert.match(document.getElementById('lifecycle-message').textContent,/Marked as read.*open Gmail.*refresh/i);
+  assert.equal(document.querySelectorAll('.card').length,0);
+  assert.equal(document.getElementById('lifecycle-message').textContent,'','reads stay silent on success');
   assert.equal(tabs.length,0,'read must not open or reload provider tabs');
   change({mailCache:{newValue:[cached]}});
 });
 
-test('Gmail refresh guidance is not shown for failed reads or Outlook',async()=>{
+test('Gmail refresh guidance is not shown for failed reads and reads stay silent on success',async()=>{
   const {document}=await workspaceFixture();
   chrome.runtime.sendMessage=async()=>({ok:false,code:'check-mailbox'});
   document.querySelector('[data-mail-action="read"]').click();await tick();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
   const error=document.getElementById('lifecycle-message').textContent;
   assert.doesNotMatch(error,/Marked as read|open Gmail.*refresh/i);
   assert.match(error,/I’ve checked/);
   const outlook={provider:'outlook',account:'studio@example.test'};
   const fixture=await workspaceFixture({accounts:[outlook],mailCache:[{...outlook,key:'outlook:studio%40example.test:one',unread:true,date:Date.now()}]});
-  fixture.document.querySelector('[data-mail-action="read"]').click();await tick();
-  assert.equal(fixture.document.getElementById('lifecycle-message').textContent,'Marked as read in your mailbox.');
+  fixture.document.querySelector('[data-mail-action="read"]').click();await tick();await tick();
+  fixture.document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
+  assert.equal(fixture.document.querySelectorAll('.card').length,0,'committed Outlook read leaves');
+  assert.equal(fixture.document.getElementById('lifecycle-message').textContent,'','successful reads stay silent');
 });
 
 test('thirty uncertain actions use one account recovery button and acknowledgement sends no mutations',async()=>{
@@ -587,14 +979,14 @@ test('thirty uncertain actions use one account recovery button and acknowledgeme
   const recovery=document.querySelector(`[data-recovery-account="gmail:${account.account}"]`);
   assert.ok(recovery);
   assert.equal(document.querySelectorAll('[data-recovery-account]').length,2);
-  assert.equal(document.getElementById('mail-undo').children.length,2,'two account recoveries; Undo has its own tray');
+  assert.equal(document.getElementById('mail-undo').children.length,2,'two account recoveries; completed Trash has no controls');
   assert.match(recovery.closest('li').textContent,/30 unconfirmed actions/);
   assert.match(recovery.getAttribute('aria-label'),/all 30 actions/);
   recovery.click();await tick();
   assert.equal(messages.length,30);
   assert.ok(messages.every(msg=>msg.action==='acknowledge'&&msg.key.startsWith('locked-')));
   assert.equal(document.querySelectorAll('[data-recovery-account]').length,1);
-  assert.ok(document.querySelector('[data-undo-key="undo"]'),'Undo remains independent');
+  assert.equal(document.querySelector('[data-undo-key]'),null,'completed Trash remains invisible');
   assert.match(document.getElementById('lifecycle-message').textContent,/30.*unlocked/);
 });
 
@@ -615,6 +1007,7 @@ test('account recovery resists duplicate clicks, keeps failures and leaves new u
   const busy=document.querySelector('[data-recovery-account]');
   assert.equal(busy.getAttribute('aria-disabled'),'true');
   busy.click();assert.equal(messages.length,1);
+  test.afterEach(() => { try { finish?.(); } catch {} });
   const newLock={state:'uncertain',item:{...account,key:'new'}};
   change({mailActions:{newValue:{first,failed,new:newLock}}});
   finish();await tick();
@@ -625,112 +1018,290 @@ test('account recovery resists duplicate clicks, keeps failures and leaves new u
 });
 
 
-test('Undo stays in a bounded tray, newest first, preserving older actions and focus', async () => {
-  const {document,change,messages}=await workspaceFixture();
-  const now=Date.now();
-  const item={provider:'gmail',account:'work@example.com',subject:'Older message'};
-  const older={state:'undo',expiresAt:now+120000,item};
-  const newer={state:'undo',expiresAt:now+600000,item:{...item,subject:'Newer message'}};
-  change({mailActions:{newValue:{older,newer,expired:{...older,expiresAt:now},foreign:{...newer,item:{...item,account:'other@example.com'}}}}});
-  const tray=document.getElementById('undo-tray');
-  assert.equal(tray.hidden,false);
-  assert.equal(tray.closest('#mail-view'),null,'new Undo cannot shift the scrollable mail list');
-  assert.deepEqual([...document.querySelectorAll('[data-undo-key]')].map(b=>b.dataset.undoKey),['newer','older']);
-  assert.match(document.getElementById('undo-summary').textContent,/2.*10 minutes/);
-  assert.match(document.getElementById('undo-list').textContent,/Newer message.*10 min left/);
-  document.querySelector('[data-undo-key="older"]').focus();
-  change({mailActions:{newValue:{older,newer}}});
-  assert.equal(document.activeElement.dataset.undoKey,'older');
-  document.activeElement.click();await tick();
-  assert.deepEqual(messages.at(-1),{type:'mail-action',key:'older',action:'undo'});
+test('saved completed deletions never reveal Undo on open, update or view changes', async () => {
+  const item={provider:'gmail',account:'work@example.com',subject:'Deleted message'};
+  const record={state:'undo',item,expiresAt:Date.now()+60000};
+  const {document,change,messages}=await workspaceFixture({mailActions:{one:record}});
+  const assertNoUndo=()=>{
+    assert.ok(!document.getElementById('undo-tray'));
+    assert.ok(!document.querySelector('[data-undo-key]'));
+    assert.doesNotMatch(document.body.textContent,/Undo|available to restore/);
+  };
+  assertNoUndo();
+  change({mailActions:{newValue:{one:record,two:{...record}}}});
+  assertNoUndo();
+  document.getElementById('open-settings').click();assertNoUndo();
+  document.getElementById('back-to-mail').click();assertNoUndo();
+  assert.equal(messages.length,0);
 });
-
-test('an open popup removes Undo at its deadline without a storage event', async t => {
-  const {document,change}=await workspaceFixture();
-  t.mock.timers.enable({apis:['setTimeout','Date'],now:Date.now()});
-  change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+1000,item:{provider:'gmail',account:'work@example.com',subject:'Expiring'}}}}});
-  assert.equal(document.getElementById('undo-tray').hidden,false);
-  t.mock.timers.tick(1000);
-  assert.equal(document.getElementById('undo-tray').hidden,true);
-  assert.equal(document.querySelector('[data-undo-key]'),null);
-});
-
-
-test('Undo tray hides in Settings and returns with its collapse state intact', async () => {
-  const {document,change}=await workspaceFixture();
-  change({mailActions:{newValue:{one:{state:'undo',expiresAt:Date.now()+60000,item:{provider:'gmail',account:'work@example.com'}}}}});
-  const tray=document.getElementById('undo-tray');
-  tray.removeAttribute('open');
-  document.getElementById('open-settings').click();
-  assert.equal(tray.hidden,true);
-  document.getElementById('back-to-mail').click();
-  assert.equal(tray.hidden,false);
-  assert.equal(tray.hasAttribute('open'),false);
-});
-
 
 for (const code of ['unavailable','provider-error','pending','sign-in']) test(`mail action ${code} only requests sign-in for authentication failure`, async () => {
   const {document}=await workspaceFixture();
   chrome.runtime.sendMessage=async()=>({ok:false,code});
   document.querySelector('[data-mail-action="read"]').click();await tick();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
   const text=document.getElementById('lifecycle-message').textContent;
   if (code==='sign-in') assert.match(text,/sign.in.*Settings/i);
   else assert.doesNotMatch(text,/sign.in|Settings/i);
 });
 
-test('completed Undos clear the open popup even when journal storage events are missed',async()=>{
-  const item={provider:'gmail',account:'work@example.com',subject:'Restored mail'};
-  const records=Object.fromEntries(Array.from({length:15},(_,i)=>['undo-'+i,{state:'undo',id:String(i),item,expiresAt:Date.now()+60000+i}]));
-  const {document,data,messages}=await workspaceFixture({mailActions:records});
-  chrome.runtime.sendMessage=async msg=>{
-    messages.push(msg);
-    data.mailActions={...data.mailActions};delete data.mailActions[msg.key];
-    return {ok:true};
-  };
-  for(let i=0;i<15;i++) {
-    const button=document.querySelector('[data-undo-key]');
-    assert.ok(button,'next Undo remains usable');
-    button.click();await tick();await tick();
-    assert.equal(document.querySelectorAll('[data-undo-key]').length,14-i,'completed entry is removed without reopening');
-  }
-  assert.equal(messages.length,15);
-  assert.equal(new Set(messages.map(msg=>msg.key)).size,15);
-  assert.equal(document.getElementById('undo-tray').hidden,true);
+test('successful Trash has concise feedback without advertising Undo',async()=>{
+  const {document,messages}=await workspaceFixture();
+  document.querySelector('[data-mail-action="trash"]').click();await tick();await tick();
+  assert.equal(document.querySelectorAll('.card').length,0);
+  assert.deepEqual(messages,[{type:'mail-action',key:'gmail:work%40example.com:1',action:'trash'}]);
+  assert.equal(document.getElementById('lifecycle-message').textContent,'Moved to Trash.');
 });
 
-test('fifteen rapid Undos stay responsive after all responses without storage events',async()=>{
-  const item={provider:'gmail',account:'work@example.com',subject:'Restored mail'};
-  const records=Object.fromEntries(Array.from({length:15},(_,i)=>['undo-'+i,{state:'undo',id:String(i),item,expiresAt:Date.now()+60000+i}]));
-  const {document,data,messages}=await workspaceFixture({mailActions:records});
-  const finishes=[];
-  chrome.runtime.sendMessage=msg=>{
-    messages.push(msg);
-    return new Promise(resolve=>finishes.push(()=>{
-      data.mailActions={...data.mailActions};delete data.mailActions[msg.key];resolve({ok:true});
-    }));
-  };
-  const buttons=[...document.querySelectorAll('[data-undo-key]')];
-  for(const button of buttons) {button.click();button.click();}
-  assert.equal(messages.length,15,'same popup suppresses duplicate clicks');
-  finishes.forEach(finish=>finish());await tick();await tick();
-  assert.equal(document.querySelector('[data-undo-key]'),null);
-  assert.equal(document.getElementById('undo-tray').hidden,true);
-  assert.match(document.getElementById('lifecycle-message').textContent,/Restored/);
-  document.querySelector('[data-mail-action="read"]').click();
-  assert.equal(messages.length,16,'mail remains actionable without reopening');
-  finishes.at(-1)();await tick();
-});
-
-test('a stale action-state reread cannot replace a newer storage event',async()=>{
-  const item={provider:'gmail',account:'work@example.com',subject:'Undo mail'};
-  const record={state:'undo',id:'one',item,expiresAt:Date.now()+60000};
+test('a stale action-state reread cannot replace a newer recovery storage event',async()=>{
+  const item={provider:'gmail',account:'work@example.com'};
+  const record={state:'uncertain',item,expiresAt:123};
   const {document,change}=await workspaceFixture({mailActions:{one:record}});
   const get=chrome.storage.local.get;
   let finish;
   chrome.storage.local.get=key=>key==='mailActions'?new Promise(resolve=>finish=resolve):get(key);
-  document.querySelector('[data-undo-key="one"]').click();await tick();
-  change({mailActions:{newValue:{newer:{...record,id:'newer'}}}});
+  document.querySelector('[data-mail-action="read"]').click();await tick();
+  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
+  await tick(); await tick();
+  const newer={state:'uncertain',item:{...item,account:'newer@example.test'},expiresAt:456};
+  change({accounts:{newValue:[item,newer.item]},mailActions:{newValue:{newer}}});
   finish({mailActions:{one:record}});await tick();
-  assert.equal(document.querySelector('[data-undo-key="one"]'),null);
-  assert.ok(document.querySelector('[data-undo-key="newer"]'));
+  assert.equal(document.querySelector('[data-recovery-account="gmail:work@example.com"]'),null);
+  assert.ok(document.querySelector('[data-recovery-account="gmail:newer@example.test"]'));
+});
+
+test('whole account headings open one active inbox tab and retain focus through updates',async()=>{
+  const accounts=[{provider:'gmail',account:'first@example.test'}, {provider:'gmail',account:'second@example.test',enabled:false},{provider:'outlook',account:'third@example.test'}];
+  const {document,window,tabs,messages,change}=await workspaceFixture({accounts,mailCache:[],accountState:{'outlook:third@example.test':{needsSignIn:true}}});
+  const links=[...document.querySelectorAll('.account-inbox')];
+  assert.equal(links.length,3);
+  links.forEach((link,i)=>{
+    assert.equal(link.querySelector('h2').textContent,accounts[i].account);
+    assert.equal(link.target,'_blank');
+    link.click();
+  });
+  await tick();
+  assert.equal(tabs.length,3);assert.ok(tabs.every(tab=>tab.active));assert.equal(messages.length,0);
+  links[1].focus();change({mailCache:{newValue:[]}});
+  assert.equal(document.activeElement.dataset.inboxAccount,'gmail:second@example.test');
+  const modified=new window.Event('click',{bubbles:true,cancelable:true});modified.ctrlKey=true;
+  document.activeElement.dispatchEvent(modified);await tick();assert.equal(tabs.length,3);assert.equal(modified.defaultPrevented,false);
+  change({accounts:{newValue:[accounts[0]]}});assert.equal(document.activeElement.id,'refresh-mail');
+});
+
+test('global Mail checking form loads legacy precision and stays last in Settings',async()=>{
+  const {document}=await workspaceFixture({pollIntervalMs:60000.5,accounts:[],mailCache:[]});
+  assert.deepEqual([...document.querySelectorAll('#settings-view > section > h2')].map(h=>h.textContent),['Accounts','Themes','Notifications','Sound','Mail checking']);
+  assert.equal(document.getElementById('poll-duration').value,'60.0005');
+  assert.equal(document.getElementById('poll-unit').value,'seconds');
+});
+test('check frequency saves through worker, validates drafts and keeps pending status honest',async()=>{
+  const {document,window,messages,change,data}=await workspaceFixture();
+  const form=document.getElementById('poll-settings-form');assert.ok(form);
+  const duration=document.getElementById('poll-duration'),unit=document.getElementById('poll-unit'),save=document.getElementById('poll-save');
+  const edit=value=>{duration.value=value;duration.dispatchEvent(new window.Event('input'));};
+  const submit=()=>form.dispatchEvent(new window.Event('submit',{cancelable:true}));
+  edit('0.1');unit.value='seconds';submit();await tick();assert.equal(messages.length,0);assert.equal(duration.getAttribute('aria-invalid'),'true');
+  assert.match(document.getElementById('poll-error').textContent,/30 seconds.*5 hours.*whole seconds/);
+  edit('2');unit.value='minutes';let finish;
+  chrome.runtime.sendMessage=msg=>{messages.push(msg);return new Promise(resolve=>finish=resolve);};
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
+  duration.focus();submit();submit();assert.equal(messages.length,1);assert.equal(save.disabled,true);
+  change({pollIntervalMs:{newValue:120000},mailCache:{newValue:[]},popupTheme:{newValue:'signal'}});
+  assert.doesNotMatch(document.getElementById('poll-status').textContent,/Saved/);assert.equal(duration.value,'2');
+  data.pollIntervalMs=120000;finish({ok:true,pollIntervalMs:120000});await tick();assert.equal(save.disabled,false);assert.match(document.getElementById('poll-status').textContent,/Saved/);
+  const reopened=await workspaceFixture({pollIntervalMs:data.pollIntervalMs});assert.equal(reopened.document.getElementById('poll-duration').value,'2');
+});
+test('unrelated events preserve interval drafts and focus; worker failure permits retry',async()=>{
+  const {document,window,change}=await workspaceFixture();
+  const duration=document.getElementById('poll-duration');assert.ok(duration);
+  const unit=document.getElementById('poll-unit'),form=document.getElementById('poll-settings-form');
+  duration.value='3';duration.dispatchEvent(new window.Event('input'));duration.focus();
+  change({pollIntervalMs:{newValue:180000},mailCache:{newValue:[]},accounts:{newValue:[]},popupTheme:{newValue:'slate'}});
+  assert.equal(duration.value,'3');assert.equal(document.activeElement,duration);
+  chrome.runtime.sendMessage=async()=>({ok:false,code:'save-failed',uncertain:true});
+  form.dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();await tick();
+  assert.match(document.getElementById('poll-error').textContent,/could not be confirmed.*try again/i);
+  assert.equal(duration.value,'3');assert.equal(unit.value,'minutes');assert.equal(document.getElementById('poll-save').disabled,false);
+  chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+  form.dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();assert.match(document.getElementById('poll-status').textContent,/Saved/);
+});
+
+test('a delayed initial interval read cannot overwrite successful Save or report a stale error',async()=>{
+  for(const rejects of [false,true]) {
+    let finish;
+    const {document,window}=await workspaceFixture({},chrome=>{
+      const get=chrome.storage.local.get;
+      chrome.storage.local.get=key=>key==='pollIntervalMs'?new Promise((resolve,reject)=>{
+        finish=()=>rejects?reject(new Error('old read failed')):resolve({pollIntervalMs:60000});
+      }):get(key);
+      chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+    });
+    const duration=document.getElementById('poll-duration');
+    duration.value='2';duration.dispatchEvent(new window.Event('input'));
+    document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+    await tick();finish();await tick();
+    assert.equal(duration.value,'2');assert.equal(document.getElementById('poll-unit').value,'minutes');
+    assert.match(document.getElementById('poll-status').textContent,/Saved/);
+    assert.equal(document.getElementById('poll-error').hidden,true);
+  }
+});
+test('a newer interval event survives an older successful Save response without false success',async()=>{
+  const {document,window,change}=await workspaceFixture();let finish;
+  chrome.runtime.sendMessage=()=>new Promise(resolve=>finish=resolve);
+  test.afterEach(() => { try { finish?.({ ok: false, code: "teardown" }); } catch {} });
+  const duration=document.getElementById('poll-duration');duration.value='2';duration.dispatchEvent(new window.Event('input'));
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  change({pollIntervalMs:{newValue:120000}});change({pollIntervalMs:{newValue:180000}});
+  finish({ok:true,pollIntervalMs:120000});await tick();
+  assert.equal(duration.value,'3');assert.equal(document.getElementById('poll-unit').value,'minutes');
+  assert.doesNotMatch(document.getElementById('poll-status').textContent,/Saved/);
+  assert.match(document.getElementById('poll-status').textContent,/changed while saving/i);
+  assert.equal(document.getElementById('poll-save').disabled,false);
+  chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));await tick();
+  assert.equal(duration.value,'3');assert.match(document.getElementById('poll-status').textContent,/Saved/);
+});
+
+test('a preference event after Save clears success only when the effective interval changes',async()=>{
+  const {document,window,change}=await workspaceFixture();
+  chrome.runtime.sendMessage=async msg=>({ok:true,pollIntervalMs:msg.pollIntervalMs});
+  const duration=document.getElementById('poll-duration');
+  const status=document.getElementById('poll-status');
+  duration.value='2';duration.dispatchEvent(new window.Event('input'));
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  await tick();assert.match(status.textContent,/Saved/);
+  change({pollIntervalMs:{newValue:120000}});
+  assert.match(status.textContent,/Saved/,'the matching storage notification does not invalidate confirmed application');
+  change({pollIntervalMs:{newValue:180000}});
+  assert.equal(duration.value,'3');assert.equal(document.getElementById('poll-unit').value,'minutes');
+  assert.equal(status.textContent,'','a different persisted preference is not proof of successful scheduling');
+  assert.equal(document.getElementById('poll-save').disabled,false);
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
+  await tick();assert.match(status.textContent,/Saved/,'an explicit successful Save can confirm the updated value');
+});
+
+function presetStates(document) {
+  return [...document.querySelectorAll('.poll-presets button')].map(button => button.getAttribute('aria-pressed'));
+}
+
+test('poll presets fill fields without saving', async () => {
+  const { document, window, messages, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  const form = document.getElementById('poll-settings-form');
+  const fiveMinutes = document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]');
+  fiveMinutes.click();
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+  assert.deepEqual(messages, [], 'choosing a preset only fills the form');
+
+  change({ pollIntervalMs: { newValue: 60000 } });
+  assert.equal(duration.value, '5', 'external storage changes preserve a dirty preset draft');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+
+  chrome.runtime.sendMessage = async message => {
+    messages.push(message);
+    return { ok: true, pollIntervalMs: message.pollIntervalMs };
+  };
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await tick();
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+});
+
+test('preset highlight follows initial asynchronous load', async () => {
+  let resolveRead;
+  const pendingRead = new Promise(resolve => { resolveRead = resolve; });
+  const { document } = await workspaceFixture({}, chrome => {
+    const get = chrome.storage.local.get;
+    chrome.storage.local.get = key => key === 'pollIntervalMs' ? pendingRead : get(key);
+  });
+  resolveRead({ pollIntervalMs: 300000 });
+  await tick();
+  assert.equal(document.getElementById('poll-duration').value, '5');
+  assert.equal(document.getElementById('poll-unit').value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+});
+
+test('preset highlight tracks manual duration and unit edits', async () => {
+  const { document, window } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]').click();
+
+  duration.value = '7';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert.deepEqual(presetStates(document), ['false', 'false', 'false', 'false', 'false']);
+
+  duration.value = '5';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  unit.value = 'seconds';
+  unit.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.deepEqual(presetStates(document), ['false', 'false', 'false', 'false', 'false']);
+});
+
+test('preset highlight follows clean storage refill', async () => {
+  const { document, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  assert.deepEqual(presetStates(document), ['false', 'true', 'false', 'false', 'false']);
+  change({ pollIntervalMs: { newValue: 300000 } });
+  assert.equal(document.getElementById('poll-duration').value, '5');
+  assert.equal(document.getElementById('poll-unit').value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+});
+
+test('successful Save normalizes fields and highlight without storage event', async () => {
+  const { document, window, messages } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  let finishSave;
+  chrome.runtime.sendMessage = message => {
+    messages.push(message);
+    return new Promise(resolve => { finishSave = resolve; });
+  };
+  test.afterEach(() => { try { finishSave?.({ ok: false, code: 'teardown' }); } catch {} });
+
+  duration.value = '300';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  unit.value = 'seconds';
+  unit.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await tick();
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
+  finishSave({ ok: true, pollIntervalMs: 300000 });
+  await Promise.resolve();
+
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+  assert.match(document.getElementById('poll-status').textContent, /Saved/);
+});
+
+test('pending Save preserves draft until response', async () => {
+  const { document, window, messages, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  const form = document.getElementById('poll-settings-form');
+  let finishSave;
+  chrome.runtime.sendMessage = message => {
+    messages.push(message);
+    return new Promise(resolve => { finishSave = resolve; });
+  };
+  test.afterEach(() => { try { finishSave?.({ ok: false, code: 'teardown' }); } catch {} });
+
+  document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]').click();
+  form.dispatchEvent(new window.Event('submit', { cancelable: true }));
+  change({ pollIntervalMs: { newValue: 60000 } });
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+
+  finishSave({ ok: true, pollIntervalMs: 300000 });
+  await Promise.resolve();
+  assert.equal(duration.value, '1');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'true', 'false', 'false', 'false']);
+  assert.match(document.getElementById('poll-status').textContent, /changed while saving/i);
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
 });

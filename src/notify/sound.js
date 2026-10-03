@@ -6,8 +6,8 @@
 // double instead).
 //
 // Service workers cannot play audio, so playChime forwards to the
-// offscreen document (src/notify/offscreen.html), which owns the only
-// AudioContext in the extension. No mail content ever enters this path:
+// offscreen document (src/notify/offscreen.html), which owns the audio
+// player in the extension. No mail content ever enters this path:
 // playChime carries at most a volume level, never subjects or snippets.
 
 // chrome.storage.local key. Both the worker and the popup read and write

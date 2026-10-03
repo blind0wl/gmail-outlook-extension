@@ -47,6 +47,11 @@ export function buildToast(group) {
 // Stable silent-auth failure reasons (#20). Fixed set only; anything else
 // is dropped rather than persisted or displayed.
 const ERROR_REASONS = new Set(["signed-out", "missing-record", "refresh-failed"]);
+const ERROR_CODES = /^(?:AUTH_REQUIRED|(?:invalid_request|invalid_client|invalid_grant|unauthorized_client|unsupported_grant_type|invalid_scope|access_denied|server_error|temporarily_unavailable|interaction_required|login_required|consent_required)(?:\/AADSTS\d{1,10})?|AADSTS\d{1,10})$/;
+
+function diagnosticCode(code) {
+  return typeof code === "string" && ERROR_CODES.test(code) ? code : undefined;
+}
 
 // Boundary sanitizer for poll errors. Provider adapters already throw
 // sanitized errors, but token callbacks and test fakes can throw anything
@@ -60,10 +65,8 @@ export function sanitizeError(err, acct) {
   );
   clean.name = "PollError";
   if (status !== undefined) clean.status = status;
-  if (typeof err?.code === "string") {
-    const code = err.code.replace(/[^a-zA-Z0-9/_-]/g, "").slice(0, 64);
-    if (code) clean.code = code;
-  }
+  const code = diagnosticCode(err?.code);
+  if (code) clean.code = code;
   if (typeof err?.reason === "string" && ERROR_REASONS.has(err.reason)) {
     clean.reason = err.reason;
   }
@@ -96,8 +99,9 @@ export function accountStatusLabel(acct, state = {}) {
     }
     // Outlook cause hint (#20): sanitized code/reason only, never raw text.
     // Missing suffix means the cause predates cause tracking — re-poll once.
-    const cause = state.code
-      ? ` (${state.code})`
+    const code = diagnosticCode(state.code);
+    const cause = code
+      ? ` (${code})`
       : state.reason === "missing-record"
         ? " (session ended)"
         : state.reason === "refresh-failed"

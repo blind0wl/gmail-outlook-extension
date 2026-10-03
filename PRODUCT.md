@@ -30,8 +30,8 @@ Implemented popup workspace (2026-09-30; owner production acceptance pending):
 
 - Stack one full-address account header and only its messages, then the next
   account. Empty and paused accounts retain sections; filters preserve identity.
-- Mail and Settings are separate views. Settings contains Themes, Accounts,
-  Notifications and Sound. Back restores Mail position; drafts survive updates.
+- Mail and Settings are separate views. Settings contains Accounts, Themes, Notifications, Sound
+  and Mail checking. Back restores Mail position; drafts survive updates.
 - Expanding a preview displays cached text without marking it read. Open retains
   the existing extension-local read flag and exact provider message link.
 - Midnight desk, Slate workspace and Signal panel are selectable and remembered.
@@ -91,3 +91,48 @@ browser session; Outlook requests Mail.ReadWrite. A worker-owned ten-minute Undo
 journal survives popup close; uncertain results require checking the mailbox.
 Actual provider acceptance is pending, especially private Gmail session/Undo
 compatibility. No send, permanent-delete, backend, analytics or popup API calls.
+
+## Popup UX and global checking candidate — 2026-10-02
+
+Approved specifications and automatic build authorization supersede the prior
+visible-Undo presentation. Completed Trash has concise success feedback, with
+no Undo tray/button/countdown. The worker restore journal and uncertainty
+recovery remain. Account headings open account-hinted webmail inboxes; routing
+still needs fresh two-account acceptance. Settings adds one Mail checking form
+at the bottom of Settings, after Sound: duration, seconds/minutes/hours, explicit Save;
+1-minute default, 30-second–5-hour range, whole seconds. Saves update storage and
+the shared alarm, with rollback on failure and preserved matching alarms on wake.
+The popup stays cache-only. Unsaved settings drafts survive unrelated updates.
+Synthetic verification passed; actual candidate acceptance is pending in
+[the dated record](docs/acceptance/2026-10-02-popup-ux-settings.md). Earlier staged
+and expanded-preview descriptions above are historical and do not own current
+scope; the current preview is always visible and capped at three lines.
+
+
+## Owner-approved reversible read interaction — 2026-10-02
+
+Mark read updates the displayed card/count immediately, keeps the card while
+hovered or keyboard focused, and commits after five seconds away or immediately
+on an outside click. Mark unread during this grace period cancels the staged
+read locally, including Gmail. Provider writes begin only at commitment and
+remain silent on progress/success; errors restore recovery cards. Committed
+Gmail unread stays unavailable. Open retains provider-unchanged local-read
+semantics and immediate dismissal; extension counts use local read state.
+The owner reported smoke acceptance passed for candidate `ca193e3` on
+2026-10-02; coverage details are recorded in the dated read grace-period record.
+
+## Owner-approved visual polish — 2026-10-03
+
+The owner approved the visual-polish proposal on 2026-10-03, and it is
+implemented in `src/popup/`. Mail now uses stronger primary-color two-line
+subjects, quieter 12px sender text and regular 11px timestamps, slimmer wrapping
+account headings, softer surfaces and a separate footer for hover/focus actions.
+This supersedes the earlier bold-sender/one-line-subject visual prescription.
+Settings keeps its section order with compact account actions, one shared local
+removal note, account-specific reconnection hints and miniature theme previews.
+Midnight panel is #253948; the three themes and mailbox semantics remain.
+The footer layout also restores native Enter/Space activation of mail actions.
+Cached preview expansion already exists and is preserved; its discrepancy with
+the older no-expansion requirement is recorded in the dated acceptance record.
+Fresh real-account acceptance for this visual candidate is pending in
+`docs/acceptance/2026-10-03-visual-polish.md`.

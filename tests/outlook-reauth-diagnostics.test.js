@@ -9,6 +9,8 @@ import test from "node:test";
 import assert from "node:assert";
 import {
   getGraphTokenForAccount,
+  getGraphToken,
+  renewGraphToken,
   sessionKeyFor,
 } from "../src/auth/microsoft.js";
 import { sanitizeError, accountStatusLabel, readAccountState } from "../src/notify/notify.js";
@@ -169,4 +171,75 @@ test("gmail and causeless rows keep existing needs-sign-in copy", async () => {
     { needsSignIn: true, reason: "missing-record" },
   );
   assert.match(endedLabel, /needs sign in \(session ended\)/);
+});
+
+test("diagnostics reject private strings even when they contain only identifier characters", () => {
+  for (const code of ["secret-access-token_123", "private-mail-subject", "invalid_grant; DROP TABLE tokens; <script>"]) {
+    const clean = sanitizeError({ code }, { account: "privacy@o.c" });
+    assert.equal(clean.code, undefined);
+    assert.doesNotMatch(accountStatusLabel({ provider: "outlook", account: "privacy@o.c" },
+      { needsSignIn: true, code }), /secret-access|private-mail|DROP TABLE/);
+  }
+  assert.equal(sanitizeError({ code: "invalid_grant/AADSTS700082" }).code,
+    "invalid_grant/AADSTS700082");
+});
+
+test("forced renewal persists the endpoint rejection after a Graph 401", async () => {
+  const account = "forced-diag@o.c";
+  const key = sessionKeyFor(account);
+  const { chrome, session } = memoryStores({}, { [key]: {
+    ...expiredRecord(account), expiresAt: Date.now() + 3_600_000,
+  } });
+  const prev = installChrome(chrome);
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 400,
+    json: async () => ({ error: "invalid_grant", error_description: "AADSTS700082: private description" }),
+  });
+  try {
+    const acct = { provider: "outlook", account };
+    const summary = await pollAll([acct], {
+      getToken: async () => getGraphTokenForAccount(account, false),
+      refreshToken: async (_acct, token) => renewGraphToken(account, token),
+      fetchers: { outlook: async () => { throw Object.assign(new Error("Graph refused token"), { status: 401 }); } },
+      notify: async () => {}, setBadge: async () => {},
+    });
+    assert.ok(summary.needsSignIn.includes(`outlook:${account}`));
+    const entry = (await readAccountState())[`outlook:${account}`];
+    assert.equal(entry.code, "invalid_grant/AADSTS700082");
+    assert.equal(entry.status, 400);
+    assert.equal(entry.reason, "refresh-failed");
+    assert.equal(session[key], undefined);
+    assert.match(accountStatusLabel(acct, entry), /invalid_grant\/AADSTS700082/);
+  } finally {
+    restoreChrome(prev);
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test("storage failures while checking sign-out remain transient for both token entry points", async () => {
+  const { chrome } = memoryStores();
+  chrome.storage.local.get = async () => { throw new Error("private storage exception"); };
+  const prev = installChrome(chrome);
+  try {
+    for (const acquire of [() => getGraphTokenForAccount("storage-diag@o.c", false), () => getGraphToken(false)]) {
+      await assert.rejects(acquire, err => {
+        assert.equal(err.transient, true);
+        assert.notEqual(err.reason, "signed-out");
+        assert.doesNotMatch(err.message, /private|needs sign in/);
+        return true;
+      });
+    }
+  } finally { restoreChrome(prev); }
+});
+
+test("explicit sign-out keeps its diagnostic reason", async () => {
+  const { chrome } = memoryStores({ "signedOut:outlook:signedout-diag@o.c": true });
+  const prev = installChrome(chrome);
+  try {
+    await assert.rejects(() => getGraphTokenForAccount("signedout-diag@o.c", false), err => {
+      assert.equal(err.reason, "signed-out");
+      assert.notEqual(err.transient, true);
+      return true;
+    });
+  } finally { restoreChrome(prev); }
 });

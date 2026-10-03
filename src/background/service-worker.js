@@ -1,3 +1,4 @@
+import { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS, normalizePollInterval, validPollInterval } from "../store/poll-settings.js";
 import { mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
 import { inspectGmailTrash } from "../providers/gmail-trash-verification.js";
 import { messageIdOf } from "../popup/links.js";
@@ -52,9 +53,7 @@ import {
 } from "../notify/sound.js";
 
 export const ALARM_NAME = "mail-poll";
-export const DEFAULT_POLL_MS = 60_000;
-export const MIN_POLL_MS = 30_000;
-export const MAX_POLL_MS = 5 * 3600 * 1000;
+export { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS };
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 10 * 60_000;
 
@@ -447,7 +446,7 @@ export async function inspectSavedGmailTrash(deps = {}) {
 globalThis.inspectSavedGmailTrash = () => inspectSavedGmailTrash();
 
 export async function handleMailboxAction(msg, deps = {}) {
-  if (!msg || !["read", "trash", "undo", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
+  if (!msg || !["read", "trash", "undo", "unread", "acknowledge"].includes(msg.action) || typeof msg.key !== "string") return { ok: false, code: "invalid-action" };
   if (msg.action === "undo" && pendingUndos.has(msg.key)) return pendingUndos.get(msg.key);
   if (pendingMail.has(msg.key)) return { ok: false, code: "pending" };
   pendingMail.add(msg.key);
@@ -803,12 +802,49 @@ function withRealTokens(accounts, deps = {}) {
 async function ensureAlarm() {
   const alarms = globalThis.chrome?.alarms;
   if (!alarms) return;
-  const stored =
-    await globalThis.chrome?.storage?.local?.get?.("pollIntervalMs");
-  await alarms.create(ALARM_NAME, {
-    periodInMinutes:
-      clampInterval(stored?.pollIntervalMs ?? DEFAULT_POLL_MS) / 60000,
+  const stored = await chrome.storage.local.get("pollIntervalMs");
+  const periodInMinutes = normalizePollInterval(stored?.pollIntervalMs) / 60000;
+  const existing = await alarms.get?.(ALARM_NAME);
+  if (existing?.periodInMinutes === periodInMinutes) return;
+  await alarms.create(ALARM_NAME, { delayInMinutes: periodInMinutes, periodInMinutes });
+}
+
+// Preference saves have their own queue: a slow mailbox poll must not block
+// scheduling, and overlapping settings transactions must not undo each other.
+let settingsTail = Promise.resolve();
+function savePollInterval(pollIntervalMs) {
+  if (!validPollInterval(pollIntervalMs)) return Promise.resolve({ ok: false, code: "invalid-interval" });
+  const operation = settingsTail.then(async () => {
+    const store = globalThis.chrome?.storage?.local;
+    const alarms = globalThis.chrome?.alarms;
+    let previous, alarm, snapshot = false;
+    try {
+      previous = await store.get("pollIntervalMs");
+      alarm = await alarms.get(ALARM_NAME);
+      snapshot = true;
+      await store.set({ pollIntervalMs });
+      const periodInMinutes = pollIntervalMs / 60000;
+      await alarms.create(ALARM_NAME, { delayInMinutes: periodInMinutes, periodInMinutes });
+      return { ok: true, pollIntervalMs };
+    } catch {
+      let uncertain = false;
+      if (snapshot) {
+        // Attempt both repairs even if one fails. Never report a failed Save
+        // as applied, since storage and alarms are not an atomic transaction.
+        try {
+          if (previous.pollIntervalMs === undefined) await store.remove("pollIntervalMs");
+          else await store.set({ pollIntervalMs: previous.pollIntervalMs });
+        } catch { uncertain = true; }
+        try {
+          if (alarm) await alarms.create(ALARM_NAME, { when: alarm.scheduledTime, ...(alarm.periodInMinutes === undefined ? {} : {periodInMinutes:alarm.periodInMinutes}) });
+          else await alarms.clear(ALARM_NAME);
+        } catch { uncertain = true; }
+      }
+      return { ok: false, code: "save-failed", ...(uncertain ? { uncertain: true } : {}) };
+    }
   });
+  settingsTail = operation.catch(() => {});
+  return operation;
 }
 
 // One initialization promise created at worker evaluation. Every polling
@@ -819,7 +855,7 @@ async function init() {
   await hydrateCache();
   await hydrateAccountState();
   await pruneMailActions();
-  await ensureAlarm();
+  try { await ensureAlarm(); } catch { /* Later initialization or Save can repair scheduling; mail stays usable. */ }
 }
 
 export const ready = init();
@@ -847,6 +883,7 @@ export async function handleSignIn(accounts, target, deps = {}) {
     ) ?? target;
   const key = accountKey(acct);
   const generation = accountGeneration.get(key) ?? 0;
+  const current = () => generation === (accountGeneration.get(key) ?? 0);
   const { interactiveGet, ...pollDeps } = deps;
   // Configure Microsoft before any interactive callback: on a fresh worker
   // this is the first event, and the graph flow would otherwise reject
@@ -868,38 +905,41 @@ export async function handleSignIn(accounts, target, deps = {}) {
   try {
     await interactive(acct);
   } catch (err) {
-    if (generation !== (accountGeneration.get(key) ?? 0))
-      return { key, needsSignIn: true };
+    if (!current()) return { key, needsSignIn: true };
     if (isRateOrServer(err?.status)) {
-      const result = {
-        key,
-        backedOff: true,
-        ...recordBackoff(acct, deps.now ?? Date.now()),
-        error: sanitizeError(err, acct),
-      };
-      await write(() => storeAccountEntries([acct], new Map([[key, result]])));
-      return result;
+      return write(async () => {
+        if (!current()) return { key, needsSignIn: true };
+        const result = {
+          key,
+          backedOff: true,
+          ...recordBackoff(acct, deps.now ?? Date.now()),
+          error: sanitizeError(err, acct),
+        };
+        await storeAccountEntries([acct], new Map([[key, result]]));
+        return result;
+      });
     }
     if (isOfflineNow()) {
-      markOffline(acct);
-      const offlineResult = {
-        key,
-        offline: true,
-        error: sanitizeError(err, acct),
-      };
-      await write(() =>
-        storeAccountEntries([acct], new Map([[key, offlineResult]])),
-      );
-      return offlineResult;
+      return write(async () => {
+        if (!current()) return { key, needsSignIn: true };
+        markOffline(acct);
+        const offlineResult = {
+          key,
+          offline: true,
+          error: sanitizeError(err, acct),
+        };
+        await storeAccountEntries([acct], new Map([[key, offlineResult]]));
+        return offlineResult;
+      });
     }
     if (err?.transient) {
-      const transientResult = { key, error: sanitizeError(err, acct) };
-      await write(() =>
-        storeAccountEntries([acct], new Map([[key, transientResult]])),
-      );
-      return transientResult;
+      return write(async () => {
+        if (!current()) return { key, needsSignIn: true };
+        const transientResult = { key, error: sanitizeError(err, acct) };
+        await storeAccountEntries([acct], new Map([[key, transientResult]]));
+        return transientResult;
+      });
     }
-    markNeedsSignIn(acct);
     // Short diagnostic code for the popup: the sanitized error keeps
     // status only, which leaves pre-popup failures (no status) mute.
     // Codes are fixed identifiers — never addresses, mail, or text.
@@ -909,35 +949,70 @@ export async function handleSignIn(accounts, target, deps = {}) {
       code: signInCode(err),
       error: sanitizeError(err, acct),
     };
-    await write(() => storeAccountEntries([acct], new Map([[key, failure]])));
-    return failure;
+    return write(async () => {
+      if (!current()) return { key, needsSignIn: true };
+      markNeedsSignIn(acct);
+      await storeAccountEntries([acct], new Map([[key, failure]]));
+      return failure;
+    });
   }
-  if (generation !== (accountGeneration.get(key) ?? 0))
-    return { key, needsSignIn: true };
+  if (!current()) return { key, needsSignIn: true };
   signedOutByKey.delete(key);
   clearBackoff(acct);
   clearNeedsSignIn(acct);
   clearOffline(acct);
+  const wasPaused = !isEnabled(acct);
+  const pollAcct = wasPaused ? { ...acct, enabled: true } : acct;
+  const pollList = list.map((account) =>
+    accountKey(account) === key ? pollAcct : account,
+  );
+  if (!pollList.some((account) => accountKey(account) === key))
+    pollList.push(pollAcct);
   const real = buildTokenProvider(list);
   // Serialize the recovery poll against alarm cycles on the shared poll
   // chain. A sign-in fetch starts only after earlier cycles committed, so
   // its complete reconcile can never wipe newer alarm mail (issue #2).
   const run = pollTail.then(() =>
-    signInPoll(list, acct, key, generation, real, pollDeps),
+    signInPoll(pollList, pollAcct, key, generation, real, pollDeps, wasPaused),
   );
   pollTail = run.catch(() => {});
   return run;
 }
 
-async function signInPoll(list, acct, key, generation, real, pollDeps) {
-  if (generation !== (accountGeneration.get(key) ?? 0))
-    return { key, needsSignIn: true };
+async function signInPoll(list, acct, key, generation, real, pollDeps, wasPaused) {
+  const current = () => generation === (accountGeneration.get(key) ?? 0);
+  if (!current()) return { key, needsSignIn: true };
   const now = pollDeps.now ?? Date.now();
+  const getToken = pollDeps.getToken ?? real.getToken;
+  const refreshToken = pollDeps.refreshToken ?? real.refreshToken;
+  const providerFetcher = pollDeps.fetchers?.[acct.provider] ?? fetchers[acct.provider];
   const result = await pollAccount(acct, {
-    getToken: real.getToken,
-    refreshToken: real.refreshToken,
     ...pollDeps,
+    getToken: async (account) => {
+      if (!current()) throw new Error("recovery superseded");
+      const token = await getToken(account);
+      if (!current()) throw new Error("recovery superseded");
+      return token;
+    },
+    refreshToken: async (account, rejectedToken) => {
+      if (!current()) throw new Error("recovery superseded");
+      const token = await refreshToken(account, rejectedToken);
+      if (!current()) throw new Error("recovery superseded");
+      return token;
+    },
+    ...(providerFetcher
+      ? {
+          fetchers: {
+            ...pollDeps.fetchers,
+            [acct.provider]: async (...args) => {
+              if (!current()) throw new Error("recovery superseded");
+              return providerFetcher(...args);
+            },
+          },
+        }
+      : {}),
   }).catch((error) => ({ key, error: sanitizeError(error, acct) }));
+  if (!current()) return { key, needsSignIn: true };
   if (acct?.provider === "gmail" && result?.needsSignIn) {
     // handleSignIn runs only on explicit Add/Sign in clicks, so opening
     // the login tab here never spams: the user asked, the session is
@@ -949,17 +1024,41 @@ async function signInPoll(list, acct, key, generation, real, pollDeps) {
     } catch {}
   }
   await write(async () => {
-    if (generation !== (accountGeneration.get(key) ?? 0)) return;
+    if (!current()) return;
+    let commitAcct = acct;
+    let commitList = list;
+    if (wasPaused) {
+      const fresh = await loadAccounts();
+      if (!current()) return;
+      const storedAcct = fresh.find((account) => accountKey(account) === key);
+      if (!storedAcct) return;
+      commitAcct = storedAcct;
+      commitList = fresh;
+      const succeeded = Array.isArray(result?.items) && !result.error &&
+        !result.needsSignIn && !result.offline && !result.skipped &&
+        !result.backedOff;
+      if (succeeded) {
+        commitAcct = { ...storedAcct, enabled: true };
+        commitList = fresh.map((account) =>
+          accountKey(account) === key ? commitAcct : account,
+        );
+        if (!current()) return;
+        await saveAccounts(commitList);
+        if (!current()) return;
+      }
+    }
     if (result.items !== undefined) {
-      reconcileAccount(acct, result.items, result.items.complete !== false);
+      reconcileAccount(commitAcct, result.items, result.items.complete !== false);
       baselineByKey.add(key);
       seenByKey.set(key, result.items.map((i) => i.key).slice(0, 200));
       await persistCache(getInbox());
     }
-    await storeAccountEntries([acct], new Map([[key, result]]), now);
-    await badgeFor(list, pollDeps);
+    if (!current()) return;
+    await storeAccountEntries([commitAcct], new Map([[key, result]]), now);
+    if (!current()) return;
+    await badgeFor(commitList, pollDeps);
   });
-  return result;
+  return current() ? result : { key, needsSignIn: true };
 }
 
 // Polling entry points. Each awaits ready first; tests drive these directly
@@ -976,6 +1075,7 @@ export async function handleManualRefresh(accounts, deps = {}) {
 
 export async function handleMessage(msg, deps = {}) {
   await ready;
+  if (msg.type === "set-poll-interval") return savePollInterval(msg.pollIntervalMs);
   if (msg.type === "refresh") {
     const result = await handleManualRefresh(await loadAccounts(), deps);
     // Per-account outcome lists let the popup report honest freshness:
@@ -1078,6 +1178,7 @@ if (typeof chrome !== "undefined") {
   chrome.runtime?.onMessage?.addListener((msg, _sender, sendResponse) => {
     if (
       ![
+        "set-poll-interval",
         "refresh",
         "mark-read",
         "mail-action",

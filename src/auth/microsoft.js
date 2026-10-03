@@ -494,8 +494,9 @@ export async function getGraphTokenForAccount(
   const generation = capture(guardKey(key));
   try {
     await checkSignedOut(guardKey(key), interactive);
-  } catch {
-    throw needsSignIn("signed-out");
+  } catch (err) {
+    if (err?.message === "auth needs sign in") throw needsSignIn("signed-out");
+    throw asTransient(new Error("microsoft sign-out state unavailable"));
   }
   const cached = await readSessionRecord(key);
   assertCurrent(guardKey(key), generation);
@@ -600,7 +601,9 @@ export async function renewGraphToken(
       if (!classified.transient) {
         if (!classified.reason) classified.reason = "refresh-failed";
         if (typeof err?.status === "number") classified.status ??= err.status;
-        if (typeof err?.code === "string" && err.code && !classified.code) classified.code = err.code;
+        // Keep the endpoint rejection instead of the generic AUTH_REQUIRED
+        // classification; the recovery message still identifies auth failure.
+        if (typeof err?.code === "string" && err.code) classified.code = err.code;
         await enqueueSessionOp(async () => {
           assertCurrent(guardKey(key), generation);
           await evictSessionRecord(key);
@@ -629,8 +632,9 @@ export async function getGraphToken(interactive = true, { clientId } = {}) {
   const generation = capture(guardKey(key));
   try {
     await checkSignedOut(guardKey(), interactive);
-  } catch {
-    throw needsSignIn("signed-out");
+  } catch (err) {
+    if (err?.message === "auth needs sign in") throw needsSignIn("signed-out");
+    throw asTransient(new Error("microsoft sign-out state unavailable"));
   }
   const cached = await readSessionRecord();
   assertCurrent(guardKey(), generation);
