@@ -323,7 +323,7 @@ Reuse Task 4's browser evidence and inspect remaining conditions in one batched 
 
 Run the Impeccable mechanical detector once over the changed popup UI files at the finish boundary and review findings against the approved design; record verified findings and false positives rather than redesigning outside scope.
 
-- [ ] **Step 3: Review the completed changes against scope and race contracts**
+- [x] **Step 3: Review the completed changes against scope and race contracts**
 
 Review the diff against this plan and the referenced specs. Resolve correctness issues before candidate completion. Check CSS support gates and selector separation, every form refill callback, dirty/pending behavior, both provider recovery paths, lifecycle generations, serialized account writes and prototype-reference inventory. Preserve the chosen implementation/review workflow rather than reopening design approval.
 
@@ -350,3 +350,7 @@ If execution occurs later, use the actual dated acceptance filename in the comma
 3. Test discipline: existing contracts may pass at baseline, new regressions must fail for their intended assertion, and each implementation commit finishes green. No flaky/failing commit exception remains.
 4. Review Focus coverage: header DOM test (Task 1); async load/Save/draft tests (Task 2); hover:none browser check (Task 7); both-provider recovery/failure/race tests (Task 5); CSS-capable modern/fallback browser checks (Task 4).
 5. Evidence limits: linkedom does not evaluate CSS; forced fallback branches do not prove an older engine; fixtures do not prove real-account Chrome authentication or extension lifecycle. Fresh acceptance records preserve these distinctions.
+
+## Execution outcome — 2026-10-03
+
+Tasks 1–7 are implemented and reviewed as a candidate. Node 24.21.0 verification passes 336 tests. Fresh whole-branch Luna/max review found no Critical, Important or Minor findings; [review report](../../ui-review-fixes/code-review.md). The tracked prototype inventory was 27 files, rather than the 28-file planning estimate. The forced fallback required an inbox grid-span correction, documented in the browser evidence. Fresh [real-account acceptance](../../acceptance/2026-10-03-review-fixes.md) remains pending; automated and synthetic completion does not imply shipping acceptance.

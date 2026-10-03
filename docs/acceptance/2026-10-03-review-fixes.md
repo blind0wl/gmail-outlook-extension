@@ -11,6 +11,10 @@
 - Fresh 320px, preset/Save, hover-none and CSS zoom emulation checks, plus modern and forced-fallback comparisons, are documented in [the browser evidence notes](../ui-review-fixes/README.md). All browser content used the synthetic fixture; no real mailbox content, credentials or provider requests were used.
 - Actual browser chrome zoom and an older Chromium engine were not tested; CSS zoom and forced support-query branches are synthetic evidence only.
 
+## Code review
+
+Fresh Luna/max whole-branch review found no Critical, Important or Minor findings. See [the review report](../ui-review-fixes/code-review.md). The code-reviewed candidate remains pending live acceptance.
+
 ## Real-account Chrome acceptance — pending
 
 Each item remains unchecked until freshly performed against this candidate. No historical acceptance ticks were reused.
