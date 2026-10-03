@@ -874,6 +874,7 @@ export async function handleSignIn(accounts, target, deps = {}) {
     ) ?? target;
   const key = accountKey(acct);
   const generation = accountGeneration.get(key) ?? 0;
+  const current = () => generation === (accountGeneration.get(key) ?? 0);
   const { interactiveGet, ...pollDeps } = deps;
   // Configure Microsoft before any interactive callback: on a fresh worker
   // this is the first event, and the graph flow would otherwise reject
@@ -895,38 +896,41 @@ export async function handleSignIn(accounts, target, deps = {}) {
   try {
     await interactive(acct);
   } catch (err) {
-    if (generation !== (accountGeneration.get(key) ?? 0))
-      return { key, needsSignIn: true };
+    if (!current()) return { key, needsSignIn: true };
     if (isRateOrServer(err?.status)) {
-      const result = {
-        key,
-        backedOff: true,
-        ...recordBackoff(acct, deps.now ?? Date.now()),
-        error: sanitizeError(err, acct),
-      };
-      await write(() => storeAccountEntries([acct], new Map([[key, result]])));
-      return result;
+      return write(async () => {
+        if (!current()) return { key, needsSignIn: true };
+        const result = {
+          key,
+          backedOff: true,
+          ...recordBackoff(acct, deps.now ?? Date.now()),
+          error: sanitizeError(err, acct),
+        };
+        await storeAccountEntries([acct], new Map([[key, result]]));
+        return result;
+      });
     }
     if (isOfflineNow()) {
-      markOffline(acct);
-      const offlineResult = {
-        key,
-        offline: true,
-        error: sanitizeError(err, acct),
-      };
-      await write(() =>
-        storeAccountEntries([acct], new Map([[key, offlineResult]])),
-      );
-      return offlineResult;
+      return write(async () => {
+        if (!current()) return { key, needsSignIn: true };
+        markOffline(acct);
+        const offlineResult = {
+          key,
+          offline: true,
+          error: sanitizeError(err, acct),
+        };
+        await storeAccountEntries([acct], new Map([[key, offlineResult]]));
+        return offlineResult;
+      });
     }
     if (err?.transient) {
-      const transientResult = { key, error: sanitizeError(err, acct) };
-      await write(() =>
-        storeAccountEntries([acct], new Map([[key, transientResult]])),
-      );
-      return transientResult;
+      return write(async () => {
+        if (!current()) return { key, needsSignIn: true };
+        const transientResult = { key, error: sanitizeError(err, acct) };
+        await storeAccountEntries([acct], new Map([[key, transientResult]]));
+        return transientResult;
+      });
     }
-    markNeedsSignIn(acct);
     // Short diagnostic code for the popup: the sanitized error keeps
     // status only, which leaves pre-popup failures (no status) mute.
     // Codes are fixed identifiers — never addresses, mail, or text.
@@ -936,35 +940,70 @@ export async function handleSignIn(accounts, target, deps = {}) {
       code: signInCode(err),
       error: sanitizeError(err, acct),
     };
-    await write(() => storeAccountEntries([acct], new Map([[key, failure]])));
-    return failure;
+    return write(async () => {
+      if (!current()) return { key, needsSignIn: true };
+      markNeedsSignIn(acct);
+      await storeAccountEntries([acct], new Map([[key, failure]]));
+      return failure;
+    });
   }
-  if (generation !== (accountGeneration.get(key) ?? 0))
-    return { key, needsSignIn: true };
+  if (!current()) return { key, needsSignIn: true };
   signedOutByKey.delete(key);
   clearBackoff(acct);
   clearNeedsSignIn(acct);
   clearOffline(acct);
+  const wasPaused = !isEnabled(acct);
+  const pollAcct = wasPaused ? { ...acct, enabled: true } : acct;
+  const pollList = list.map((account) =>
+    accountKey(account) === key ? pollAcct : account,
+  );
+  if (!pollList.some((account) => accountKey(account) === key))
+    pollList.push(pollAcct);
   const real = buildTokenProvider(list);
   // Serialize the recovery poll against alarm cycles on the shared poll
   // chain. A sign-in fetch starts only after earlier cycles committed, so
   // its complete reconcile can never wipe newer alarm mail (issue #2).
   const run = pollTail.then(() =>
-    signInPoll(list, acct, key, generation, real, pollDeps),
+    signInPoll(pollList, pollAcct, key, generation, real, pollDeps, wasPaused),
   );
   pollTail = run.catch(() => {});
   return run;
 }
 
-async function signInPoll(list, acct, key, generation, real, pollDeps) {
-  if (generation !== (accountGeneration.get(key) ?? 0))
-    return { key, needsSignIn: true };
+async function signInPoll(list, acct, key, generation, real, pollDeps, wasPaused) {
+  const current = () => generation === (accountGeneration.get(key) ?? 0);
+  if (!current()) return { key, needsSignIn: true };
   const now = pollDeps.now ?? Date.now();
+  const getToken = pollDeps.getToken ?? real.getToken;
+  const refreshToken = pollDeps.refreshToken ?? real.refreshToken;
+  const providerFetcher = pollDeps.fetchers?.[acct.provider] ?? fetchers[acct.provider];
   const result = await pollAccount(acct, {
-    getToken: real.getToken,
-    refreshToken: real.refreshToken,
     ...pollDeps,
+    getToken: async (account) => {
+      if (!current()) throw new Error("recovery superseded");
+      const token = await getToken(account);
+      if (!current()) throw new Error("recovery superseded");
+      return token;
+    },
+    refreshToken: async (account, rejectedToken) => {
+      if (!current()) throw new Error("recovery superseded");
+      const token = await refreshToken(account, rejectedToken);
+      if (!current()) throw new Error("recovery superseded");
+      return token;
+    },
+    ...(providerFetcher
+      ? {
+          fetchers: {
+            ...pollDeps.fetchers,
+            [acct.provider]: async (...args) => {
+              if (!current()) throw new Error("recovery superseded");
+              return providerFetcher(...args);
+            },
+          },
+        }
+      : {}),
   }).catch((error) => ({ key, error: sanitizeError(error, acct) }));
+  if (!current()) return { key, needsSignIn: true };
   if (acct?.provider === "gmail" && result?.needsSignIn) {
     // handleSignIn runs only on explicit Add/Sign in clicks, so opening
     // the login tab here never spams: the user asked, the session is
@@ -976,17 +1015,41 @@ async function signInPoll(list, acct, key, generation, real, pollDeps) {
     } catch {}
   }
   await write(async () => {
-    if (generation !== (accountGeneration.get(key) ?? 0)) return;
+    if (!current()) return;
+    let commitAcct = acct;
+    let commitList = list;
+    if (wasPaused) {
+      const fresh = await loadAccounts();
+      if (!current()) return;
+      const storedAcct = fresh.find((account) => accountKey(account) === key);
+      if (!storedAcct) return;
+      commitAcct = storedAcct;
+      commitList = fresh;
+      const succeeded = Array.isArray(result?.items) && !result.error &&
+        !result.needsSignIn && !result.offline && !result.skipped &&
+        !result.backedOff;
+      if (succeeded) {
+        commitAcct = { ...storedAcct, enabled: true };
+        commitList = fresh.map((account) =>
+          accountKey(account) === key ? commitAcct : account,
+        );
+        if (!current()) return;
+        await saveAccounts(commitList);
+        if (!current()) return;
+      }
+    }
     if (result.items !== undefined) {
-      reconcileAccount(acct, result.items, result.items.complete !== false);
+      reconcileAccount(commitAcct, result.items, result.items.complete !== false);
       baselineByKey.add(key);
       seenByKey.set(key, result.items.map((i) => i.key).slice(0, 200));
       await persistCache(getInbox());
     }
-    await storeAccountEntries([acct], new Map([[key, result]]), now);
-    await badgeFor(list, pollDeps);
+    if (!current()) return;
+    await storeAccountEntries([commitAcct], new Map([[key, result]]), now);
+    if (!current()) return;
+    await badgeFor(commitList, pollDeps);
   });
-  return result;
+  return current() ? result : { key, needsSignIn: true };
 }
 
 // Polling entry points. Each awaits ready first; tests drive these directly
