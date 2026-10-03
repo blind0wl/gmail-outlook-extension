@@ -2,8 +2,8 @@
 
 Runtime candidate: `c67f9189dc986a9406e358cee3db1d31718fbaf9`, combining
 PR #22 with current main `600d873`. Subsequent acceptance-record/PR-description
-updates do not change this runtime candidate. Fresh real-account acceptance:
-**pending; not performed**.
+updates do not change this runtime candidate. Fresh real-account owner smoke
+acceptance: **passed on 2026-10-03**, as recorded below.
 
 The original PR merged cleanly and passed 342 tests, but review reproduced
 three gaps: arbitrary identifier-shaped private content survived code
@@ -42,3 +42,19 @@ a new owner result for this candidate:
 
 This improves diagnosis of #20; it does not establish or fix the underlying
 recurrence cause. Historical acceptance results have not been reused.
+
+## Owner smoke result — 2026-10-03
+
+Loaded PR head: `be1e19acc9af7533be672326cf031fbefb82d01e`, whose runtime
+source matches `c67f918`. In response to the candidate-specific reload,
+Outlook sign-in/Refresh, other-account and appearance smoke request, the owner
+reported: "no errors, just needed to sign in to outlook".
+
+This accepts the requested smoke pass, including Outlook sign-in recovery.
+Requiring sign-in after extension reload is consistent with session-only
+credential storage. The owner reported no errors or visual regressions.
+Browser version, individual account results and explicit DevTools Console/
+Network observations were not supplied. No token endpoint rejection was
+reported, so failure-specific diagnostic UI remains covered by automated tests
+and has not been claimed as exercised with a live provider. The checklist
+above retains those detailed checks as unconfirmed; no historical tick was reused.
