@@ -909,7 +909,10 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   function applyTheme(theme) {
     var selected = validTheme(theme);
     document.documentElement.dataset.theme = selected;
-    document.querySelectorAll('[name="popup-theme"]').forEach(function (radio) { radio.checked = radio.value === selected; });
+    document.querySelectorAll('[name="popup-theme"]').forEach(function (radio) {
+      radio.checked = radio.value === selected;
+      radio.closest(".theme-choice")?.setAttribute("data-selected", String(radio.checked));
+    });
   }
 
   function initThemes() {

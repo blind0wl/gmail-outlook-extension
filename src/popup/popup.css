@@ -2,7 +2,10 @@
 :root[data-theme="slate"] { color-scheme: light; --bg: #dce4ef; --panel: #f8faff; --header: #eaf0f8; --text: #26384e; --muted: #53677f; --line: #ced9e7; --hover: #eaf0f8; --accent: #3a649b; --danger: #a43d48; --tag: #dee8f6; --control: #eef3fa; --on-accent: #ffffff; }
 :root[data-theme="signal"] { color-scheme: light; --bg: #c8cdd1; --panel: #e6e8e9; --header: #d7dadd; --text: #242a2e; --muted: #50585f; --line: #bbc3c9; --hover: #d9dee1; --accent: #765014; --danger: #a33132; --tag: #f2dfb4; --control: #d9dee1; --on-accent: #ffffff; }
 /* Derived from the twelve roles, so every theme stays complete. */
-:root { --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent); --accent-line: color-mix(in srgb, var(--accent) 50%, var(--line)); --line-soft: color-mix(in srgb, var(--line) 55%, transparent); --muted-soft: color-mix(in srgb, var(--muted) 82%, var(--panel)); }
+:root { --accent-soft: var(--hover); --accent-line: var(--accent); --line-soft: var(--line); --muted-soft: var(--muted); }
+@supports (color: color-mix(in srgb, black, white)) {
+  :root { --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent); --accent-line: color-mix(in srgb, var(--accent) 50%, var(--line)); --line-soft: color-mix(in srgb, var(--line) 55%, transparent); --muted-soft: color-mix(in srgb, var(--muted) 82%, var(--panel)); }
+}
 html { width: 480px; max-width: 100%; background: var(--bg); }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -52,7 +55,14 @@ input::placeholder { color: var(--muted); opacity: 1; }
 #inbox-list { display: flex; flex-direction: column; gap: 20px; }
 .account-section { min-width: 0; }
 .account-heading { background: transparent; }
-.account-inbox, .account-heading:not(:has(.account-inbox)) { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "addr addr addr count" "prov chk . ."; align-items: center; column-gap: 8px; row-gap: 0; padding: 6px 10px 6px 2px; margin: 0 0 4px; border-radius: 10px; color: inherit; text-decoration: none; }
+.account-inbox { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "addr addr addr count" "prov chk . ."; align-items: center; column-gap: 8px; row-gap: 0; padding: 6px 10px 6px 2px; margin: 0 0 4px; border-radius: 10px; color: inherit; text-decoration: none; }
+@supports selector(:has(*)) {
+  .account-heading:not(:has(.account-inbox)) { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "addr addr addr count" "prov chk . ."; align-items: center; column-gap: 8px; row-gap: 0; padding: 6px 10px 6px 2px; margin: 0 0 4px; border-radius: 10px; color: inherit; text-decoration: none; }
+}
+@supports not selector(:has(*)) {
+  .account-heading { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "addr addr addr count" "prov chk . ."; align-items: center; column-gap: 8px; row-gap: 0; padding: 6px 10px 6px 2px; margin: 0 0 4px; border-radius: 10px; color: inherit; text-decoration: none; }
+  .account-inbox { grid-column: 1 / -1; }
+}
 .account-heading-top { display: contents; }
 .account-heading h2 { grid-area: addr; margin: 0; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; font-weight: 650; }
 .account-heading .badge { grid-area: prov; }
@@ -160,12 +170,20 @@ li[data-status="attention"] .account-detail::before { background: var(--danger);
 .theme-settings [role="radiogroup"] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .theme-choice { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; min-height: 0; }
 .theme-choice:hover { background: var(--hover); }
-.theme-choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.theme-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-choice[data-selected="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+@supports selector(:has(*)) {
+  .theme-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+@supports not selector(:has(*)) {
+  .theme-choice:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
 .theme-choice input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .theme-choice > span:not(.theme-swatch) { font-size: 12px; font-weight: 600; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
 .theme-choice small { margin: -2px 0 0; font-size: 11px; color: var(--muted); line-height: 1.2; }
-.theme-swatch { position: relative; width: 100%; height: 44px; border: 1px solid color-mix(in srgb, var(--muted) 60%, transparent); border-radius: 6px; flex-shrink: 0; overflow: hidden; }
+.theme-swatch { position: relative; width: 100%; height: 44px; border: 1px solid var(--muted); border-radius: 6px; flex-shrink: 0; overflow: hidden; }
+@supports (color: color-mix(in srgb, black, white)) {
+  .theme-swatch { border-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+}
 .midnight-swatch { background: #15232f; --sample-header: #293e50; --sample-card: #253948; --sample-accent: #8ed3cc; }
 .slate-swatch { background: #dce4ef; --sample-header: #eaf0f8; --sample-card: #f8faff; --sample-accent: #3a649b; }
 .signal-swatch { background: #c8cdd1; --sample-header: #d7dadd; --sample-card: #e6e8e9; --sample-accent: #765014; }

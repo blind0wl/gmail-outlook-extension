@@ -470,7 +470,15 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
 
 test("workspace themes persist without replacing focused controls or draft form input", async () => {
   const { document, window, data, change } = await workspaceFixture({ popupTheme: "slate" });
+  const assertSelectedThemeMirrorsRadios = expected => {
+    for (const choice of document.querySelectorAll(".theme-choice")) {
+      const radio = choice.querySelector('input[name="popup-theme"]');
+      assert.equal(radio.checked, radio.value === expected, `${radio.value} radio selection`);
+      assert.equal(choice.getAttribute("data-selected"), String(radio.checked), `${radio.value} selected styling state`);
+    }
+  };
   assert.equal(document.documentElement.dataset.theme, "slate");
+  assertSelectedThemeMirrorsRadios("slate");
   document.getElementById("open-settings").click();
   document.getElementById("add-gmail").click();
   const draft = document.getElementById("add-account-email");
@@ -480,14 +488,20 @@ test("workspace themes persist without replacing focused controls or draft form 
   signal.dispatchEvent(new window.Event("change", { bubbles: true }));
   await tick();
   assert.equal(document.documentElement.dataset.theme, "signal");
+  assertSelectedThemeMirrorsRadios("signal");
   assert.equal(document.activeElement, signal);
   assert.equal(draft.value, "unfinished@example.com");
   assert.equal(data.popupTheme, "signal");
   change({ popupTheme: { newValue: "slate" } });
   assert.equal(document.documentElement.dataset.theme, "slate");
+  assertSelectedThemeMirrorsRadios("slate");
   assert.equal(document.activeElement, signal, "external preference update preserves focus");
   const next = await workspaceFixture({ popupTheme: data.popupTheme });
   assert.equal(next.document.documentElement.dataset.theme, "signal", "reopen loads saved choice");
+  for (const choice of next.document.querySelectorAll(".theme-choice")) {
+    const radio = choice.querySelector('input[name="popup-theme"]');
+    assert.equal(choice.getAttribute("data-selected"), String(radio.checked), `${radio.value} selected styling state after reopen`);
+  }
 });
 
 test("workspace failed theme save reports recovery while retaining usable selected appearance", async () => {
