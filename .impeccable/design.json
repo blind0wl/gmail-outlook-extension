@@ -550,7 +550,7 @@
     "popupSettingsUpdate": "2026-10-02: whole native account heading links; Accounts \u2192 Themes \u2192 Notifications \u2192 Sound \u2192 Mail checking. Retained duration/unit/Save form, theme-native controls and accessible pending/error/success. Completed Trash has no visible Undo; recovery remains. Synthetic 320/480px all-theme checks passed; fresh real-account acceptance pending. Owner smoke-test refinement: whole-header hover without address underline.",
     "visualPolishUpdate": {
       "date": "2026-10-03",
-      "reference": "docs/design/visual-polish/",
+      "reference": "src/popup/",
       "mail": "Slim full-address account headings, two-line primary subjects, three-line cached previews and separate flow-based action footers.",
       "settings": "Compact account actions, shared removal note, local reconnection hints and miniature theme previews.",
       "acceptance": "Fresh unpacked-extension acceptance pending in docs/acceptance/2026-10-03-visual-polish.md."
@@ -632,7 +632,7 @@
   ],
   "narrative": {
     "northStar": "Midnight desk",
-    "overview": "Owner-approved visual polish implemented 2026-10-03 from docs/design/visual-polish/. Midnight desk remains the default alongside Slate workspace and Signal panel. Subjects lead, account identity wraps, native actions occupy a separate footer and Settings controls are quieter. Fresh real-account acceptance remains pending for this candidate.",
+    "overview": "Owner-approved visual polish implemented in src/popup/ on 2026-10-03. Midnight desk remains the default alongside Slate workspace and Signal panel. Subjects lead, account identity wraps, native actions occupy a separate footer and Settings controls are quieter. Fresh real-account acceptance remains pending for this candidate.",
     "keyCharacteristics": [
       "Three remembered palettes with Midnight as fallback.",
       "Separate rounded mail cards beneath slim full-address account headings.",
