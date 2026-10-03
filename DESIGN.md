@@ -3,11 +3,11 @@ name: Gmail plus Outlook
 description: Compact account-owned mail workspace with three remembered themes
 colors:
   midnight-bg: "#15232f"
-  midnight-panel: "#223443"
+  midnight-panel: "#253948"
   midnight-header: "#293e50"
   midnight-text: "#ecf2f8"
   midnight-muted: "#b1c3d4"
-  midnight-line: "#3d5163"
+  midnight-line: "#3a4d5e"
   midnight-hover: "#2f4659"
   midnight-accent: "#8ed3cc"
   midnight-danger: "#ffb0ad"
@@ -19,7 +19,7 @@ colors:
   slate-header: "#eaf0f8"
   slate-text: "#26384e"
   slate-muted: "#53677f"
-  slate-line: "#dbe4ef"
+  slate-line: "#ced9e7"
   slate-hover: "#eaf0f8"
   slate-accent: "#3a649b"
   slate-danger: "#a43d48"
@@ -31,7 +31,7 @@ colors:
   signal-header: "#d7dadd"
   signal-text: "#242a2e"
   signal-muted: "#50585f"
-  signal-line: "#c2c9cf"
+  signal-line: "#bbc3c9"
   signal-hover: "#d9dee1"
   signal-accent: "#765014"
   signal-danger: "#a33132"
@@ -41,24 +41,24 @@ colors:
 typography:
   title:
     fontFamily: "system-ui, sans-serif"
-    fontSize: "20px"
+    fontSize: "22px"
     fontWeight: 650
     lineHeight: 1.3
   section-title:
     fontFamily: "system-ui, sans-serif"
-    fontSize: "14px"
+    fontSize: "15px"
     fontWeight: 650
     lineHeight: 1.5
   account-title:
     fontFamily: "system-ui, sans-serif"
-    fontSize: "14px"
-    fontWeight: 600
+    fontSize: "13px"
+    fontWeight: 650
     lineHeight: 1.4
   subject:
     fontFamily: "system-ui, sans-serif"
-    fontSize: "14px"
-    fontWeight: 600
-    lineHeight: 1.5
+    fontSize: "15px"
+    fontWeight: 650
+    lineHeight: 1.4
   body:
     fontFamily: "system-ui, sans-serif"
     fontSize: "13px"
@@ -67,7 +67,7 @@ typography:
   control:
     fontFamily: "system-ui, sans-serif"
     fontSize: "13px"
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 1.5
   metadata:
     fontFamily: "system-ui, sans-serif"
@@ -79,18 +79,37 @@ typography:
     fontSize: "11px"
     fontWeight: 600
     lineHeight: 1.5
+  sender:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "12px"
+    fontWeight: 500
+    lineHeight: 1.5
+  help:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: 1.5
+  form-heading:
+    fontFamily: "system-ui, sans-serif"
+    fontSize: "14px"
+    fontWeight: 650
+    lineHeight: 1.5
 rounded:
   badge: "4px"
   control: "6px"
   panel: "12px"
   pill: "999px"
+  theme-swatch: "5px"
+  swatch-inset: "2px"
 spacing:
   tight: "4px"
   controls: "6px"
   group: "8px"
   stack: "12px"
-  panel-inset: "14px"
-  toolbar-inset: "16px"
+  panel-inset: "16px"
+  narrow-panel-inset: "14px"
+  toolbar-inset: "20px"
+  account-gap: "24px"
 components:
   button:
     backgroundColor: "{colors.midnight-control}"
@@ -114,19 +133,19 @@ components:
     rounded: "{rounded.pill}"
     padding: "6px 14px"
   provider-badge:
-    backgroundColor: "{colors.midnight-tag}"
-    textColor: "{colors.midnight-text}"
+    backgroundColor: "transparent"
+    textColor: "{colors.midnight-muted}"
     rounded: "{rounded.badge}"
-    padding: "2px 6px"
+    padding: "0"
   account-panel:
-    backgroundColor: "{colors.midnight-panel}"
+    backgroundColor: "transparent"
     textColor: "{colors.midnight-text}"
-    rounded: "{rounded.panel}"
+    rounded: "{rounded.control}"
   mail-row:
     backgroundColor: "{colors.midnight-panel}"
     textColor: "{colors.midnight-text}"
     rounded: "{rounded.panel}"
-    padding: "12px 14px 10px 20px"
+    padding: "14px 16px 8px 18px"
   email-input:
     backgroundColor: "{colors.midnight-control}"
     textColor: "{colors.midnight-text}"
@@ -155,13 +174,14 @@ This is the implementation record extracted on 2026-09-30 from
 `src/popup/popup.css`, `popup.html`, `popup.js` and `themes.js`. It replaces the
 former white A v5 world. Historical screenshots and reproduction provenance stay
 in `docs/ui-baseline/`; they are historical evidence, not current tokens.
-Current synthetic verification is in `docs/ui-workspace/`; real-account owner
-acceptance of this candidate remains pending.
+Current synthetic verification is in `docs/ui-workspace/`. The 2026-10-03
+visual-polish candidate is recorded in `docs/acceptance/2026-10-03-visual-polish.md`;
+fresh real-account acceptance for that candidate remains pending.
 
 **Key Characteristics:**
 
 - Three complete palettes with Midnight as the remembered-preference fallback.
-- Flat mail rows inside separate account panels.
+- Separate rounded mail cards below slim, full-address account headings.
 - Normal-case system typography and authored SVG toolbar icons.
 - Immediate state changes without ambient or theme-transition motion.
 
@@ -201,16 +221,17 @@ All labels remain normal case with ordinary tracking.
 
 ### Hierarchy
 
-- **Title** (20px, 650, line-height 1.3): Inbox and Settings toolbar heading.
-- **Section title** (14px, 650, line-height 1.5): Settings section headings.
-- **Account title** (14px, 600, line-height 1.4): full account address, wrapping anywhere.
-- **Subject** (14px, 600, line-height 1.5): unread subject; read subjects use 400.
+- **Title** (22px, 650, line-height 1.3): Inbox and Settings toolbar heading.
+- **Section title** (15px, 650, line-height 1.5): Settings section headings.
+- **Account title** (13px, 650, line-height 1.4): full account address, wrapping anywhere.
+- **Subject** (15px, 650, line-height 1.4): unread subject; read subjects use 400.
 - **Body** (13px, 400, line-height 1.5): snippets, help and expanded cached text.
-- **Control** (13px, 600, line-height 1.5): buttons and filters.
+- **Control** (13px, 500, line-height 1.5): buttons and filters.
 - **Metadata** (11px, 400, line-height 1.5): timestamps and theme default label.
 - **Badge** (11px, 600, line-height 1.5): provider labels and account counts.
 
-Sender names are 13px semibold for unread mail and regular for read mail.
+Sender names are muted 12px medium for unread mail and regular for read mail.
+Help text is 12px regular. Subjects use the primary text color and two-line clamp.
 Counts, times and volume values use tabular numerals. The unread toolbar count
 uses muted 13px regular text alongside the title.
 
@@ -221,19 +242,22 @@ uses muted 13px regular text alongside the title.
 The popup is one column (480px maximum width) with a fixed-height flex shell
 (`600px`). The intrinsic height must not depend on the initial viewport;
 automatically sized extension hosts can start at zero height. The toolbar stays outside the independently scrolling Mail
-or Settings viewport. View insets are 12px horizontally and 16px at the bottom;
-the toolbar uses a 16px inset. Panels stack with 12px gaps. Account headers and
-mail rows use a 14px horizontal inset; rows reserve 20px on the left for the
-unread dot. Settings panels use a 14px inset.
+or Settings viewport. View insets are 16px horizontally and 20px at the bottom;
+the toolbar uses 20px horizontal insets (16px at narrow widths). Account groups
+have 24px gaps; cards have 8px gaps. Slim, transparent account headings place
+full-address identity above provider, checked time and count. Settings panels
+use 16px padding (14px at narrow widths).
 
-Account identity wraps. Sender and subject use bold weight and a one-line
-ellipsis; cached plain text is immediately visible with a three-line clamp and
-word wrapping. There is no preview button or expanded content. Separate message
-cards use panel surfaces, one-pixel line borders, 12px corners and 8px gaps.
-Account headers remain distinct above their messages, without an enclosing
-nested panel. Open sits below the preview; 34px read/Trash icon buttons appear
-on card hover or keyboard focus. Non-hover devices expose them continuously.
-Account headers keep checked times and provider counts/opened-here markers.
+Sender names retain a single-line ellipsis; subjects wrap to two lines. Cached
+plain text is immediately visible with a three-line clamp. The existing cached
+preview expansion remains unchanged by this visual pass: click or Enter/Space
+expands it, and Escape collapses. This existing behavior differs from the older
+No preview expansion requirement in specs/003; removal is not part of this pass.
+Message cards use panel surfaces, one-pixel line borders and 12px corners.
+A flow-based footer holds muted regular timestamps and 32px Open/read/Trash
+buttons. Buttons are siblings of the preview control, so keyboard activation
+does not expand the preview. Hover/focus reveals actions; non-hover devices
+expose them continuously. Errors follow the footer without overlap.
 The volume control is a label/range/value grid with an 8px gap and a 4ch value
 column. Toolbar tools wrap at 340px; at 240px the title occupies its own row.
 Back to mail remains a single-line label. Native thin scrollbars use theme colors.
@@ -246,27 +270,26 @@ composition remains in `.impeccable/surfaces/src-popup-popup-html.md`.
 ## Elevation & Depth
 
 There are no shadows. Tonal separation between background, panel and account
-header provides depth; thin dividers separate neighboring mail rows. Signal's
-silver toolbar has the authored vertical gradient from `#dce0e3` to `#cbd0d4`.
-That material belongs to Signal; it is not a global ban on gradients.
+header provides depth; thin dividers separate neighboring mail rows. Signal's toolbar uses its background role; the earlier gradient is superseded
+by the owner-approved polish.
 All state changes are immediate, with no entrance, ambient or theme-transition
 animation.
 
-**The Flat Row Rule.** Give each account one enclosing panel; separate its messages with dividers rather than independent raised cards.
+**Account ownership.** Keep one heading per account and separate rounded messages beneath it; never combine accounts into a shared mailbox group.
 
 ## Shapes
 
 Account and Settings panels have gently curved corners (12px), clipped to their
-surface. Buttons and email fields use tighter corners (6px); provider badges and
-theme swatches use 4px. Provider filters are pills (999px). Unread indicators are
-small circles (5px). Ordinary control strokes and row dividers are one pixel.
+surface. Buttons and email fields use tighter corners (6px); provider badges use 4px;
+miniature theme previews use 5px with 2px inset shapes. Provider filters are pills (999px). Unread indicators are
+small circles (4px). Ordinary control strokes and row dividers are one pixel.
 Toolbar icon buttons are square (34px) with 18px authored stroke SVGs.
 
 ## Components
 
 ### Buttons
 
-Compact native actions use theme control/text colors, a muted one-pixel border,
+Compact native actions use theme control/text colors, a line-color one-pixel border,
 6px corners, 6px by 10px padding and a 32px minimum height. Hover changes the
 surface; active changes the border to accent. Disabled actions use muted text
 and the default cursor. Add account uses accent/on-accent; Open is a transparent
@@ -275,7 +298,7 @@ their contrasting foreground on hover.
 
 ### Chips
 
-Provider badges use tag/text colors with 2px by 6px padding. Counts have a
+Provider labels use muted text on transparent backgrounds without inset padding. Counts have a
 transparent background and accent text. Filter pills use muted text at rest and
 accent/on-accent when selected, expressed with `aria-pressed`.
 
@@ -283,11 +306,10 @@ accent/on-accent when selected, expressed with `aria-pressed`.
 
 Each full-address account header owns its messages, including same-provider
 accounts. Empty and paused accounts retain identity. Sender and subject are
-600-weight for unread mail and 400 while marking read; subject uses accent, preview uses
-muted text. An unread dot preserves the state distinction. Message bodies are
-static and never imply an in-extension reader that has not been implemented.
+500- and 650-weight respectively for unread mail and 400 while marking read;
+subjects use primary text, while sender and preview use muted text. An unread dot preserves the state distinction. Cached previews never imply a full-message reader that has not been implemented.
 
-Hover/focus actions use authored 18px stroke SVGs on 34px buttons, currentColor
+Hover/focus actions use authored 16px stroke SVGs on 32px buttons, currentColor
 and theme danger for Trash. Gmail labels explicitly name conversation actions;
 Outlook labels name individual-message actions. Pending buttons stay focusable
 with aria-disabled and resist duplicate clicks; errors display safe recovery text.
@@ -308,7 +330,7 @@ native and use the accent color. Errors use danger text with alert/status roles.
 
 Refresh and Settings use authored inline SVGs with current-color strokes
 (1.7px), rounded ends and joins. The Back to mail control pairs a matching SVG
-with visible text. Every button, input, summary and link has an accent keyboard
+with visible text. Every button, input, summary, preview control and link has an accent keyboard
 outline (2px) with a 2px offset. Forced colors replace outlines with Highlight,
 add CanvasText panel borders and preserve the unread dot; theme swatches retain
 their preview colors.
@@ -368,3 +390,38 @@ Pending Save prevents duplicate submissions. The retained form preserves drafts
 and focus across unrelated renders. Synthetic checks cover all three themes at
 320px/480px and 200% CSS zoom; they do not establish real-account acceptance.
 The old compact Undo tray section above is retained as a historical record only.
+
+## Owner-approved visual polish — 2026-10-03
+
+Approved from docs/design/visual-polish: stronger subjects, quieter sender/time
+metadata, wrapping transparent account headings, softer card/button lines,
+compact Settings account actions and miniature theme previews. All three themes,
+Settings order and mailbox action semantics remain. Removal guidance is shared
+below Accounts; account-local reconnection guidance remains visible when needed.
+This record supersedes older visual measurements above where they conflict.
+
+## Owner-approved polish v2 — 2026-10-03
+
+Approved from docs/design/polish-v2/ and implemented in src/popup. Supersedes
+the card footer, account-heading, Settings account-row and control details above.
+
+- Cards: sender and time share one row. Hover/focus actions float over the time
+  (absolute, 28px buttons); no footer row on pointer devices. With `hover: none`
+  the actions stay visible in flow. Read cards use a transparent surface and a
+  softer line. The unread dot is 7px.
+- Account headings: address and a numeric unread pill (`aria-label` "N unread")
+  share a row; provider and "Checked" time sit beneath. Zero shows an outlined
+  pill. Empty checked accounts read "All caught up." Whole-heading link and
+  hover highlight stay; the hover outline is replaced by the hover token fill.
+- Toolbar: the unread total is a pill. Provider filters sit in one segmented
+  track. The counts explainer is a footnote below the list.
+- Settings: account rows have an avatar, status dot, one primary action (Sign out
+  when connected, Sign in when paused or needing sign-in) and an icon Remove with
+  the same accessible name. Themes are three tiles over native radios. Checkboxes
+  render as switches (native input, forced-colors falls back to native). Chime
+  rows show the address with the provider beneath. Mail checking adds preset
+  chips that only fill the fields; Save remains explicit.
+- Status bar: hairline top border, muted 12px text. Mail and Settings fade at
+  the bottom edge. Derived tokens use `color-mix` over the existing twelve roles.
+
+Synthetic checks only; real-account acceptance is pending.

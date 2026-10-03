@@ -120,3 +120,18 @@ Gmail unread stays unavailable. Open retains provider-unchanged local-read
 semantics and immediate dismissal; extension counts use local read state.
 The owner reported smoke acceptance passed for candidate `ca193e3` on
 2026-10-02; coverage details are recorded in the dated read grace-period record.
+
+## Owner-approved visual polish — 2026-10-03
+
+The owner approved the interactive proposal in docs/design/visual-polish/ and
+requested implementation. Mail now uses stronger primary-color two-line
+subjects, quieter 12px sender text and regular 11px timestamps, slimmer wrapping
+account headings, softer surfaces and a separate footer for hover/focus actions.
+This supersedes the earlier bold-sender/one-line-subject visual prescription.
+Settings keeps its section order with compact account actions, one shared local
+removal note, account-specific reconnection hints and miniature theme previews.
+Midnight panel is #253948; the three themes and mailbox semantics remain.
+The footer layout also restores native Enter/Space activation of mail actions.
+Cached preview expansion already exists and is preserved; its discrepancy with
+the older no-expansion requirement is recorded in the dated acceptance record.
+Fresh real-account acceptance for this visual candidate is pending.

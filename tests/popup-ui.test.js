@@ -125,9 +125,7 @@ test("popup lifecycle controls send worker messages and static previews never wr
   signout.click();
   await tick();
   assert.equal(messages.at(-1).type, "sign-out");
-  const remove = [...document.querySelectorAll("button")].find(
-    (b) => b.textContent === "Remove",
-  );
+  const remove = document.querySelector('button[data-action="remove-account"]');
   remove.click();
   await tick();
   assert.equal(messages.at(-1).type, "remove-account");
@@ -243,7 +241,7 @@ test("Gmail read can be reversed locally before any provider write", async () =>
   assert.equal(messages.length, 0);
   document.querySelector('[data-mail-action="read"]').click();
   assert.equal(document.querySelectorAll('.card.read').length, 0);
-  assert.equal(document.getElementById('unread-count').textContent, '(1)');
+  assert.equal(document.getElementById('unread-count').textContent, '1');
   document.getElementById('unread-count').click();
   assert.equal(messages.length, 0, 'cancelled read never reaches the provider');
 });
@@ -374,7 +372,7 @@ test("Open on a staged read performs only the extension-local Open", async t => 
   assert.equal(messages[0].type, 'mark-read');
   assert.equal(tabs.length, 1);
   assert.equal(document.getElementById('unread-count').textContent, '');
-  assert.equal(document.querySelector('.account-count').textContent, '0 unread');
+  assert.equal(document.querySelector('.account-count').getAttribute('aria-label'), '0 unread');
   await new Promise(setImmediate);
 });
 
@@ -434,7 +432,7 @@ test("workspace groups same-provider accounts independently and keeps empty/stat
   assert.equal(document.querySelector('[data-key*="orphan"]'), null);
   assert.ok(sections[0].querySelector(".card-snippet"));
   assert.equal(messages.length, 0, "preview is visible without interaction");
-  assert.equal(sections[0].querySelector(".account-count").textContent, "2 unread");
+  assert.equal(sections[0].querySelector(".account-count").getAttribute("aria-label"), "2 unread");
   sections[0].querySelector('[data-mail-action="open"]').click();
   await tick();
   assert.equal(messages.at(-1).type, "mark-read", "Open keeps existing local behavior");
@@ -535,7 +533,7 @@ test("opened mail leaves the list and follows saved local state", async () => {
   const { document, change, messages, tabs } = await workspaceFixture({
     mailCache: [mail("one"), mail("two")],
   });
-  assert.equal(document.querySelector(".account-count").textContent, "2 unread");
+  assert.equal(document.querySelector(".account-count").getAttribute("aria-label"), "2 unread");
   document.querySelector('[data-mail-action="open"]').click();
   await tick();
   assert.equal(document.querySelectorAll(".card").length, 1, "opened card leaves instantly");
@@ -555,7 +553,7 @@ test("cards expand in place on toggle without changing mailbox state", async () 
   assert.equal(toggle.getAttribute("aria-expanded"), "false");
   assert.equal(card.classList.contains("expanded"), false);
   const icons = card.querySelector(".card-icons");
-  assert.ok(icons, "open/read/delete icons live inline left of the time");
+  assert.ok(icons, "open/read/delete icon actions are available");
   assert.equal(icons.querySelector('[data-mail-action="read"]')?.getAttribute("aria-label")?.includes("conversation as read"), true);
   toggle.click();
   assert.equal(card.classList.contains("expanded"), true);
@@ -583,14 +581,24 @@ test("expanding a second card collapses the first (accordion)", async () => {
   assert.equal(cards[0].querySelector(".card-toggle").getAttribute("aria-expanded"), "false");
 });
 
-test("card top row shows sender, icon group, then bold time with no overlap shift", async () => {
-  const { document } = await workspaceFixture();
-  const line = document.querySelector(".card .card-topline");
-  assert.ok(line, "top row exists");
-  const order = [...line.children].map(function (el) { return el.className; });
-  assert.deepEqual(order.slice(0, 3), ["card-sender", "card-icons", "card-time"]);
-  assert.ok(document.querySelector('.card [data-mail-action="open"]'), "open is an icon action");
-  assert.equal(document.querySelector(".card-open"), null, "text Open button is removed");
+test("mail action keys remain available to native buttons without expanding the preview", async () => {
+  const { document, window, messages } = await workspaceFixture();
+  const card = document.querySelector('.card');
+  for (const action of ['open', 'read', 'trash']) {
+    for (const key of ['Enter', ' ']) {
+      const event = new window.Event('keydown', { bubbles: true, cancelable: true });
+      event.key = key;
+      card.querySelector(`[data-mail-action="${action}"]`).dispatchEvent(event);
+      assert.equal(event.defaultPrevented, false, `${action} must retain native ${key} activation`);
+      assert.equal(card.classList.contains('expanded'), false, 'action keys never expand cached text');
+    }
+  }
+  assert.equal(messages.length, 0, 'keydown alone does not write mail');
+  const expand = new window.Event('keydown', { bubbles: true, cancelable: true });
+  expand.key = 'Enter';
+  card.querySelector('.card-toggle').dispatchEvent(expand);
+  assert.equal(expand.defaultPrevented, true, 'preview handles its own key');
+  assert.equal(card.classList.contains('expanded'), true);
 });
 
 test("icon clicks act on mail without collapsing the card", async () => {

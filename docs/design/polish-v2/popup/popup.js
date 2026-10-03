@@ -8,10 +8,10 @@ import { initPollPresets } from "./poll-presets.js";
 // "accountState" flags and recover via a "sign-in" runtime message.
 
 import { THEME_KEY, DEFAULT_THEME, validTheme, loadTheme, saveTheme } from "./themes.js";
-import { normalizeAccount, accountKey } from "../store/accounts.js";
+import { normalizeAccount, accountKey } from "../../../../src/store/accounts.js";
 import { threadUrl, accountInboxUrl } from "./links.js";
-import { accountStatusLabel } from "../notify/notify.js";
-import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
+import { accountStatusLabel } from "../../../../src/notify/notify.js";
+import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../../../../src/notify/sound.js";
 
 (function () {
   "use strict";

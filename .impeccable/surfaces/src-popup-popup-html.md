@@ -48,3 +48,11 @@ record. These pending results supersede no historical acceptance.
 Owner refinement: whole-heading hover adds a 2px inset accent outline with no
 layout movement or address underline. All other smoke checks passed as reported
 by the owner; the new hover outline awaits owner confirmation.
+
+2026-10-03 owner-approved polish: subjects lead at 15px/650 in primary text,
+senders are muted 12px/500 and timestamps muted 11px/400. Full addresses wrap
+above compact provider/count metadata on transparent account headings. Cards
+have stable flow footers for 32px hover/focus actions, separate from preview
+controls. Settings has quieter compact account actions and miniature theme
+previews. Settings order, theme preference and mailbox semantics remain.
+Current production acceptance is pending in docs/acceptance/2026-10-03-visual-polish.md.
