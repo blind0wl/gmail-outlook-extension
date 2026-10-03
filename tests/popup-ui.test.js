@@ -1167,3 +1167,127 @@ test('a preference event after Save clears success only when the effective inter
   document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit',{cancelable:true}));
   await tick();assert.match(status.textContent,/Saved/,'an explicit successful Save can confirm the updated value');
 });
+
+function presetStates(document) {
+  return [...document.querySelectorAll('.poll-presets button')].map(button => button.getAttribute('aria-pressed'));
+}
+
+test('poll presets fill fields without saving', async () => {
+  const { document, window, messages, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  const form = document.getElementById('poll-settings-form');
+  const fiveMinutes = document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]');
+  fiveMinutes.click();
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+  assert.deepEqual(messages, [], 'choosing a preset only fills the form');
+
+  change({ pollIntervalMs: { newValue: 60000 } });
+  assert.equal(duration.value, '5', 'external storage changes preserve a dirty preset draft');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+
+  chrome.runtime.sendMessage = async message => {
+    messages.push(message);
+    return { ok: true, pollIntervalMs: message.pollIntervalMs };
+  };
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await tick();
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+});
+
+test('preset highlight follows initial asynchronous load', async () => {
+  let resolveRead;
+  const pendingRead = new Promise(resolve => { resolveRead = resolve; });
+  const { document } = await workspaceFixture({}, chrome => {
+    const get = chrome.storage.local.get;
+    chrome.storage.local.get = key => key === 'pollIntervalMs' ? pendingRead : get(key);
+  });
+  resolveRead({ pollIntervalMs: 300000 });
+  await tick();
+  assert.equal(document.getElementById('poll-duration').value, '5');
+  assert.equal(document.getElementById('poll-unit').value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+});
+
+test('preset highlight tracks manual duration and unit edits', async () => {
+  const { document, window } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]').click();
+
+  duration.value = '7';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  assert.deepEqual(presetStates(document), ['false', 'false', 'false', 'false', 'false']);
+
+  duration.value = '5';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  unit.value = 'seconds';
+  unit.dispatchEvent(new window.Event('change', { bubbles: true }));
+  assert.deepEqual(presetStates(document), ['false', 'false', 'false', 'false', 'false']);
+});
+
+test('preset highlight follows clean storage refill', async () => {
+  const { document, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  assert.deepEqual(presetStates(document), ['false', 'true', 'false', 'false', 'false']);
+  change({ pollIntervalMs: { newValue: 300000 } });
+  assert.equal(document.getElementById('poll-duration').value, '5');
+  assert.equal(document.getElementById('poll-unit').value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+});
+
+test('successful Save normalizes fields and highlight without storage event', async () => {
+  const { document, window, messages } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  let finishSave;
+  chrome.runtime.sendMessage = message => {
+    messages.push(message);
+    return new Promise(resolve => { finishSave = resolve; });
+  };
+  test.afterEach(() => { try { finishSave?.({ ok: false, code: 'teardown' }); } catch {} });
+
+  duration.value = '300';
+  duration.dispatchEvent(new window.Event('input', { bubbles: true }));
+  unit.value = 'seconds';
+  unit.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await tick();
+  document.getElementById('poll-settings-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
+  finishSave({ ok: true, pollIntervalMs: 300000 });
+  await Promise.resolve();
+
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+  assert.match(document.getElementById('poll-status').textContent, /Saved/);
+});
+
+test('pending Save preserves draft until response', async () => {
+  const { document, window, messages, change } = await workspaceFixture({ pollIntervalMs: 60000 });
+  const duration = document.getElementById('poll-duration');
+  const unit = document.getElementById('poll-unit');
+  const form = document.getElementById('poll-settings-form');
+  let finishSave;
+  chrome.runtime.sendMessage = message => {
+    messages.push(message);
+    return new Promise(resolve => { finishSave = resolve; });
+  };
+  test.afterEach(() => { try { finishSave?.({ ok: false, code: 'teardown' }); } catch {} });
+
+  document.querySelector('.poll-presets [data-value="5"][data-unit="minutes"]').click();
+  form.dispatchEvent(new window.Event('submit', { cancelable: true }));
+  change({ pollIntervalMs: { newValue: 60000 } });
+  assert.equal(duration.value, '5');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'false', 'true', 'false', 'false']);
+
+  finishSave({ ok: true, pollIntervalMs: 300000 });
+  await Promise.resolve();
+  assert.equal(duration.value, '1');
+  assert.equal(unit.value, 'minutes');
+  assert.deepEqual(presetStates(document), ['false', 'true', 'false', 'false', 'false']);
+  assert.match(document.getElementById('poll-status').textContent, /changed while saving/i);
+  assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+});

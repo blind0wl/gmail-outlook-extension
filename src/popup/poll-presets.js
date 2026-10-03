@@ -9,11 +9,9 @@ export function initPollPresets() {
   buttons.forEach(b => b.addEventListener("click", () => {
     duration.value = b.dataset.value;
     unit.value = b.dataset.unit;
-    duration.dispatchEvent(new Event("input", { bubbles: true }));
-    sync();
+    duration.dispatchEvent(new document.defaultView.Event("input", { bubbles: true }));
   }));
-  // The form refills its fields from storage and after saves without events,
-  // so refresh the highlight whenever the user reaches the form.
-  for (const type of ["input", "change", "focusin", "mouseover", "submit"]) form.addEventListener(type, () => setTimeout(sync, 0));
+  for (const type of ["input", "change"]) form.addEventListener(type, sync);
   sync();
+  return { sync };
 }

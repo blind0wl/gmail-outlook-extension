@@ -967,8 +967,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     });
     window.addEventListener("pagehide", function () { commitOtherReads(); });
     window.addEventListener("blur", function () { commitOtherReads(); });
-    var pollSettings = initPollSettings();
-    initPollPresets();
+    var pollPresets = initPollPresets();
+    var pollSettings = initPollSettings({ onFill: () => pollPresets?.sync() });
     initThemes();
     document.getElementById("open-settings").addEventListener("click", function () { showView(true); });
     document.getElementById("back-to-mail").addEventListener("click", function () { showView(false); });
