@@ -25,3 +25,10 @@ Fresh verification:
 Fresh real-account acceptance is **pending**. Reload the unpacked extension,
 then check the account and Inbox counts for round single-digit shapes and
 visually centred numerals. Agent checks used synthetic mail only.
+
+## Owner acceptance — 2026-10-03
+
+After PR #27 merged and the main checkout was updated to `600d873`, the owner
+reloaded the extension and reported: "yep thats better, working now". Badge
+appearance is owner-accepted. This supersedes the pending badge acceptance
+above; no additional browser/version or theme coverage was supplied.
