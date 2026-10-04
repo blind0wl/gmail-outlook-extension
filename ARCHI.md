@@ -76,10 +76,12 @@ Verified (ran 2026-10-04, box Node v26.10.0): `node --test "tests/*.test.js"` â†
   override recollection; never reuse historical ticks for a new candidate.
 
 ## Unknowns / pending (2026-10-04)
-- `tasks/branch-cleanup.md`: discovery done, awaiting owner approval; merged PR
-  branches (#22/#26/#27/#28) + stale worktrees + stash + badge-acceptance note
-  (`t3code-38e68479` dirty) + stale `fix/current-main-outlook-diagnostics`
-  (HTTP-status label fallback + branch-only popup test) unexecuted.
+- Branch cleanup completed 2026-10-04 (commit `a590468` + task record
+  `tasks/branch-cleanup.md`): 6 merged branches + all T3 worktrees + stale
+  stash removed; only `main` / origin/HEAD / origin/main remain. Badge owner
+  note preserved in `docs/acceptance/2026-10-03-count-badges.md`. Stale
+  `fix/current-main-outlook-diagnostics` (HTTP-status label fallback +
+  branch-only popup test) dropped per owner decision, not tracked.
 - Fresh real-account acceptance pending for visual-polish candidate
   (`docs/acceptance/2026-10-03-visual-polish.md`) and earlier popup-UX candidate.
 - `HANDOFF-optimistic-read.md` (PR #25 worktree) is stale vs current main
