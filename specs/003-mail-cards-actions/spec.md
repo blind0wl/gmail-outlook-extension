@@ -238,3 +238,20 @@ This supersedes the immediate-dismissal read presentation above; Open still
 removes its card immediately after marking it opened locally. Fresh verification
 and real-account acceptance status are in
 [read grace-period acceptance](../../docs/acceptance/2026-10-02-read-grace-period.md).
+
+
+## Unread expansion stages read — 2026-10-05
+
+Owner direction supersedes the original display-only/no-preview-expansion
+requirements: expanding an unread card by click, Enter or Space stages the
+existing reversible read interaction. Read styling and extension unread counts
+update immediately. The expanded card, including Trash, remains available
+while hovered or keyboard focused; after leaving, it dismisses after five
+seconds. An outside click, including a click on another card, commits
+immediately. Mark unread and Trash cancel the staged read; collapsing and
+re-expanding preserve it. Pending or uncertain mailbox actions must not be
+staged by expansion. The worker/provider read remains deferred until dismissal,
+using the existing account isolation, failure recovery, and cache-only popup
+flow. Open continues to use its separate provider-unchanged local-read behavior.
+Fresh synthetic verification and pending real-account Chrome acceptance are
+recorded in [the 2026-10-05 acceptance record](../../docs/acceptance/2026-10-05-expand-marks-read.md).

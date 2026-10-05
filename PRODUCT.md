@@ -136,3 +136,17 @@ Cached preview expansion already exists and is preserved; its discrepancy with
 the older no-expansion requirement is recorded in the dated acceptance record.
 Fresh real-account acceptance for this visual candidate is pending in
 `docs/acceptance/2026-10-03-visual-polish.md`.
+
+## Owner-approved unread expansion read — 2026-10-05
+
+Expanding an unread card by click, Enter or Space stages the existing
+reversible mailbox read: read styling and unread counts update immediately,
+while the card and Trash action remain available during the grace period.
+Leaving the card starts the five-second timer; hovering or keyboard focus
+pauses it, and an outside click (including another card) commits immediately.
+Mark unread or Trash cancels the staged read. Collapsing and re-expanding do
+not cancel it. Pending or uncertain mailbox actions remain locked and cannot
+be staged by expansion. This supersedes the earlier display-only expansion
+behavior. Open keeps its provider-unchanged local-read behavior. The popup
+remains cache-only; the owner reported smoke tests passed on 2026-10-05 in
+`docs/acceptance/2026-10-05-expand-marks-read.md`.

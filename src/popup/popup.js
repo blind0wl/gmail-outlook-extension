@@ -228,9 +228,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
   }
 
-  // Cards expanded in place. Survives list re-renders; expanding never
-  // touches mailbox state, it only unclamps the cached snippet.
-  // Accordion: opening one card closes the others.
+  // Accordion: opening one card closes the others. Expanded unread cards also
+  // stage the existing reversible read interaction.
   var expandedKeys = new Set();
   var cardToggles = new Map();
   function toggleCard(card, toggle, key, force) {
@@ -251,6 +250,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     cardToggles.set(key, { card: card, toggle: toggle, subject: toggle.dataset.subject });
     card.classList.toggle("expanded", on);
     toggle.setAttribute("aria-expanded", String(on));
+    return on;
   }
 
   function visibleItems() {
@@ -336,7 +336,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     renderList();
   }
   function stageRead(key) {
-    if (stagedReads.has(key) || pendingMailActions.has(key)) return;
+    if (stagedReads.has(key) || pendingMailActions.has(key) || ["pending", "uncertain"].includes(mailActions[key]?.state)) return;
     var item = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; });
     if (!item) return;
     mailFeedback.delete(key);
@@ -645,7 +645,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
         // The toggle owns sender/subject/snippet; icon and Open buttons
         // stay siblings so nesting stays valid. Clicking elsewhere on the
-        // card delegates to the toggle; expanding only unclamps cache text.
+        // card delegates to the toggle; expansion stages unread mail for the
+        // existing reversible read interaction.
         // Preview and footer actions are separate controls. Native button
         // activation must never pass through the preview's key handler.
         var toggle = document.createElement("div");
@@ -739,12 +740,20 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         card.appendChild(toggle);
         card.appendChild(icons);
         toggle.addEventListener("click", function () {
-          toggleCard(card, toggle, item.key);
+          // stageRead rerenders the list synchronously. Commit other staged
+          // cards first so this click cannot be lost when the target is moved
+          // out of the live document before the document click listener runs.
+          commitOtherReads(item.key);
+          var expanded = toggleCard(card, toggle, item.key);
+          if (expanded && isUnread(item)) stageRead(item.key);
         });
         toggle.addEventListener("keydown", function (event) {
           if (event.key === "Enter" || event.key === " ") {
+            keyboardMode = true;
             event.preventDefault();
-            toggleCard(card, toggle, item.key);
+            commitOtherReads(item.key);
+            var expanded = toggleCard(card, toggle, item.key);
+            if (expanded && isUnread(item)) stageRead(item.key);
           }
         });
         card.addEventListener("keydown", function (event) {
