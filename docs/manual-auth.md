@@ -37,7 +37,8 @@ The separate `tabs` permission amendment allows the worker to inspect the active
 4. Click Refresh. Cache and badge update, but manual refresh never toasts or chimes.
 5. Click Sign out for one account. Its tokens are removed and explicit signed-out state survives worker restart. Automatic polling must not sign it back in. Other accounts remain usable. Sign in explicitly to resume.
 6. Click Remove. The account and its cached messages disappear from the extension; no server mail is deleted. Other account rows remain.
-7. Revoke a grant in the provider's account settings. A failed silent renewal shows needs sign in for that account. Transient 429/5xx shows a retry deadline instead.
+7. Reload the extension, or restart Chrome. Outlook tokens clear with session storage, so the next poll tries one hidden `prompt=none` sign-in from the browser's existing Microsoft login. While that login is alive, Outlook resumes with no Sign in click and no window. Without it, the account shows needs sign in and the hidden attempt does not repeat until the next reload or restart.
+8. Revoke a grant in the provider's account settings. A failed silent renewal shows needs sign in for that account. Transient 429/5xx shows a retry deadline instead.
 
 ## Focus and OS DND
 
@@ -50,6 +51,7 @@ Chrome's [notifications API](https://developer.chrome.com/docs/extensions/refere
 - [ ] Two Gmail accounts and one Outlook account add successfully from popup prompts.
 - [ ] Mailbox ownership mismatch rejects without caching a foreign credential.
 - [ ] Per-account sign-out remains effective after worker restart and does not affect another account.
+- [ ] After extension reload and after Chrome restart, Outlook resumes without a Sign in click while signed in to Microsoft in this browser.
 - [ ] Explicit sign-in resumes that account; removal drops only its extension cache.
 - [ ] Gmail needs no registration at all (session-cookie transport); Outlook token lifecycle verified with actual accounts.
 - [ ] Refresh, baseline, focused-tab suppression, master mute, chime, and badge verified in Chrome.

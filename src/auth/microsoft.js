@@ -26,6 +26,13 @@ export const GRAPH_ME_URL =
 // Refresh one minute before expiry so a poll never races the clock.
 export const TOKEN_SKEW_MS = 60_000;
 
+// Session storage clears on browser restart and extension reload, so a
+// poll that finds no record first tries the browser's Microsoft login.
+// One failed attempt per account per browser session: the marker lives in
+// session storage too, so the next restart or reload tries again.
+export const SILENT_SIGN_IN_TIMEOUT_MS = 10_000;
+const SILENT_FAILED_KEY = "auth.microsoft.silentFailed";
+
 // Module-level Entra app id. Task 9 integration calls
 // configureMicrosoftAuth once with the public application id; getGraphToken
 // then keeps its promised one-argument shape. An explicit per-call
@@ -237,6 +244,7 @@ export function buildAuthorizeUrl({
   codeChallenge,
   state,
   loginHint,
+  prompt,
 }) {
   if (!clientId) throw new Error("microsoft auth: clientId required");
   if (!redirectUri) throw new Error("microsoft auth: redirectUri required");
@@ -252,6 +260,7 @@ export function buildAuthorizeUrl({
   });
   // login_hint pins the chooser to the requested address for multi-account.
   if (loginHint) params.set("login_hint", loginHint);
+  if (prompt) params.set("prompt", prompt);
   return `${MS_AUTHORITY}/oauth2/v2.0/authorize?${params}`;
 }
 
@@ -378,13 +387,15 @@ export function isFresh(record, now = Date.now()) {
 // a public identifier, never a secret. It defaults to the id set via
 // configureMicrosoftAuth, with an explicit argument winning when given.
 // opts selects the session slot and pins the chooser: { loginHint,
-// sessionKey, account }. Defaults preserve the legacy single-slot flow.
+// sessionKey, account, silent }. Defaults preserve the legacy single-slot
+// flow. silent runs prompt=none in a hidden window: it completes only on
+// the browser's existing Microsoft login and never shows UI.
 export async function signInMicrosoft(
   clientId,
   generation = undefined,
   opts = {},
 ) {
-  const { loginHint, sessionKey = MS_SESSION_KEY, account } = opts;
+  const { loginHint, sessionKey = MS_SESSION_KEY, account, silent } = opts;
   generation ??= capture(guardKey(sessionKey));
   const resolvedId = resolveClientId(clientId);
   // Epoch is fixed at entry (synchronously, via the default above for
@@ -404,10 +415,21 @@ export async function signInMicrosoft(
     codeChallenge: challenge,
     state,
     loginHint,
+    prompt: silent ? "none" : undefined,
   });
+  const flowOpts = silent
+    ? {
+        url: authUrl,
+        interactive: false,
+        // The consumers authority hops through login.live.com before it
+        // redirects back, so the first page load is not the answer.
+        abortOnLoadForNonInteractive: false,
+        timeoutMsForNonInteractive: SILENT_SIGN_IN_TIMEOUT_MS,
+      }
+    : { url: authUrl, interactive: true };
   const callbackUrl = await new Promise((resolve, reject) => {
     try {
-      id.launchWebAuthFlow({ url: authUrl, interactive: true }, (url) => {
+      id.launchWebAuthFlow(flowOpts, (url) => {
         const err = globalThis.chrome?.runtime?.lastError ?? null;
         if (err || !url) {
           reject(new Error("microsoft sign in cancelled or failed"));
@@ -517,6 +539,9 @@ export async function getGraphTokenForAccount(
     // and must not surface as needs-sign-in.
     if (refreshErr?.transient) throw refreshErr;
     if (refreshErr) throw needsSignIn("refresh-failed", refreshErr);
+    if (!cached && account) {
+      return silentSignIn(resolvedId, generation, account, key);
+    }
     throw needsSignIn("missing-record");
   }
   return signInMicrosoft(resolvedId, generation, {
@@ -524,6 +549,33 @@ export async function getGraphTokenForAccount(
     sessionKey: key,
     account: account || undefined,
   });
+}
+
+async function silentSignIn(clientId, generation, account, sessionKey) {
+  const marker = `${SILENT_FAILED_KEY}:${account}`;
+  const store = sessionStore();
+  if ((await store?.get?.(marker))?.[marker]) {
+    throw needsSignIn("missing-record");
+  }
+  try {
+    return await signInMicrosoft(clientId, generation, {
+      loginHint: account,
+      sessionKey,
+      account,
+      silent: true,
+    });
+  } catch (err) {
+    if (err?.message === "auth superseded by sign out" || err?.transient) {
+      throw err;
+    }
+    // No callback URL means the flow never reached Microsoft's answer
+    // (offline at boot, timeout): retry next poll. Anything else is a
+    // definitive no for this session.
+    if (err?.message !== "microsoft sign in cancelled or failed") {
+      await store?.set?.({ [marker]: true });
+    }
+    throw needsSignIn("missing-record", err);
+  }
 }
 
 function authRequiredError(reason) {
