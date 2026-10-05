@@ -377,7 +377,7 @@ test("moving outside after card replacement releases the hover grace period", as
 test("Open on a staged read performs only the extension-local Open", async t => {
   const { document, window, messages, tabs } = await workspaceFixture();
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  document.querySelector('[data-mail-action="read"]').click();
+  document.querySelector('.card-toggle').click();
   document.querySelector('[data-mail-action="open"]').click();
   window.dispatchEvent(new window.Event('blur'));
   t.mock.timers.tick(5000);
@@ -573,8 +573,8 @@ test("opened mail leaves the list and follows saved local state", async () => {
   assert.equal(document.querySelectorAll(".card").length, 2, "clearing saved local state returns the unread card");
 });
 
-test("cards expand in place on toggle without changing mailbox state", async () => {
-  const { document, messages, tabs } = await workspaceFixture();
+test("expanding unread mail stages read and keeps the card expanded until dismissal", async () => {
+  const { document, data, messages, tabs } = await workspaceFixture();
   const card = document.querySelector(".card");
   const toggle = card.querySelector(".card-toggle");
   assert.ok(toggle, "card content is a toggle control");
@@ -584,29 +584,47 @@ test("cards expand in place on toggle without changing mailbox state", async () 
   assert.ok(icons, "open/read/delete icon actions are available");
   assert.equal(icons.querySelector('[data-mail-action="read"]')?.getAttribute("aria-label")?.includes("conversation as read"), true);
   toggle.click();
-  assert.equal(card.classList.contains("expanded"), true);
-  assert.equal(toggle.getAttribute("aria-expanded"), "true");
-  assert.equal(messages.length, 0, "expanding never writes to the mailbox");
-  assert.equal(tabs.length, 0, "expanding never opens provider tabs");
-  card.querySelector(".card-sender").click();
-  assert.equal(card.classList.contains("expanded"), false, "clicking the card again collapses");
-  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  let current = document.querySelector(".card");
+  assert.equal(current.classList.contains("expanded"), true);
+  assert.equal(current.classList.contains("read"), true, "expansion projects read styling immediately");
+  assert.equal(data.mailCache[0].unread, true, "expansion keeps the cached provider snapshot unchanged");
+  assert.equal(current.querySelector(".card-toggle").getAttribute("aria-expanded"), "true");
+  assert.equal(document.getElementById("unread-count").textContent, "", "expansion updates the unread count immediately");
+  assert.equal(messages.length, 0, "the provider write waits for dismissal");
+  assert.equal(tabs.length, 0, "expansion never opens a provider tab");
+  current.querySelector(".card-sender").click();
+  current = document.querySelector(".card");
+  assert.equal(current.classList.contains("expanded"), false, "clicking the card again collapses");
+  assert.equal(current.classList.contains("read"), true, "collapsing does not cancel the staged read");
+  current.querySelector(".card-toggle").click();
+  current = document.querySelector(".card");
+  assert.equal(current.classList.contains("expanded"), true, "re-expansion stays available");
+  assert.equal(messages.length, 0, "re-expansion does not cancel or commit the staged read");
+  document.getElementById("unread-count").click();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, "read");
 });
 
-test("expanding a second card collapses the first (accordion)", async () => {
+test("expanding another card commits the first staged read, then stages the second", async () => {
   const now = Date.now();
   const mail = (id) => ({ key: "gmail:work%40example.com:" + id, provider: "gmail",
     account: "work@example.com", from: "Sender", subject: id, snippet: "text",
     date: now, unread: true });
-  const { document } = await workspaceFixture({ mailCache: [mail("one"), mail("two")] });
-  const cards = [...document.querySelectorAll(".card")];
-  assert.equal(cards.length, 2);
-  cards[0].querySelector(".card-toggle").click();
-  assert.equal(cards[0].classList.contains("expanded"), true);
-  cards[1].querySelector(".card-toggle").click();
-  assert.equal(cards[1].classList.contains("expanded"), true);
-  assert.equal(cards[0].classList.contains("expanded"), false, "only one card stays expanded");
-  assert.equal(cards[0].querySelector(".card-toggle").getAttribute("aria-expanded"), "false");
+  const { document, messages } = await workspaceFixture({ mailCache: [mail("one"), mail("two")] });
+  document.querySelector('[data-key$=":one"] .card-toggle').click();
+  assert.equal(document.querySelector('[data-key$=":one"]')?.classList.contains("read"), true);
+  document.querySelector('[data-key$=":two"] .card-toggle').click();
+  assert.equal(messages.length, 1, "the previous staged read commits on another-card click");
+  assert.equal(messages[0].key, "gmail:work%40example.com:one");
+  const second = document.querySelector('[data-key$=":two"]');
+  assert.ok(second, "the newly expanded card remains present");
+  assert.equal(second.classList.contains("expanded"), true);
+  assert.equal(second.classList.contains("read"), true);
+  assert.equal(second.querySelector(".card-toggle").getAttribute("aria-expanded"), "true");
+  assert.equal(document.querySelectorAll(".card.expanded").length, 1, "the accordion keeps one expanded card");
+  document.getElementById("unread-count").click();
+  assert.equal(messages.length, 2, "the second staged read commits when leaving it");
+  assert.equal(messages[1].key, "gmail:work%40example.com:two");
 });
 
 test("mail action keys remain available to native buttons without expanding the preview", async () => {
@@ -626,26 +644,132 @@ test("mail action keys remain available to native buttons without expanding the 
   expand.key = 'Enter';
   card.querySelector('.card-toggle').dispatchEvent(expand);
   assert.equal(expand.defaultPrevented, true, 'preview handles its own key');
-  assert.equal(card.classList.contains('expanded'), true);
+  const current = document.querySelector('.card');
+  assert.equal(current.classList.contains('expanded'), true);
+  assert.equal(current.classList.contains('read'), true, 'Enter stages read just like a mouse click');
+  assert.equal(document.getElementById('unread-count').textContent, '');
+  const collapse = new window.Event('keydown', { bubbles: true, cancelable: true });
+  collapse.key = ' ';
+  current.querySelector('.card-toggle').dispatchEvent(collapse);
+  assert.equal(collapse.defaultPrevented, true, 'Space is handled by the preview');
+  assert.equal(document.querySelector('.card').classList.contains('expanded'), false);
+  const reexpand = new window.Event('keydown', { bubbles: true, cancelable: true });
+  reexpand.key = ' ';
+  document.querySelector('.card-toggle').dispatchEvent(reexpand);
+  assert.equal(document.querySelector('.card').classList.contains('expanded'), true);
+  assert.equal(messages.length, 0, 'Space re-expansion preserves the original staged read');
+  document.getElementById('unread-count').click();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'read');
 });
 
-test("icon clicks act on mail without collapsing the card", async () => {
-  const outlook = { provider: "outlook", account: "o@example.test" };
-  const { document, messages } = await workspaceFixture({
-    accounts: [outlook],
-    mailCache: [{ ...outlook, key: "outlook:o%40example.test:1", from: "Sender", subject: "Icon", snippet: "text", date: Date.now(), unread: true }],
-  });
-  const card = document.querySelector(".card");
-  card.querySelector(".card-toggle").click();
-  assert.equal(card.classList.contains("expanded"), true);
-  chrome.runtime.sendMessage = async (msg) => { messages.push(msg); return { ok: true }; };
-  card.querySelector('[data-mail-action="read"]').click();
-  document.getElementById('unread-count').click(); // Leave the card to commit the staged read.
-  await tick();
-  await tick();
+test("Mark unread cancels expansion read without collapsing the card", async () => {
+  const { document, messages } = await workspaceFixture();
+  document.querySelector(".card-toggle").click();
+  assert.equal(document.querySelector(".card").classList.contains("expanded"), true);
+  const read = document.querySelector('[data-mail-action="read"]');
+  assert.equal(read.getAttribute("aria-disabled"), "false", "Gmail Mark unread remains available during the grace period");
+  read.click();
+  const current = document.querySelector(".card");
+  assert.equal(current.classList.contains("expanded"), true, "icon activation does not collapse the preview");
+  assert.equal(current.classList.contains("read"), false, "Mark unread restores unread styling");
+  assert.equal(document.getElementById('unread-count').textContent, '1');
+  assert.equal(messages.length, 0, "cancellation never reaches the provider");
+});
+
+test("expanded unread card commits read after five seconds away", async t => {
+  const { document, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  document.querySelector(".card-toggle").click();
+  t.mock.timers.tick(4999);
+  assert.equal(messages.length, 0);
+  assert.equal(document.querySelectorAll(".card.read").length, 1);
+  t.mock.timers.tick(1);
   assert.equal(messages.length, 1);
   assert.equal(messages[0].action, "read");
-  assert.equal(document.querySelectorAll(".card").length, 0, "committed read card leaves and stays gone");
+  assert.equal(document.querySelectorAll(".card").length, 0);
+});
+
+test("expanded card hover pauses read dismissal across a synchronous rerender", async t => {
+  const { document, window, messages, data, change } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  document.querySelector(".card").dispatchEvent(new window.Event("mouseenter"));
+  document.querySelector(".card-toggle").click();
+  change({ mailCache: { newValue: data.mailCache } });
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0, "hover remains active after the card node is replaced");
+  const current = document.querySelector(".card");
+  assert.ok(current.querySelector('[data-mail-action="trash"]'), "Trash stays available on the expanded card");
+  document.getElementById("unread-count").dispatchEvent(new window.Event("pointermove", { bubbles: true }));
+  t.mock.timers.tick(4999);
+  assert.equal(messages.length, 0);
+  t.mock.timers.tick(1);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, "read");
+});
+
+test("expanded card keyboard focus pauses read dismissal and Space expands it", async t => {
+  const { document, window, messages, data, change } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  document.querySelector(".card-toggle").focus();
+  const expand = new window.Event("keydown", { bubbles: true, cancelable: true });
+  expand.key = " ";
+  document.querySelector(".card-toggle").dispatchEvent(expand);
+  assert.equal(expand.defaultPrevented, true);
+  change({ mailCache: { newValue: data.mailCache } });
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0, "keyboard focus pauses dismissal after focus restoration");
+  const current = document.querySelector(".card");
+  document.getElementById("refresh-mail").focus();
+  current.dispatchEvent(new window.Event("focusout", { bubbles: true }));
+  await new Promise(setImmediate);
+  t.mock.timers.tick(4999);
+  assert.equal(messages.length, 0);
+  t.mock.timers.tick(1);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, "read");
+});
+
+test("a click still bubbles with its original card after expansion rerenders the list", async () => {
+  const { document, messages } = await workspaceFixture();
+  const key = "gmail:work%40example.com:1";
+  let bubbledKey = null;
+  document.addEventListener("click", event => {
+    const card = event.target?.closest?.(".card");
+    if (card) bubbledKey = card.dataset.key;
+  }, { once: true });
+  document.querySelector(".card-toggle").click();
+  assert.equal(bubbledKey, key, "document sees the event path captured before synchronous replacement");
+  assert.equal(document.querySelector(".card").classList.contains("read"), true);
+  assert.equal(messages.length, 0, "the originating card is not mistaken for an outside click");
+  document.querySelector('[data-mail-action="read"]').click();
+  assert.equal(messages.length, 0, "Mark unread cancels the staged interaction and its timer");
+});
+
+for (const state of ["pending", "uncertain"]) test(`expansion does not stage a locked action (${state})`, async t => {
+  const { document, data, change, messages } = await workspaceFixture();
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const item = data.mailCache[0];
+  change({ mailActions: { newValue: { [item.key]: { state, item } } } });
+  document.querySelector(".card-toggle").click();
+  assert.equal(document.querySelector(".card").classList.contains("expanded"), true, "cached content can still expand");
+  assert.equal(document.querySelector(".card").classList.contains("read"), false, "locked mail stays unread");
+  assert.equal(document.getElementById("unread-count").textContent, "1");
+  assert.equal(document.querySelector('[data-mail-action="read"]').getAttribute("aria-disabled"), "true");
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0, "no read write was staged");
+});
+
+test("Trash stays available on an expanded staged card and cancels its read", async () => {
+  const { document, messages } = await workspaceFixture();
+  document.querySelector(".card-toggle").click();
+  const trash = document.querySelector('[data-mail-action="trash"]');
+  assert.ok(trash, "Trash remains available while expanded");
+  assert.equal(trash.getAttribute("aria-disabled"), "false");
+  trash.click();
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].type, "mail-action");
+  assert.equal(messages[0].action, "trash");
 });
 
 test("outlook read commits on outside click and stays silent", async () => {
