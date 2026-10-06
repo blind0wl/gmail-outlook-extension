@@ -6,7 +6,7 @@
 @supports (color: color-mix(in srgb, black, white)) {
   :root { --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent); --accent-line: color-mix(in srgb, var(--accent) 50%, var(--line)); --line-soft: color-mix(in srgb, var(--line) 55%, transparent); --muted-soft: color-mix(in srgb, var(--muted) 82%, var(--panel)); }
 }
-html { width: 480px; max-width: 100%; background: var(--bg); }
+html { width: 680px; max-width: 100%; background: var(--bg); }
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; max-height: 600px; display: flex; flex-direction: column; font: 13px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg); }
