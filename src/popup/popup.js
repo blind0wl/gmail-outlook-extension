@@ -236,6 +236,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   var expandedKeys = new Set();
   var cardToggles = new Map();
   var messageBodies = new Map();
+  var accountSections = new Map();
+  function currentMailItem(key) {
+    return displayedItems().find(function (item) { return item.key === key; })
+      || items.find(function (item) { return item.key === key; })
+      || stagedReads.get(key)?.item
+      || mailFeedback.get(key)?.item;
+  }
   function showMessageBody(card, key) {
     var body = card.querySelector(".card-body");
     if (!body) return;
@@ -256,9 +263,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
             if (current) { toggleCard(current.card, current.toggle, key, false); current.toggle.focus(); }
           },
           onReading: function (input) {
-            keyboardMode = input === "keyboard";
-            if (input === "pointer") { hoveredCards.clear(); hoveredCards.add(key); }
-            scheduleStagedRead(key);
+            markCardReading(key, input);
           },
           onLink: function (url) { void chrome.tabs.create({ url: url, active: true }); },
         }));
@@ -279,6 +284,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         body.appendChild(retry);
       }
     }
+  }
+  function purgeMessageBody(key) {
+    var record = cardToggles.get(key);
+    record?.body?.replaceChildren();
+    record?.card?.classList.remove("expanded", "has-body");
+    record?.body?.setAttribute("aria-busy", "false");
+    if (record) record.toggle.setAttribute("aria-expanded", "false");
+    messageBodies.delete(key);
+    expandedKeys.delete(key);
   }
   async function loadMessageBody(key) {
     var previous = messageBodies.get(key);
@@ -308,13 +322,17 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         if (other) {
           other.card.classList.remove("expanded");
           other.toggle.setAttribute("aria-expanded", "false");
-          other.toggle.setAttribute("aria-label", "Expand: " + (other.subject || "(no subject)"));
+          other.toggle.setAttribute("aria-label", "Expand: " + (other.subjectLabel || "(no subject)"));
         }
       });
       expandedKeys.clear();
       expandedKeys.add(key);
     } else expandedKeys.delete(key);
-    cardToggles.set(key, { card: card, toggle: toggle, subject: toggle.dataset.subject });
+    var record = cardToggles.get(key) || {};
+    record.card = card;
+    record.toggle = toggle;
+    record.subjectLabel = toggle.dataset.subject;
+    cardToggles.set(key, record);
     card.classList.toggle("expanded", on);
     toggle.setAttribute("aria-expanded", String(on));
     return on;
@@ -377,11 +395,23 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   function scheduleStagedRead(key) {
     var staged = stagedReads.get(key);
     if (!staged) return;
-    if (hoveredCards.has(key) || (keyboardMode && document.activeElement?.closest?.('.card')?.dataset.key === key)) {
+    var active = document.activeElement;
+    var cardHasFocus = active?.closest?.('.card')?.dataset.key === key;
+    var readingFrameHasFocus = active?.classList?.contains("message-frame") && cardHasFocus;
+    if (hoveredCards.has(key) || (keyboardMode && cardHasFocus) || readingFrameHasFocus) {
       pauseStagedRead(key);
     } else if (staged.timer == null) {
       staged.timer = setTimeout(function () { commitStagedRead(key); }, 5000);
     }
+  }
+  function markCardReading(key, input) {
+    if (!key) return;
+    keyboardMode = input === "keyboard";
+    if (input === "pointer") {
+      hoveredCards.clear();
+      hoveredCards.add(key);
+    }
+    scheduleStagedRead(key);
   }
   function commitStagedRead(key) {
     var staged = stagedReads.get(key);
@@ -463,6 +493,73 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     path.setAttribute("d", kind === "read" ? "M3 8l9 6 9-6M3 8l9-5 9 5v12H3V8M8 17l2 2 4-4" : kind === "open" ? "M14 4h6v6M20 4L11 13M19 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6" : "M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7");
     svg.appendChild(path);
     return svg;
+  }
+  function updateMailButton(button, item, action) {
+    var isToggle = action === "read";
+    var isOpen = action === "open";
+    var readState = !isUnread(item);
+    var gmailUnreadBlocked = isToggle && readState && item.provider === "gmail" && !stagedReads.has(item.key);
+    var label = isOpen
+      ? "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account + " (marks opened here, provider unchanged)"
+      : isToggle
+        ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + (readState ? " as unread" : " as read")
+        : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
+    button.className = "card-icon" + (action === "trash" ? " card-trash" : "") + (isToggle && readState ? " card-icon-active" : "");
+    button.title = isOpen
+      ? "Opens the provider message and marks opened here (provider unread unchanged)"
+      : gmailUnreadBlocked ? "Marking unread is not available for Gmail yet" : label;
+    if (isToggle) button.setAttribute("aria-pressed", String(readState));
+    else button.removeAttribute("aria-pressed");
+    button.setAttribute("aria-label", isOpen ? label : label + ": " + (item.subject || "(no subject)") + " for " + item.account);
+    button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || gmailUnreadBlocked));
+  }
+  function updateCard(record, item) {
+    var card = record.card;
+    var read = !isUnread(item);
+    record.item = item;
+    card.classList.toggle("read", read);
+    card.classList.toggle("expanded", expandedKeys.has(item.key));
+    card.setAttribute("data-key", item.key);
+    card.removeAttribute("aria-busy");
+    if (pendingMailActions.has(item.key)) card.setAttribute("aria-busy", "true");
+    record.toggle.dataset.subject = item.subject || "(no subject)";
+    record.toggle.setAttribute("aria-expanded", String(expandedKeys.has(item.key)));
+    record.toggle.setAttribute("aria-label", (expandedKeys.has(item.key) ? "Collapse: " : "Expand: ") + (item.subject || "(no subject)"));
+    record.sender.textContent = item.from || "Unknown sender";
+    record.subjectElement.textContent = item.subject || "(no subject)";
+    record.subjectLabel = item.subject || "(no subject)";
+    record.snippet.textContent = item.snippet || "";
+    record.time.textContent = formatTime(item.date);
+    if (!read && !record.dot) {
+      record.dot = document.createElement("span");
+      record.dot.className = "unread-dot";
+      record.dot.setAttribute("role", "img");
+      record.dot.setAttribute("aria-label", "Unread");
+      card.insertBefore(record.dot, card.firstChild);
+    } else if (read && record.dot) {
+      record.dot.remove();
+      record.dot = null;
+    }
+    if (item.unread === true && item.localRead === true && !record.openedTag) {
+      record.openedTag = document.createElement("span");
+      record.openedTag.className = "opened-tag";
+      record.openedTag.textContent = "Opened here";
+      record.topline.insertBefore(record.openedTag, record.time);
+    } else if (!(item.unread === true && item.localRead === true) && record.openedTag) {
+      record.openedTag.remove();
+      record.openedTag = null;
+    }
+    ["open", "read", "trash"].forEach(function (action) { updateMailButton(record.buttons[action], item, action); });
+    var error = mailErrors[item.key];
+    if (error && !record.error) {
+      record.error = document.createElement("p");
+      record.error.className = "card-error";
+      card.appendChild(record.error);
+    }
+    if (record.error) {
+      if (error) record.error.textContent = error;
+      else { record.error.remove(); record.error = null; }
+    }
   }
   async function actOnMail(key, action, snapshot) {
     if (pendingMailActions.has(key)) return;
@@ -588,17 +685,54 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var hadListFocus = list.contains(active);
     var recoveryFocus = null;
     var index = 0;
-    while (list.firstChild) list.removeChild(list.firstChild);
     var shown = visibleItems();
     var sections = configuredAccounts.filter(function (acct) { return filter === "all" || acct.provider === filter; });
+    var sectionKeys = new Set(sections.map(accountKey));
+    var activeReaderKey = Array.from(expandedKeys).find(function (key) {
+      var record = cardToggles.get(key);
+      return record?.card?.isConnected && sectionKeys.has(accountKey(record.item || currentMailItem(key) || {}));
+    });
+    var preserveLayout = Boolean(activeReaderKey);
     empty.hidden = sections.length !== 0;
     empty.textContent = configuredAccounts.length ? "No accounts match this filter." : "No accounts yet. Open Settings to connect Gmail or Outlook.";
     var setupCta = document.getElementById("empty-setup");
     if (setupCta) setupCta.hidden = configuredAccounts.length !== 0;
-    sections.forEach(function (acct) {
-      var group = document.createElement("li");
-      group.className = "account-section";
-      group.dataset.accountKey = accountKey(acct);
+    accountSections.forEach(function (group, key) {
+      if (sectionKeys.has(key)) return;
+      if (!configuredAccounts.some(function (acct) { return accountKey(acct) === key; })) {
+        group.querySelectorAll(".card").forEach(function (card) {
+          var mailKey = card.getAttribute("data-key");
+          pauseStagedRead(mailKey);
+          stagedReads.delete(mailKey);
+          hoveredCards.delete(mailKey);
+          purgeMessageBody(mailKey);
+          cardToggles.delete(mailKey);
+        });
+      }
+      group.remove();
+      accountSections.delete(key);
+    });
+    if (!preserveLayout) {
+      for (var [key, record] of cardToggles) {
+        if (record.card.isConnected) continue;
+        if (!items.some(function (item) { return item.key === key; })
+          && !stagedReads.has(key) && !mailFeedback.has(key)) {
+          cardToggles.delete(key);
+          messageBodies.delete(key);
+          expandedKeys.delete(key);
+        }
+      }
+    }
+    sections.forEach(function (acct, sectionIndex) {
+      var acctKey = accountKey(acct);
+      var group = accountSections.get(acctKey);
+      var isNewSection = !group;
+      if (!group) {
+        group = document.createElement("li");
+        group.className = "account-section";
+        group.dataset.accountKey = acctKey;
+        accountSections.set(acctKey, group);
+      }
       var heading = document.createElement("header");
       heading.className = "account-heading";
       var top = document.createElement("div");
@@ -646,11 +780,11 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         });
         heading.appendChild(inbox);
       } else heading.append(top, address);
-      group.appendChild(heading);
       var state = acctState;
       var status = acct.enabled === false ? "Paused" : accountStatusLabel(acct, state);
+      var note = null;
       if (status) {
-        var note = document.createElement("div");
+        note = document.createElement("div");
         note.className = "account-note";
         var label = document.createElement("span");
         label.textContent = status;
@@ -670,21 +804,64 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           note.appendChild(recovery);
           if (focusedRecovery === accountKey(acct)) recoveryFocus = recovery;
         }
-        group.appendChild(note);
       }
-      var messageList = document.createElement("ul");
-      messageList.className = "account-mail";
-      group.appendChild(messageList);
-      list.appendChild(group);
+      var messageList = group.querySelector(".account-mail");
+      if (!messageList) {
+        messageList = document.createElement("ul");
+        messageList.className = "account-mail";
+      }
+      if (isNewSection) {
+        group.appendChild(heading);
+        if (note) group.appendChild(note);
+        group.appendChild(messageList);
+        var nextGroup = null;
+        if (preserveLayout) {
+          for (var following = sectionIndex + 1; following < sections.length; following++) {
+            var followingGroup = accountSections.get(accountKey(sections[following]));
+            if (followingGroup?.parentNode === list) { nextGroup = followingGroup; break; }
+          }
+        }
+        list.insertBefore(group, nextGroup);
+      } else {
+        var oldHeading = group.querySelector(".account-heading");
+        if (oldHeading) oldHeading.replaceWith(heading);
+        else group.insertBefore(heading, messageList);
+        var oldNote = group.querySelector(".account-note");
+        if (note) {
+          if (oldNote) oldNote.replaceWith(note);
+          else group.insertBefore(note, messageList);
+        } else if (oldNote) oldNote.remove();
+      }
       if (focusedInbox === accountKey(acct) && inboxUrl) inbox.focus();
       if (!mail.length) {
-        var noMail = document.createElement("p");
-        noMail.className = "account-empty";
+        var noMail = group.querySelector(".account-empty");
+        if (!noMail) {
+          noMail = document.createElement("p");
+          noMail.className = "account-empty";
+          group.appendChild(noMail);
+        }
         // A checked empty mailbox reads differently from missing data.
         noMail.textContent = (!status && state.checkedAt) ? "All caught up." : "No messages to show.";
-        group.appendChild(noMail);
+      } else {
+        group.querySelector(".account-empty")?.remove();
       }
-      mail.forEach(function (item) {
+      var desiredCardKeys = new Set(mail.map(function (item) { return item.key; }));
+      Array.from(messageList.querySelectorAll(".card")).forEach(function (oldCard) {
+        var oldKey = oldCard.getAttribute("data-key");
+        if (desiredCardKeys.has(oldKey)) return;
+        oldCard.remove();
+        pauseStagedRead(oldKey);
+        purgeMessageBody(oldKey);
+        cardToggles.delete(oldKey);
+        stagedReads.delete(oldKey);
+        hoveredCards.delete(oldKey);
+      });
+      mail.forEach(function (item, mailIndex) {
+        var existing = cardToggles.get(item.key);
+        if (existing?.card?.parentNode === messageList) {
+          updateCard(existing, item);
+          return;
+        }
         var read = !isUnread(item);
 
         var card = document.createElement("li");
@@ -739,6 +916,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         // names. Hover and keyboard focus reveal the same native buttons.
         var icons = document.createElement("span");
         icons.className = "card-icons";
+        var mailButtons = {};
         ["open", "read", "trash"].forEach(function (action) {
           var button = document.createElement("button");
           button.type = "button";
@@ -747,38 +925,28 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           // local during that grace period; provider unread remains blocked.
           var isToggle = action === "read";
           var isOpen = action === "open";
-          var readState = !isUnread(item);
-          var gmailUnreadBlocked = isToggle && readState && item.provider === "gmail" && !stagedReads.has(item.key);
-          button.className = "card-icon" + (action === "trash" ? " card-trash" : "") + (isToggle && readState ? " card-icon-active" : "");
           button.dataset.mailAction = action;
-          var label = isOpen
-            ? "Open " + (item.subject || "(no subject)") + " in " + (item.provider === "outlook" ? "Outlook" : "Gmail") + " for " + item.account + " (marks opened here, provider unchanged)"
-            : isToggle
-              ? "Mark " + (item.provider === "gmail" ? "conversation" : "message") + (readState ? " as unread" : " as read")
-              : "Move " + (item.provider === "gmail" ? "conversation to Trash" : "message to Deleted Items");
-          button.title = isOpen
-            ? "Opens the provider message and marks opened here (provider unread unchanged)"
-            : gmailUnreadBlocked ? "Marking unread is not available for Gmail yet" : label;
-          if (isToggle) button.setAttribute("aria-pressed", String(readState));
-          button.setAttribute("aria-label", isOpen ? label : label + ": " + (item.subject || "(no subject)") + " for " + item.account);
-          button.setAttribute("aria-disabled", String(pendingMailActions.has(item.key) || ["pending", "uncertain"].includes(mailActions[item.key]?.state) || gmailUnreadBlocked));
           button.appendChild(actionIcon(action));
+          updateMailButton(button, item, action);
+          mailButtons[action] = button;
           button.addEventListener("click", function (event) {
             event.stopPropagation();
             if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-            commitOtherReads(item.key);
+            var current = currentMailItem(item.key);
+            if (!current) return;
+            commitOtherReads(current.key);
             if (button.getAttribute("aria-disabled") === "true") return;
             if (isOpen) {
-              if (stagedReads.has(item.key)) cancelStagedRead(item.key);
-              void markRead(item.key);
-              openUrl(threadUrl(item));
-            } else if (isToggle && stagedReads.has(item.key) && readState) {
-              cancelStagedRead(item.key);
-            } else if (isToggle && !readState) {
-              stageRead(item.key);
+              if (stagedReads.has(current.key)) cancelStagedRead(current.key);
+              void markRead(current.key);
+              openUrl(threadUrl(current));
+            } else if (isToggle && stagedReads.has(current.key) && !isUnread(current)) {
+              cancelStagedRead(current.key);
+            } else if (isToggle && isUnread(current)) {
+              stageRead(current.key);
             } else {
-              if (stagedReads.has(item.key)) cancelStagedRead(item.key);
-              void actOnMail(item.key, isToggle ? "unread" : action);
+              if (stagedReads.has(current.key)) cancelStagedRead(current.key);
+              void actOnMail(current.key, isToggle ? "unread" : action, current);
             }
           });
           icons.appendChild(button);
@@ -786,6 +954,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         var time = document.createElement("span");
         time.className = "card-time";
         time.textContent = formatTime(item.date);
+        var openedTag = null;
         if (item.unread === true && item.localRead === true) {
           var openedTag = document.createElement("span");
           openedTag.className = "opened-tag";
@@ -812,45 +981,75 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         body.setAttribute("role", "region");
         body.setAttribute("aria-label", "Full message");
         card.appendChild(body);
-        cardToggles.set(item.key, { card: card, toggle: toggle, subject: item.subject });
+        var record = { card: card, toggle: toggle, subjectLabel: item.subject || "(no subject)", item: item,
+          sender: sender, subjectElement: subject, snippet: snippet, time: time, topline: topline,
+          body: body, dot: card.querySelector(".unread-dot"), openedTag: openedTag,
+          buttons: mailButtons, error: null };
+        cardToggles.set(item.key, record);
         if (expandedKeys.has(item.key)) showMessageBody(card, item.key);
         toggle.addEventListener("click", function () {
           // stageRead rerenders the list synchronously. Commit other staged
           // cards first so this click cannot be lost when the target is moved
           // out of the live document before the document click listener runs.
-          commitOtherReads(item.key);
-          var expanded = toggleCard(card, toggle, item.key);
-          if (expanded && isUnread(item)) stageRead(item.key);
-          if (expanded) void loadMessageBody(item.key);
+          var current = currentMailItem(item.key);
+          if (!current) return;
+          commitOtherReads(current.key);
+          var expanded = toggleCard(card, toggle, current.key);
+          if (expanded && isUnread(current)) stageRead(current.key);
+          if (expanded) void loadMessageBody(current.key);
         });
         toggle.addEventListener("keydown", function (event) {
           if (event.key === "Enter" || event.key === " ") {
             keyboardMode = true;
             event.preventDefault();
-            commitOtherReads(item.key);
-            var expanded = toggleCard(card, toggle, item.key);
-            if (expanded && isUnread(item)) stageRead(item.key);
-            if (expanded) void loadMessageBody(item.key);
+            var current = currentMailItem(item.key);
+            if (!current) return;
+            commitOtherReads(current.key);
+            var expanded = toggleCard(card, toggle, current.key);
+            if (expanded && isUnread(current)) stageRead(current.key);
+            if (expanded) void loadMessageBody(current.key);
           }
         });
         card.addEventListener("keydown", function (event) {
           if (event.key === "Escape" && card.classList.contains("expanded")) toggleCard(card, toggle, item.key, false);
         });
 
-        messageList.appendChild(card);
+        var nextCard = null;
+        if (preserveLayout) {
+          for (var nextIndex = mailIndex + 1; nextIndex < mail.length; nextIndex++) {
+            var nextRecord = cardToggles.get(mail[nextIndex].key);
+            if (nextRecord?.card?.parentNode === messageList) { nextCard = nextRecord.card; break; }
+          }
+        }
+        messageList.insertBefore(card, nextCard);
         if (pendingMailActions.has(item.key)) card.setAttribute("aria-busy", "true");
         if (mailErrors[item.key]) {
           var error = document.createElement("p");
           error.className = "card-error";
           error.textContent = mailErrors[item.key];
           card.appendChild(error);
+          record.error = error;
         }
         if (focusedKey === item.key) {
           var restore = focusedToggle ? toggle : card.querySelector('[data-mail-action="' + focusedAction + '"]') || card.querySelector('[data-mail-action="open"]') || toggle;
           restore.focus();
         }
       });
+      if (!preserveLayout) {
+        var orderedCards = mail.map(function (item) { return cardToggles.get(item.key)?.card; }).filter(Boolean);
+        orderedCards.forEach(function (card, cardIndex) {
+          var current = messageList.children[cardIndex] || null;
+          if (current !== card) messageList.insertBefore(card, current);
+        });
+      }
     });
+    if (!preserveLayout) {
+      var orderedGroups = sections.map(function (acct) { return accountSections.get(accountKey(acct)); }).filter(Boolean);
+      orderedGroups.forEach(function (group, groupIndex) {
+        var current = list.children[groupIndex] || null;
+        if (current !== group) list.insertBefore(group, current);
+      });
+    }
     stagedReads.forEach(function (_, key) { scheduleStagedRead(key); });
     if (recoveryFocus) recoveryFocus.focus();
     else if (hadListFocus && !list.contains(document.activeElement)) document.getElementById("refresh-mail").focus();
@@ -1043,6 +1242,16 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       hoveredCards.clear();
       stagedReads.forEach(function (_, key) { scheduleStagedRead(key); });
     });
+    document.addEventListener("wheel", function (event) {
+      var key = event.target?.closest?.(".card")?.dataset.key;
+      if (!key && document.activeElement?.classList?.contains("message-frame"))
+        key = document.activeElement.closest?.(".card")?.dataset.key;
+      markCardReading(key, "pointer");
+    }, { capture: true, passive: true });
+    document.addEventListener("scroll", function (event) {
+      var key = event.target?.closest?.(".card")?.dataset.key;
+      if (key) markCardReading(key, "pointer");
+    }, true);
     document.addEventListener("pointerdown", function () {
       keyboardMode = false;
       stagedReads.forEach(function (_, key) { scheduleStagedRead(key); });
@@ -1214,18 +1423,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           if (changes[ACCOUNTS_KEY]) {
             var anext = changes[ACCOUNTS_KEY].newValue;
             configuredAccounts = Array.isArray(anext) ? anext.map(normalizeAccount) : [];
-            stagedReads.forEach(function (staged, key) {
-              if (!configuredAccounts.some(function (acct) { return acct.enabled !== false && accountKey(acct) === accountKey(staged.item); })) {
+            var readerKeys = new Set([...stagedReads.keys(), ...messageBodies.keys(), ...expandedKeys]);
+            readerKeys.forEach(function (key) {
+              var item = cardToggles.get(key)?.item || currentMailItem(key);
+              var account = item && configuredAccounts.find(function (acct) { return accountKey(acct) === accountKey(item); });
+              if (!account || account.enabled === false) {
                 pauseStagedRead(key);
                 stagedReads.delete(key);
                 hoveredCards.delete(key);
-              }
-            });
-            messageBodies.forEach(function (_body, key) {
-              var item = items.find(function (item) { return item.key === key; });
-              if (!item || !configuredAccounts.some(function (acct) { return acct.enabled !== false && accountKey(acct) === accountKey(item); })) {
-                messageBodies.delete(key);
-                expandedKeys.delete(key);
+                purgeMessageBody(key);
               }
             });
             render();
@@ -1234,12 +1440,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
             var stnext = changes[ACCOUNT_STATE_KEY].newValue;
             accountState = stnext && typeof stnext === "object" ? stnext : {};
             var discardedBody = false;
-            messageBodies.forEach(function (_body, key) {
-              var item = items.find(function (item) { return item.key === key; });
+            var signedOutReaderKeys = new Set([...messageBodies.keys(), ...expandedKeys]);
+            signedOutReaderKeys.forEach(function (key) {
+              var item = cardToggles.get(key)?.item || currentMailItem(key);
               if (item && accountState[accountKey(item)]?.signedOut) {
                 discardedBody = true;
-                messageBodies.delete(key);
-                expandedKeys.delete(key);
+                pauseStagedRead(key);
+                stagedReads.delete(key);
+                hoveredCards.delete(key);
+                purgeMessageBody(key);
               }
             });
             if (discardedBody) render();

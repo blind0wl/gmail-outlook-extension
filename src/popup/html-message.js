@@ -117,6 +117,8 @@ export function createHtmlMessage(content, document, { loadImages = false, onLoa
     inner.addEventListener("load", resize, true);
     inner.addEventListener("pointermove", () => onReading?.("pointer"));
     inner.addEventListener("pointerdown", () => onReading?.("pointer"));
+    inner.addEventListener("wheel", () => onReading?.("pointer"), { passive: true });
+    inner.addEventListener("scroll", () => onReading?.("pointer"), true);
     inner.addEventListener("keydown", () => onReading?.("keyboard"));
     const observer = new ResizeObserver(resize);
     observer.observe(inner.body);

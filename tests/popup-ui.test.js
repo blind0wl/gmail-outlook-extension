@@ -235,6 +235,23 @@ async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
     } };
 }
 
+function attachInlineFrameDocument(frame, window) {
+  const inner = parseHTML(frame.srcdoc).document;
+  inner.body.getBoundingClientRect = () => ({ height: 120 });
+  Object.defineProperty(inner.body, "scrollHeight", { configurable: true, value: 120 });
+  Object.defineProperty(frame, "contentDocument", { configurable: true, value: inner });
+  Object.defineProperty(frame, "contentWindow", {
+    configurable: true,
+    value: { addEventListener() {} },
+  });
+  const previousResizeObserver = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+  frame.dispatchEvent(new window.Event("load"));
+  if (previousResizeObserver === undefined) delete globalThis.ResizeObserver;
+  else globalThis.ResizeObserver = previousResizeObserver;
+  return inner;
+}
+
 test('header unread pill exposes accessible unread name', async () => {
   const { document } = await workspaceFixture();
   const el = document.getElementById('unread-count');
@@ -338,6 +355,18 @@ test("popup dismissal commits staged reads once", async () => {
   assert.equal(messages.length, 1);
   assert.equal(messages[0].action, 'read');
   await tick();
+});
+
+test("provider filtering keeps a staged read pending for popup dismissal", async () => {
+  const outlook = { provider: 'outlook', account: 'outlook@example.test' };
+  const { document, window, messages } = await workspaceFixture({
+    accounts: [{ provider: 'gmail', account: 'work@example.com' }, outlook],
+  });
+  document.querySelector('[data-mail-action="read"]').click();
+  document.querySelector('[data-filter="outlook"]').click();
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'read');
 });
 
 test("clicking a locked action on another card commits the staged read", async () => {
@@ -1558,4 +1587,100 @@ test("focusing the formatted email frame keeps staged read pending until the pop
   assert.ok(document.querySelector('.card.expanded'));
   window.dispatchEvent(new window.Event('pagehide'));
   assert.equal(messages[0].action, 'read', 'closing the popup still commits read');
+});
+
+test("mouse-mode iframe focus pauses the read after the pointer leaves the popup", async t => {
+  const { document, window, messages } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = async msg => msg.type === 'message-body'
+      ? { ok: true, contentType: 'html', content: '<p>Formatted body</p>' }
+      : (messages.push(msg), { ok: true });
+  });
+  document.querySelector('.card-toggle').click();
+  await tick();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const frame = document.querySelector('.message-frame');
+  const inner = attachInlineFrameDocument(frame, window);
+  document.dispatchEvent(new window.Event('pointerdown'));
+  inner.dispatchEvent(new window.Event('pointerdown'));
+  frame.focus();
+  document.dispatchEvent(new window.Event('pointerout'));
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0, 'iframe focus keeps the reading timer paused in pointer mode');
+  window.dispatchEvent(new window.Event('pagehide'));
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(messages.length, 1, 'popup dismissal commits the staged read once');
+  assert.equal(messages[0].action, 'read');
+});
+
+test("HTML reader and iframe focus survive cloned cache, action, status and new-mail updates", async () => {
+  const { document, window, data, change } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = async msg => msg.type === 'message-body'
+      ? { ok: true, contentType: 'html', content: '<p>Long formatted message</p>' }
+      : { ok: true };
+  });
+  const initial = data.mailCache[0];
+  document.querySelector('.card-toggle').click();
+  await tick();
+  const frame = document.querySelector('.message-frame');
+  const section = document.querySelector('.account-section');
+  attachInlineFrameDocument(frame, window);
+  frame.focus();
+  const incoming = { ...initial, key: 'gmail:work%40example.com:new', subject: 'New arrival',
+    date: initial.date + 1000, unread: true };
+  change({
+    mailCache: { newValue: [{ ...initial, subject: 'Updated subject' }, incoming] },
+    accountState: { newValue: { 'gmail:work@example.com': { checkedAt: Date.now() } } },
+    mailActions: { newValue: { other: { state: 'uncertain', item: { ...incoming, key: 'other' } } } },
+  });
+  assert.equal(document.querySelector('.account-section'), section, 'the reader keeps its account section connected');
+  assert.equal(document.querySelector('.card.expanded .message-frame'), frame, 'the loaded frame node is reused');
+  assert.equal(frame.isConnected, true, 'cache refresh does not detach the frame');
+  assert.equal(document.activeElement, frame, 'cache refresh does not steal iframe focus');
+  assert.equal(document.querySelector('.card-toggle .card-subject').textContent, 'New arrival');
+  assert.equal(document.querySelector('.account-checked')?.textContent.startsWith('Checked '), true);
+});
+
+test("wheel and scroll activity in formatted mail pause staged read until leaving the reader", async t => {
+  const { document, window, messages } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = async msg => msg.type === 'message-body'
+      ? { ok: true, contentType: 'html', content: '<p>Long formatted message</p>' }
+      : (messages.push(msg), { ok: true });
+  });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  document.querySelector('.card-toggle').click();
+  await new Promise(setImmediate);
+  const frame = document.querySelector('.message-frame');
+  const inner = attachInlineFrameDocument(frame, window);
+  inner.dispatchEvent(new window.Event('wheel'));
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0, 'scrolling an iframe does not commit the staged read');
+  document.getElementById('unread-count').dispatchEvent(new window.Event('pointermove', { bubbles: true }));
+  t.mock.timers.tick(4999);
+  assert.equal(messages.length, 0, 'the normal grace period starts after leaving');
+  t.mock.timers.tick(1);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].action, 'read');
+  await new Promise(setImmediate);
+});
+
+test("Escape, image opt-in and account removal still clear the retained reader", async () => {
+  const { document, window, data, change } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = async msg => msg.type === 'message-body'
+      ? { ok: true, contentType: 'html', content: '<p>Formatted</p><img src="https://example.test/image.png" alt="Photo">' }
+      : { ok: true };
+  });
+  document.querySelector('.card-toggle').click();
+  await tick();
+  const frame = document.querySelector('.message-frame');
+  attachInlineFrameDocument(frame, window);
+  frame.contentDocument.dispatchEvent(Object.assign(new window.Event('keydown'), { key: 'Escape' }));
+  assert.equal(document.querySelector('.card.expanded'), null, 'Escape still collapses the expanded card');
+  document.querySelector('.card-toggle').click();
+  await tick();
+  document.querySelector('.message-image-tools button').click();
+  const loaded = document.querySelector('.message-frame');
+  assert.match(loaded.srcdoc, /src="https:\/\/example.test\/image.png"/);
+  change({ accounts: { newValue: [] } });
+  assert.equal(document.querySelector('.message-frame'), null, 'removing the account clears its reader frame');
+  assert.equal(document.querySelectorAll('.card').length, 0);
 });
