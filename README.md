@@ -6,7 +6,13 @@ chime. There is no backend or analytics. Mail and credentials stay in your
 browser profile and are exchanged only with the providers.
 
 The popup groups cached mail under each account in separate rounded cards, with
-bold sender/subject and an automatic preview capped at three lines. Hover or
+bold sender/subject and an automatic preview capped at three lines. Click a card
+(or press Enter/Space) to load the complete message. HTML emails preserve headings, colours, tables
+and inline styles in a separate reading frame; plain-text mail stays selectable
+text. External images are hidden until you click **Load images** for that
+message. Links open in a browser tab. Full bodies and image choices are held
+only while the popup is open; embedded attachment images and attachments
+stay in the provider mailbox. Hover or
 keyboard focus reveals mark-as-read and Trash actions. Gmail uses the existing
 browser login and acts on **whole conversations**; Outlook acts on individual
 messages through Graph. Trash remains recoverable in the owning mailbox; the
@@ -113,7 +119,7 @@ framework, bundler, or production npm dependencies.
 
 The worker fetches provider data, normalizes it, and writes to
 `chrome.storage.local`. The popup reads that cache and sends account/refresh/
-local-read/mailbox-action messages to the worker; it never calls provider APIs. One failed
+local-read/mailbox-action/full-body messages to the worker; it never calls provider APIs. One failed
 account leaves the other accounts usable. Poll cycles and storage commits are
 serialized to protect newer mail and sign-out decisions.
 

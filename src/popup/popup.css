@@ -101,7 +101,11 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .card-subject { font-size: 14px; font-weight: 650; line-height: 1.4; color: var(--text); -webkit-line-clamp: 2; line-clamp: 2; }
 .card.read .card-subject { font-weight: 400; color: var(--muted); }
 .card-snippet { margin-top: 3px; font-size: 12.5px; line-height: 1.45; color: var(--muted); -webkit-line-clamp: 3; line-clamp: 3; overflow-wrap: anywhere; }
-.card.expanded .card-snippet { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+.card.expanded.has-body .card-snippet { display: none; }
+.card-body { display: none; }
+.card.expanded .card-body { display: block; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.card-body p { margin: 0 0 8px; }
+.card-body:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .card-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 /* Actions float over the time on hover or focus, so cards keep no footer row. */
 .card-icons { position: absolute; top: 5px; right: 6px; display: flex; gap: 1px; padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); visibility: hidden; }
@@ -230,3 +234,8 @@ input[type="checkbox"]:checked::before { transform: translateX(14px); background
   .unread-dot { background: CanvasText; }
   .theme-swatch { forced-color-adjust: none; }
 }
+
+.html-message { white-space: normal; }
+.message-frame { display: block; width: 100%; height: 100px; border: 0; border-radius: 6px; background: #fff; }
+.message-image-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
+.message-image-tools button { flex-shrink: 0; font-size: 12px; }

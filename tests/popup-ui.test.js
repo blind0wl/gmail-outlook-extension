@@ -208,10 +208,14 @@ async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
     ...overrides,
   };
   const messages = [];
+  const bodyMessages = [];
   const tabs = [];
   let listener;
   globalThis.chrome = {
-    runtime: { sendMessage: async msg => { messages.push(msg); return { ok: true }; } },
+    runtime: { sendMessage: async msg => {
+      if (msg.type === "message-body") { bodyMessages.push(msg); return { ok: true, content: "Full message text", contentType: "text" }; }
+      messages.push(msg); return { ok: true };
+    } },
     tabs: { create: async tab => { tabs.push(tab); } },
     storage: {
       local: {
@@ -224,7 +228,7 @@ async function workspaceFixture(overrides = {}, configureChrome = () => {}) {
   configureChrome(globalThis.chrome);
   await import(`../src/popup/popup.js?workspace=${++popupFixtureId}`);
   await tick(); await tick();
-  return { document, window, data, messages, tabs,
+  return { document, window, data, messages, bodyMessages, tabs,
     change: changes => {
       if (changes.mailActions) data.mailActions = changes.mailActions.newValue;
       listener(changes, "local");
@@ -1428,4 +1432,130 @@ test('pending Save preserves draft until response', async () => {
   assert.deepEqual(presetStates(document), ['false', 'true', 'false', 'false', 'false']);
   assert.match(document.getElementById('poll-status').textContent, /changed while saving/i);
   assert.deepEqual(messages, [{ type: 'set-poll-interval', pollIntervalMs: 300000 }]);
+});
+
+
+test("expanded mail loads the full body once, preserves paragraphs and remains selectable", async () => {
+  const { document, bodyMessages } = await workspaceFixture();
+  assert.equal(bodyMessages.length, 0, "collapsed previews stay cache-only");
+  document.querySelector('.card-toggle').click();
+  assert.match(document.querySelector('.card-body').textContent, /Loading full message/);
+  await tick();
+  assert.equal(document.querySelector('.card-body').textContent, 'Full message text');
+  assert.equal(document.querySelector('.card-toggle .card-body'), null, 'reading and selecting text does not toggle the card');
+  document.querySelector('.card-body').click();
+  assert.equal(document.querySelector('.card').classList.contains('expanded'), true);
+  document.querySelector('.card-toggle').click();
+  document.querySelector('.card-toggle').click();
+  await tick();
+  assert.equal(bodyMessages.length, 1, 're-expansion reuses the body for this popup');
+});
+
+test("body loading can fail and retry without changing the preview or losing expansion", async () => {
+  let calls = 0;
+  const { document, data } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = async msg => {
+      if (msg.type !== 'message-body') return { ok: true };
+      calls++;
+      return calls === 1 ? { ok: false } : { ok: true, contentType: 'html', content: '<p>First &amp; second</p><p>Final line</p><script>secret</script><img src="https://example.test/tracker">' };
+    };
+  });
+  document.querySelector('.card-toggle').click();
+  await tick();
+  assert.match(document.querySelector('.card-body').textContent, /Could not load/);
+  document.querySelector('.card-body button').click();
+  await tick();
+  const frame = document.querySelector('.card-body iframe');
+  assert.ok(frame, 'HTML mail uses the formatted viewer');
+  assert.match(frame.srcdoc, /<p>First &amp; second<\/p><p>Final line<\/p>/);
+  assert.equal(frame.getAttribute('sandbox'), 'allow-same-origin');
+  assert.equal(frame.srcdoc.includes('<script>secret'), false);
+  assert.equal(document.querySelector('.card-body script, .card-body img'), null);
+  assert.equal(document.querySelector('.card').classList.contains('expanded'), true);
+  assert.equal(data.mailCache[0].snippet, 'A cached preview');
+  assert.equal(calls, 2);
+});
+
+test("a body finishing after an accordion switch updates only its own card", async () => {
+  let finish;
+  const mail = id => ({ key: 'gmail:work%40example.com:' + id, provider: 'gmail', account: 'work@example.com', unread: true, subject: id, snippet: 'Preview', date: Date.now() });
+  const { document } = await workspaceFixture({ mailCache: [mail('one'), mail('two')] }, chrome => {
+    chrome.runtime.sendMessage = msg => msg.key.endsWith(':one') ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ ok: true, content: 'Second body', contentType: 'text' });
+  });
+  document.querySelector('[data-key$=":one"] .card-toggle').click();
+  document.querySelector('[data-key$=":two"] .card-toggle').click();
+  await tick();
+  finish({ ok: true, content: 'First body', contentType: 'text' });
+  await tick();
+  assert.equal(document.querySelector('.card.expanded .card-body').textContent, 'Second body');
+  assert.equal(document.querySelector('.card.expanded').dataset.key, 'gmail:work%40example.com:two');
+});
+
+
+test("sign-out discards cached and pending full bodies", async () => {
+  let finish;
+  const { document, change } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = () => new Promise(resolve => { finish = resolve; });
+  });
+  document.querySelector('.card-toggle').click();
+  change({ accountState: { newValue: { 'gmail:work@example.com': { signedOut: true } } } });
+  finish({ ok: true, content: 'Private body after sign-out', contentType: 'text' });
+  await tick();
+  assert.equal(document.querySelector('.card.expanded'), null);
+  assert.equal(document.body.textContent.includes('Private body after sign-out'), false);
+});
+
+
+test("successful full bodies are cleared on sign-out but survive account preference changes", async () => {
+  const { document, change, data, bodyMessages } = await workspaceFixture();
+  document.querySelector('.card-toggle').click();
+  await tick();
+  change({ accounts: { newValue: [{ ...data.accounts[0], notify: false }] } });
+  assert.equal(document.querySelector('.card.expanded .card-body').textContent, 'Full message text');
+  assert.equal(bodyMessages.length, 1);
+  change({ accountState: { newValue: { 'gmail:work@example.com': { signedOut: true } } } });
+  assert.equal(document.querySelector('.card.expanded'), null);
+  assert.equal(document.body.textContent.includes('Full message text'), false);
+});
+
+
+test("formatted mail blocks external images until Load images and preserves that choice through rerenders", async () => {
+  const { document, change, data } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = async msg => msg.type === 'message-body'
+      ? { ok: true, contentType: 'html', content: '<h2 style="color:#245;">Hello</h2><img src="https://example.test/image.png" alt="Photo">' }
+      : { ok: true };
+  });
+  document.querySelector('.card-toggle').click();
+  await tick();
+  assert.equal(document.querySelector('.message-frame').srcdoc.includes('<img'), false);
+  document.querySelector('.message-image-tools button').click();
+  assert.equal(document.querySelector('.message-frame').srcdoc.includes('src="https://example.test/image.png"'), true);
+  assert.equal(document.querySelector('.message-image-tools'), null);
+  assert.equal(document.querySelector('.card').classList.contains('expanded'), true);
+  change({ mailCache: { newValue: data.mailCache } });
+  assert.equal(document.querySelector('.message-frame').srcdoc.includes('src="https://example.test/image.png"'), true);
+});
+
+test("focusing the formatted email frame keeps staged read pending until the popup closes", async t => {
+  const { document, window, messages } = await workspaceFixture({}, chrome => {
+    chrome.runtime.sendMessage = async msg => {
+      if (msg.type === 'message-body') return { ok: true, contentType: 'html', content: '<p>Formatted body</p>' };
+      messages.push(msg);
+      return { ok: true };
+    };
+  });
+  document.querySelector('.card-toggle').click();
+  await tick();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const frame = document.querySelector('.message-frame');
+  frame.focus();
+  const keyboard = new window.Event('keydown', { bubbles: true });
+  keyboard.key = 'Tab';
+  document.dispatchEvent(keyboard);
+  window.dispatchEvent(new window.Event('blur'));
+  t.mock.timers.tick(10000);
+  assert.equal(messages.length, 0, 'frame focus does not dismiss the staged card');
+  assert.ok(document.querySelector('.card.expanded'));
+  window.dispatchEvent(new window.Event('pagehide'));
+  assert.equal(messages[0].action, 'read', 'closing the popup still commits read');
 });

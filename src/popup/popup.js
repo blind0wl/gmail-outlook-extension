@@ -1,9 +1,12 @@
+import { createHtmlMessage } from "./html-message.js";
+import { messageBodyText } from "./message-body.js";
 import { initPollSettings } from "./poll-settings-form.js";
 import { initPollPresets } from "./poll-presets.js";
 // A v5 inbox popup. Reads the normalized cache from chrome.storage.local
 // key "mailCache" only (shape from src/store/cache.js):
 // { key, provider, account, from, subject, snippet, date, unread, localRead }
-// Keys include provider, encoded account, and message ID. No network calls.
+// Keys include provider, encoded account, and message ID. Full message bodies
+// are requested from the worker on expansion and held only for this popup.
 // Per-account error rows (stale, offline, needs sign in) read the worker's
 // "accountState" flags and recover via a "sign-in" runtime message.
 
@@ -232,6 +235,70 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   // stage the existing reversible read interaction.
   var expandedKeys = new Set();
   var cardToggles = new Map();
+  var messageBodies = new Map();
+  function showMessageBody(card, key) {
+    var body = card.querySelector(".card-body");
+    if (!body) return;
+    body.replaceChildren();
+    var state = messageBodies.get(key);
+    card.classList.toggle("has-body", state?.text !== undefined);
+    body.setAttribute("aria-busy", String(state?.loading === true));
+    if (state?.text !== undefined) {
+      if (state.contentType === "html" && state.content) {
+        body.appendChild(createHtmlMessage(state.content, document, {
+          loadImages: state.loadImages === true,
+          onLoadImages: function () {
+            state.loadImages = true;
+            showMessageBody(card, key);
+          },
+          onEscape: function () {
+            var current = cardToggles.get(key);
+            if (current) { toggleCard(current.card, current.toggle, key, false); current.toggle.focus(); }
+          },
+          onReading: function (input) {
+            keyboardMode = input === "keyboard";
+            if (input === "pointer") { hoveredCards.clear(); hoveredCards.add(key); }
+            scheduleStagedRead(key);
+          },
+          onLink: function (url) { void chrome.tabs.create({ url: url, active: true }); },
+        }));
+      } else body.textContent = state.text || "This message has no text content.";
+    } else {
+      var status = document.createElement("p");
+      status.setAttribute("role", "status");
+      status.textContent = state?.loading ? "Loading full message…" : "Could not load the full message.";
+      body.appendChild(status);
+      if (!state?.loading) {
+        var retry = document.createElement("button");
+        retry.type = "button";
+        retry.textContent = "Retry";
+        retry.addEventListener("click", function (event) {
+          event.stopPropagation();
+          loadMessageBody(key);
+        });
+        body.appendChild(retry);
+      }
+    }
+  }
+  async function loadMessageBody(key) {
+    var previous = messageBodies.get(key);
+    if (previous?.loading || previous?.text !== undefined) return;
+    var state = { loading: true };
+    messageBodies.set(key, state);
+    var card = cardToggles.get(key)?.card;
+    if (card) showMessageBody(card, key);
+    try {
+      var result = await chrome.runtime.sendMessage({ type: "message-body", key: key });
+      if (messageBodies.get(key) !== state) return;
+      if (!result?.ok || typeof result.content !== "string" || !["text", "html"].includes(result.contentType)) throw Error();
+      state.text = messageBodyText(result.content, result.contentType, document);
+      state.content = result.content;
+      state.contentType = result.contentType;
+    } catch { /* Retry stays available without exposing provider errors. */ }
+    state.loading = false;
+    card = cardToggles.get(key)?.card;
+    if (card) showMessageBody(card, key);
+  }
   function toggleCard(card, toggle, key, force) {
     var on = force !== undefined ? force : !card.classList.contains("expanded");
     if (on) {
@@ -739,6 +806,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         toggle.appendChild(snippet);
         card.appendChild(toggle);
         card.appendChild(icons);
+        var body = document.createElement("div");
+        body.className = "card-body";
+        body.tabIndex = 0;
+        body.setAttribute("role", "region");
+        body.setAttribute("aria-label", "Full message");
+        card.appendChild(body);
+        cardToggles.set(item.key, { card: card, toggle: toggle, subject: item.subject });
+        if (expandedKeys.has(item.key)) showMessageBody(card, item.key);
         toggle.addEventListener("click", function () {
           // stageRead rerenders the list synchronously. Commit other staged
           // cards first so this click cannot be lost when the target is moved
@@ -746,6 +821,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           commitOtherReads(item.key);
           var expanded = toggleCard(card, toggle, item.key);
           if (expanded && isUnread(item)) stageRead(item.key);
+          if (expanded) void loadMessageBody(item.key);
         });
         toggle.addEventListener("keydown", function (event) {
           if (event.key === "Enter" || event.key === " ") {
@@ -754,6 +830,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
             commitOtherReads(item.key);
             var expanded = toggleCard(card, toggle, item.key);
             if (expanded && isUnread(item)) stageRead(item.key);
+            if (expanded) void loadMessageBody(item.key);
           }
         });
         card.addEventListener("keydown", function (event) {
@@ -978,7 +1055,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       commitOtherReads(event.target?.closest?.('.card')?.dataset.key);
     });
     window.addEventListener("pagehide", function () { commitOtherReads(); });
-    window.addEventListener("blur", function () { commitOtherReads(); });
+    window.addEventListener("blur", function () {
+      // Focusing the child document blurs this window while the popup stays open.
+      setTimeout(function () {
+        if (document.activeElement?.classList?.contains("message-frame")) return;
+        commitOtherReads();
+      }, 0);
+    });
     var pollPresets = initPollPresets();
     var pollSettings = initPollSettings({ onFill: () => pollPresets?.sync() });
     initThemes();
@@ -1138,12 +1221,29 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
                 hoveredCards.delete(key);
               }
             });
+            messageBodies.forEach(function (_body, key) {
+              var item = items.find(function (item) { return item.key === key; });
+              if (!item || !configuredAccounts.some(function (acct) { return acct.enabled !== false && accountKey(acct) === accountKey(item); })) {
+                messageBodies.delete(key);
+                expandedKeys.delete(key);
+              }
+            });
             render();
           }
           if (changes[ACCOUNT_STATE_KEY]) {
             var stnext = changes[ACCOUNT_STATE_KEY].newValue;
             accountState = stnext && typeof stnext === "object" ? stnext : {};
-            renderStatus();
+            var discardedBody = false;
+            messageBodies.forEach(function (_body, key) {
+              var item = items.find(function (item) { return item.key === key; });
+              if (item && accountState[accountKey(item)]?.signedOut) {
+                discardedBody = true;
+                messageBodies.delete(key);
+                expandedKeys.delete(key);
+              }
+            });
+            if (discardedBody) render();
+            else renderStatus();
           }
         }
       });
