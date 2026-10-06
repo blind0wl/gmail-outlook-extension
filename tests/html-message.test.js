@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseHTML } from 'linkedom';
-import { sanitizedMessage, safeMessageUrl } from '../src/popup/html-message.js';
+import { createHtmlMessage, sanitizedMessage, safeMessageUrl } from '../src/popup/html-message.js';
 const document = parseHTML('<html></html>').document;
 const body = result => parseHTML(result.html).document;
 
@@ -57,4 +57,34 @@ test('encoded URLs and malformed markup cannot escape the sanitized document', (
   assert.equal(parsed.querySelector('a').getAttribute('href'), null);
   assert.equal(parsed.querySelector('[onerror],script,math'), null);
   assert.equal(parsed.querySelector('div').getAttribute('style'), 'background-color:red');
+});
+
+test('formatted reader reports wheel, scroll and keyboard activity', () => {
+  const { window } = parseHTML('<html></html>');
+  const readings = [];
+  const previousResizeObserver = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
+  try {
+    const container = createHtmlMessage('<p>Reader</p>', window.document, {
+      onReading: input => readings.push(input),
+    });
+    const frame = container.querySelector('iframe');
+    const inner = parseHTML(frame.srcdoc).document;
+    inner.body.getBoundingClientRect = () => ({ height: 20 });
+    Object.defineProperty(inner.body, 'scrollHeight', { value: 20 });
+    Object.defineProperty(frame, 'contentDocument', { configurable: true, value: inner });
+    Object.defineProperty(frame, 'contentWindow', {
+      configurable: true, value: { addEventListener() {} },
+    });
+    frame.dispatchEvent(new window.Event('load'));
+    inner.dispatchEvent(new window.Event('wheel'));
+    inner.dispatchEvent(new window.Event('scroll'));
+    const keyboard = new window.Event('keydown');
+    keyboard.key = 'ArrowDown';
+    inner.dispatchEvent(keyboard);
+    assert.deepEqual(readings, ['pointer', 'pointer', 'keyboard']);
+  } finally {
+    if (previousResizeObserver === undefined) delete globalThis.ResizeObserver;
+    else globalThis.ResizeObserver = previousResizeObserver;
+  }
 });
