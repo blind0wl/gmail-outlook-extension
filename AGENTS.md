@@ -1,10 +1,6 @@
 # Build methodology
 
-When work is invoked, use the managed work skill as the task lifecycle owner.
-Implementation is model-native and follows repository conventions and checks.
-Do not activate Superpowers or another engineering workflow unless the current
-user explicitly requests it. Use pbakaus/impeccable for frontend design and UX.
-Load only the skills needed for the current task.
+Follow repository conventions and checks. Use pbakaus/impeccable for frontend design and UX. Load only the skills needed for the current task.
 
 Continue from approved specifications, plans and tasks without restarting
 completed design interviews or requesting approvals already given.
