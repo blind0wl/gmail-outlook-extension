@@ -156,3 +156,14 @@ export async function fetchOutlookMessages(token, since) {
   }
   return Object.assign(out, { complete: !next });
 }
+
+export async function fetchOutlookMessageBody(token, id) {
+  const raw = await readJson(
+    `${GRAPH_BASE}/me/messages/${encodeURIComponent(id)}?$select=body`,
+    token, 'body', { id },
+  );
+  if (typeof raw.body?.content !== 'string'
+    || !['text', 'html'].includes(raw.body.contentType?.toLowerCase()))
+    throw new OutlookFetchError('body parse', { id });
+  return { content: raw.body.content, contentType: raw.body.contentType.toLowerCase() };
+}

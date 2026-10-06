@@ -1,9 +1,9 @@
-// Strict decoding shared by Gmail queries. Decoded content stays inside providers.
+// Strict decoding shared by Gmail queries. Decoded protocol rows stay inside providers.
 export const MAX_GMAIL_REPLY_BYTES = 2 * 1024 * 1024;
 const MAX_BYTES = MAX_GMAIL_REPLY_BYTES;
 
 // Consume declared-length frames rather than splitting inside mail strings.
-// Unsupported formats fail closed; subject/body fields are never returned.
+// Unsupported formats fail closed. Callers select only the fields they need.
 export function decodeGmailReply(text) {
   const fail = (format, issue) => ({ format, issue, payloads: [] });
   if (typeof text !== 'string') return fail('other', 'unsupported-prefix');

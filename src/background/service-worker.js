@@ -1,5 +1,6 @@
+import { readGmailMessageBody } from "../providers/gmail-conversation-state.js";
 import { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS, normalizePollInterval, validPollInterval } from "../store/poll-settings.js";
-import { mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
+import { gmailSession, mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
 import { inspectGmailTrash } from "../providers/gmail-trash-verification.js";
 import { messageIdOf } from "../popup/links.js";
 // Service worker entry. Owns polling, cache writes, badge, and toasts.
@@ -12,7 +13,7 @@ import { messageIdOf } from "../popup/links.js";
 // through handleSignIn. Tests supply fakes via deps.
 
 import { fetchGmailMessages } from "../providers/gmail.js";
-import { fetchOutlookMessages } from "../providers/outlook.js";
+import { fetchOutlookMessages, fetchOutlookMessageBody } from "../providers/outlook.js";
 import {
   getGraphTokenForAccount,
   renewGraphToken,
@@ -1073,8 +1074,47 @@ export async function handleManualRefresh(accounts, deps = {}) {
   return pollAll(accounts, { ...withRealTokens(accounts, deps), manual: true });
 }
 
+export async function handleMessageBody(msg, deps = {}) {
+  await ready;
+  const accounts = await loadAccounts();
+  const item = getInbox().find(item => item.key === msg.key);
+  const acct = accounts.find(acct => item && accountKey(acct) === accountKey(item));
+  if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct)))
+    return { ok: false, code: "sign-in" };
+  const generation = accountGeneration.get(accountKey(acct)) ?? 0;
+  const current = () => generation === (accountGeneration.get(accountKey(acct)) ?? 0);
+  const id = messageIdOf(item.key);
+  try {
+    let body;
+    if (deps.readBody) body = await deps.readBody(acct, id);
+    else if (acct.provider === "gmail") {
+      const session = await gmailSession(acct.account);
+      if (!current()) return { ok: false, code: "sign-in" };
+      body = await readGmailMessageBody(acct.account, session, id);
+    } else {
+      const tokens = buildTokenProvider(accounts);
+      let token = await tokens.getToken(acct);
+      if (!current()) return { ok: false, code: "sign-in" };
+      try { body = await fetchOutlookMessageBody(token, id); }
+      catch (error) {
+        if (error.status !== 401 || !current()) throw error;
+        token = await tokens.refreshToken(acct, token);
+        if (!current()) return { ok: false, code: "sign-in" };
+        body = await fetchOutlookMessageBody(token, id);
+      }
+    }
+    if (!current()) return { ok: false, code: "sign-in" };
+    if (!body || body.recognized === false || typeof body.content !== "string"
+      || !["text", "html"].includes(body.contentType)) return { ok: false, code: "unavailable" };
+    return { ok: true, content: body.content, contentType: body.contentType };
+  } catch {
+    return { ok: false, code: "unavailable" };
+  }
+}
+
 export async function handleMessage(msg, deps = {}) {
   await ready;
+  if (msg.type === "message-body") return handleMessageBody(msg, deps);
   if (msg.type === "set-poll-interval") return savePollInterval(msg.pollIntervalMs);
   if (msg.type === "refresh") {
     const result = await handleManualRefresh(await loadAccounts(), deps);
@@ -1178,6 +1218,7 @@ if (typeof chrome !== "undefined") {
   chrome.runtime?.onMessage?.addListener((msg, _sender, sendResponse) => {
     if (
       ![
+        "message-body",
         "set-poll-interval",
         "refresh",
         "mark-read",

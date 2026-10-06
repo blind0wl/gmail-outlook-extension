@@ -255,3 +255,47 @@ using the existing account isolation, failure recovery, and cache-only popup
 flow. Open continues to use its separate provider-unchanged local-read behavior.
 Fresh synthetic verification and pending real-account Chrome acceptance are
 recorded in [the 2026-10-05 acceptance record](../../docs/acceptance/2026-10-05-expand-marks-read.md).
+
+
+## Owner amendment — full message reading (2026-10-06)
+
+The owner requested complete email content on card expansion. This supersedes
+preview-only expansion and the strict cache-only display requirement for the
+expanded reader. Collapsed cards still read only the normalized cache; the popup
+requests a complete body from the worker when expanded, never calls provider
+APIs, and retains body text only for its current lifetime. Loading, retry and
+empty-body states are explicit. Message text preserves paragraphs, is selectable,
+and scrolls with the inbox. Email HTML is converted to inert text; scripts,
+remote images and attachments are not displayed. Existing staged read, Trash,
+Undo and account isolation behavior remains in scope.
+
+Gmail reads the exact Atom member, or the latest member for a conversation ID,
+using the existing session conversation endpoint and ownership recheck. Missing
+full-body fields fail rather than displaying a snippet as complete content.
+Outlook reads the individual message body through account-bound Graph auth.
+
+See the new [acceptance record](../../docs/acceptance/2026-10-06-full-message-reader.md).
+
+
+## Owner amendment — formatted HTML reading (2026-10-06)
+
+After reporting that the full-text reader works, the owner approved a formatted
+HTML viewer with validation and a live smoke-test handoff. This supersedes
+converting every HTML body to plain text. HTML email now preserves allowlisted
+markup and inline typography, colours and tables in a sandboxed frame. Plain
+text retains its existing rendering. The reader uses a white email surface,
+fits tables/images to the popup width and grows to its complete content height.
+
+Scripts, forms, embeds, event handlers, arbitrary stylesheets and CSS network
+requests are removed. The frame never permits scripts; its content security
+policy denies resources except inline safe styling and opt-in HTTPS images.
+Same-origin access is retained only for trusted parent sizing and link handlers.
+Only absolute HTTP(S) links without embedded credentials open browser tabs.
+
+External HTTPS images are hidden until the owner clicks Load images per message.
+The choice lasts only for the current popup. Embedded attachment images remain
+in the provider mailbox. Iframe focus/input must preserve staged-read behavior,
+including Escape to collapse and commit on popup closure. Provider fetching,
+account ownership checks, read/Trash/Undo scope and diagnostics are unchanged.
+
+See [formatted-reader acceptance](../../docs/acceptance/2026-10-06-html-message-reader.md).

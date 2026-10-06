@@ -42,6 +42,10 @@ Object.defineProperty(globalThis, "chrome", { configurable: true, value: {
   runtime: { sendMessage: async message => { requests.push(message);
     if (params.has("pending")) await new Promise(resolve => setTimeout(resolve, 5000));
     if (params.has("action-error")) throw Error("Synthetic action error");
+    if (message.type === "message-body") {
+      if (params.has("body-error")) return { ok: false, code: "unavailable" };
+      return { ok: true, contentType: "html", content: "<h2 style=\"color:#285d57;font-size:22px\">The reading room</h2><table cellpadding=\"8\" style=\"background-color:#edf6f4;border:1px solid #9cc5bb\"><tr><th>Session</th><th>Time</th></tr><tr><td>Thursday</td><td>10 am</td></tr></table><p><a href=\"https://example.test/notes\">Read the session notes</a></p><p>Hello from the reading room,</p><p>This is the complete message, beyond the cached preview. Thursday’s session starts at 10 am.</p>" + "<p>Bring your notes and questions. We will discuss the next chapter and leave time for conversation.</p>".repeat(12) + "<p>Final line: see you on Thursday.</p><img src='https://example.test/tracker'><script>throw Error('Unsafe mail')</script>" };
+    }
     if (message.type === "mail-action") {
       const records = { ...(data.mailActions || {}) };
       const item = data.mailCache.find(i => i.key === message.key);
