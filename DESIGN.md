@@ -240,7 +240,7 @@ uses muted 13px regular text alongside the title.
 
 ## Layout
 
-The popup is one column (480px maximum width) with a content-sized flex shell
+The popup is one column (680px maximum width) with a content-sized flex shell
 capped at `600px`. Short mail lists and caught-up accounts shrink the popup;
 longer content grows to the cap and then scrolls. The intrinsic height must not depend on the initial viewport;
 automatically sized extension hosts can start at zero height. The toolbar stays outside the independently scrolling Mail

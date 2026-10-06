@@ -22,7 +22,7 @@ STORY: Identify account and unread mail, scan three-line cached text, Open the p
 manage accounts/alerts/sound and choose a remembered theme in Settings. Hover/focus icons mark read or move to Trash; Gmail uses conversations and its
 browser session, Outlook uses individual messages. Provider acceptance is pending.
 
-FIRST VIEWPORT: Compact 480px maximum-width popup; toolbar title/count, Refresh
+FIRST VIEWPORT: Compact 680px maximum-width popup; toolbar title/count, Refresh
 and Settings, then provider filters and stacked full-address account headers
 carrying visible checked times.
 First account's newest mail leads; later accounts remain in vertical order.
