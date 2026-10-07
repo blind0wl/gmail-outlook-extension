@@ -30,20 +30,24 @@ test('email scripts, forms, navigation, event handlers and CSS network requests 
   assert.equal(result.html.includes('evil()'), false);
 });
 
-test('images are blocked by default and HTTPS images load only after opt-in', () => {
-  const content = '<img src="https://example.test/photo.png" srcset="https://example.test/other.png 2x" onerror="evil()" alt="Photo"><img src="cid:attachment" alt="Logo"><img src="http://example.test/insecure"><img src="data:image/svg+xml,unsafe">';
-  const hidden = sanitizedMessage(content, document);
-  assert.equal(hidden.remoteImages, 1);
-  assert.equal(body(hidden).querySelector('img'), null);
-  assert.match(hidden.html, /img-src 'none'/);
-  assert.equal(body(hidden).querySelector('.image-placeholder').textContent, 'Photo');
-  const loaded = sanitizedMessage(content, document, true);
-  const images = body(loaded).querySelectorAll('img');
+test('credential-free HTTPS images load automatically while unsupported images remain placeholders', () => {
+  const content = '<img src="https://example.test/photo.png" srcset="https://example.test/other.png 2x" onerror="evil()" alt="Photo"><img src="cid:attachment" alt="Logo"><img src="http://example.test/insecure"><img src="data:image/svg+xml,unsafe"><img src="https://user:secret@example.test/tracker.png" alt="Tracker">';
+  const result = sanitizedMessage(content, document);
+  const parsed = body(result);
+  const images = parsed.querySelectorAll('img');
   assert.equal(images.length, 1);
   assert.equal(images[0].getAttribute('src'), 'https://example.test/photo.png');
   assert.equal(images[0].getAttribute('referrerpolicy'), 'no-referrer');
   assert.equal(images[0].getAttribute('srcset'), null);
   assert.equal(images[0].getAttribute('onerror'), null);
+  assert.equal(parsed.querySelectorAll('.image-placeholder').length, 4);
+  assert.deepEqual(Array.from(parsed.querySelectorAll('.image-placeholder'), placeholder => placeholder.textContent), [
+    'Logo', 'Image available in mailbox', 'Image available in mailbox', 'Tracker',
+  ]);
+  assert.match(result.html, /img-src https:/);
+  assert.match(result.html, /script-src 'none'/);
+  assert.match(result.html, /<meta name="referrer" content="no-referrer">/);
+  assert.equal(result.html.includes('user:secret'), false);
 });
 
 test('link URLs must be absolute HTTP(S) without credentials', () => {

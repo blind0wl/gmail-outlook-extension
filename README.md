@@ -9,10 +9,9 @@ The popup groups cached mail under each account in separate rounded cards, with
 bold sender/subject and an automatic preview capped at three lines. Click a card
 (or press Enter/Space) to load the complete message. HTML emails preserve headings, colours, tables
 and inline styles in a separate reading frame; plain-text mail stays selectable
-text. External images are hidden until you click **Load images** for that
-message. Links open in a browser tab. Full bodies and image choices are held
-only while the popup is open; embedded attachment images and attachments
-stay in the provider mailbox. Hover or
+text. Credential-free HTTPS images load automatically in the reader; embedded
+attachment images and unsupported image URLs remain placeholders. Links open
+in a browser tab. Full bodies are held only while the popup is open. Hover or
 keyboard focus reveals mark-as-read and Trash actions. Gmail uses the existing
 browser login and acts on **whole conversations**; Outlook acts on individual
 messages through Graph. Trash remains recoverable in the owning mailbox; the

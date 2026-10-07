@@ -299,3 +299,16 @@ including Escape to collapse and commit on popup closure. Provider fetching,
 account ownership checks, read/Trash/Undo scope and diagnostics are unchanged.
 
 See [formatted-reader acceptance](../../docs/acceptance/2026-10-06-html-message-reader.md).
+
+
+## Owner amendment — automatic HTTPS images (2026-10-07)
+
+The owner requested that expanded HTML email display its images without a
+separate Load images action. Credential-free absolute HTTPS image URLs load
+automatically in the sandboxed reader. HTTP, data, credential-bearing URLs and
+embedded attachment references remain placeholders. The sanitizer continues
+to remove active markup and untrusted attributes, and the frame retains its
+no-referrer policy, script-denying sandbox and CSP. The earlier opt-in rule in
+this historical formatted-reader amendment remains as recorded; this dated
+owner amendment supersedes it for current behavior. Provider fetching,
+account ownership checks, read/Trash/Undo scope and diagnostics are unchanged.

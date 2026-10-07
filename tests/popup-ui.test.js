@@ -1548,21 +1548,32 @@ test("successful full bodies are cleared on sign-out but survive account prefere
 });
 
 
-test("formatted mail blocks external images until Load images and preserves that choice through rerenders", async () => {
+test("formatted mail loads HTTPS images automatically through rerenders and collapse/reopen", async () => {
   const { document, change, data } = await workspaceFixture({}, chrome => {
     chrome.runtime.sendMessage = async msg => msg.type === 'message-body'
-      ? { ok: true, contentType: 'html', content: '<h2 style="color:#245;">Hello</h2><img src="https://example.test/image.png" alt="Photo">' }
+      ? { ok: true, contentType: 'html', content: '<h2 style="color:#245;">Hello</h2><img src="https://example.test/image.png" alt="Photo"><img src="http://example.test/insecure.png" alt="Insecure">' }
       : { ok: true };
   });
   document.querySelector('.card-toggle').click();
   await tick();
-  assert.equal(document.querySelector('.message-frame').srcdoc.includes('<img'), false);
-  document.querySelector('.message-image-tools button').click();
-  assert.equal(document.querySelector('.message-frame').srcdoc.includes('src="https://example.test/image.png"'), true);
+  const firstFrame = document.querySelector('.message-frame');
+  assert.equal(firstFrame.getAttribute('sandbox'), 'allow-same-origin');
+  assert.equal(firstFrame.getAttribute('referrerpolicy'), 'no-referrer');
+  assert.equal(firstFrame.srcdoc.includes('src="https://example.test/image.png"'), true);
+  assert.match(firstFrame.srcdoc, /img-src https:/);
+  assert.match(firstFrame.srcdoc, /script-src 'none'/);
+  assert.match(firstFrame.srcdoc, /referrerpolicy="no-referrer"/);
+  assert.equal(firstFrame.srcdoc.includes('src="http://example.test/insecure.png"'), false);
+  assert.match(firstFrame.srcdoc, /class="image-placeholder">Insecure/);
   assert.equal(document.querySelector('.message-image-tools'), null);
   assert.equal(document.querySelector('.card').classList.contains('expanded'), true);
   change({ mailCache: { newValue: data.mailCache } });
   assert.equal(document.querySelector('.message-frame').srcdoc.includes('src="https://example.test/image.png"'), true);
+  document.querySelector('.card-toggle').click();
+  assert.equal(document.querySelector('.card.expanded'), null);
+  document.querySelector('.card-toggle').click();
+  assert.equal(document.querySelector('.message-frame').srcdoc.includes('src="https://example.test/image.png"'), true);
+  assert.equal(document.querySelector('.message-image-tools'), null);
 });
 
 test("focusing the formatted email frame keeps staged read pending until the popup closes", async t => {
@@ -1663,7 +1674,7 @@ test("wheel and scroll activity in formatted mail pause staged read until leavin
   await new Promise(setImmediate);
 });
 
-test("Escape, image opt-in and account removal still clear the retained reader", async () => {
+test("Escape and account removal still clear the retained reader with automatic images", async () => {
   const { document, window, data, change } = await workspaceFixture({}, chrome => {
     chrome.runtime.sendMessage = async msg => msg.type === 'message-body'
       ? { ok: true, contentType: 'html', content: '<p>Formatted</p><img src="https://example.test/image.png" alt="Photo">' }
@@ -1677,7 +1688,6 @@ test("Escape, image opt-in and account removal still clear the retained reader",
   assert.equal(document.querySelector('.card.expanded'), null, 'Escape still collapses the expanded card');
   document.querySelector('.card-toggle').click();
   await tick();
-  document.querySelector('.message-image-tools button').click();
   const loaded = document.querySelector('.message-frame');
   assert.match(loaded.srcdoc, /src="https:\/\/example.test\/image.png"/);
   change({ accounts: { newValue: [] } });
