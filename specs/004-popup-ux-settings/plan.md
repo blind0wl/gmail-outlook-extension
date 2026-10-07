@@ -5,7 +5,9 @@
 automated/synthetic checks passed, real-account acceptance pending.
 **Specifications**: [scope map](spec.md) and its three approved module specs.
 **Task list target**: [tasks.md](tasks.md), explicitly selected by the owner.
-Preserve `tasks/plan.md` and `tasks/todo.md`; their Gmail follow-ups are separate.
+Gmail follow-ups were separate from this plan; the superseded task lists were
+removed in the 2026-10-07 repository cleanup. Historical outcomes remain in
+`docs/acceptance/` and `docs/investigations/`.
 
 ## Overview
 

@@ -202,7 +202,7 @@ provider UI when using the popup. Historical acceptance remains historical.
 
 ## Read presentation superseded — 2026-10-02
 
-Owner direction in `HANDOFF-optimistic-read.md` replaces session-visible read
+Owner direction recorded in the [optimistic-read acceptance record](../../docs/acceptance/2026-10-02-optimistic-read.md) replaces session-visible read
 cards and successful-read refresh guidance with immediate dismissal and silent
 background completion. Open dismisses immediately while persisting the existing
 local opened-here flag; it still does not mark provider mail read. Failed writes

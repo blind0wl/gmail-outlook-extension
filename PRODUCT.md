@@ -1,152 +1,74 @@
-# Gmail plus Outlook
+# Product scope
 
-<!-- impeccable:product-schema 1 -->
+Gmail plus Outlook is a personal-use Chrome extension for checking multiple
+Gmail and Outlook.com accounts in one popup. It prioritizes clear account
+ownership, quick mail reading, keyboard access, and independent account
+failure handling.
 
-## Platform
+## Current experience
 
-web
+- The Mail view groups messages under their full-address account headings.
+  Filters preserve account identity. Settings manages accounts, themes,
+  notifications, sound, and one shared polling interval.
+- Mail cards show a short preview. Expanding a card loads the complete body;
+  plain text stays selectable and sanitized HTML appears in an isolated reader.
+  Credential-free HTTPS images load automatically. Remote image hosts receive
+  those requests and may track access; no referrer is sent. Attachment images
+  remain placeholders.
+- Opening a provider link records local read state in the extension and does
+  not change the provider. Expanding unread mail stages a provider read. It
+  commits after five seconds away from the card or immediately on an outside
+  click; hover and keyboard focus pause the timer. During the grace period,
+  Mark unread or Trash cancels the pending read. Gmail provider unread state
+  remains unavailable after a committed read.
+- Cards support mark-read and recoverable Trash actions. Gmail actions operate
+  on whole conversations; Outlook actions operate on individual messages.
+  Confirmed Trash has no visible Undo control. Uncertain outcomes stay locked
+  to the affected mail until the user checks the mailbox and acknowledges the
+  result.
+- Midnight desk is the default theme. Slate workspace and Signal panel are
+  also available and remembered. The default polling interval is one minute;
+  users can set a whole-second interval from 30 seconds to five hours.
 
-## Users
+## Data and provider boundaries
 
-Personal mailbox users checking multiple Gmail and Outlook.com accounts in a
-browser extension. The owner prioritizes seeing each account separately.
+The popup is cache-only. A background service worker makes provider requests,
+normalizes results, and owns mailbox writes. Account errors remain isolated.
+Mail and settings are stored in the browser profile. There is no backend or
+analytics. Outlook tokens use session storage and clear on extension reload or
+browser restart; the extension can silently reconnect after restart if the
+browser's Microsoft session is still active. Gmail uses the existing browser
+session and stores no Gmail token.
 
-## Product Purpose
+Gmail access and actions use private, unsupported session endpoints rather
+than the Gmail API. Protocol changes may interrupt reads or actions. Gmail
+mailbox actions cover whole conversations. Outlook support is limited to
+personal Microsoft accounts and uses Microsoft Graph. The cache is bounded
+and contains recent inbox/unread results, not a full mailbox. See
+[ARCHI.md](ARCHI.md) for implementation boundaries and limits.
 
-Check incoming mail across accounts, identify which account owns each message,
-and act on messages quickly. The main popup should show mail; account management,
-sound and notification controls belong in a separate settings section.
+Provider writes are limited to read and recoverable Trash/restore operations.
+The extension does not send mail, permanently delete mail, or provide compose,
+archive, or search features. Diagnostics exclude mail content and credentials.
+Remote email images are the exception to provider-only network access: the
+reader loads credential-free HTTPS images directly from their hosts, without a
+referrer.
 
-## Operating Context
+## Approved scope and evidence
 
-Chrome MV3 extension with a compact, vertically scrolling popup. The existing
-implementation shows cached sender, subject, snippet and unread state, opens
-the provider mailbox, and supports alerts, badge counts and sound controls.
-Owner acceptance uses real accounts in a Chromium browser.
+The [v1 design](docs/superpowers/specs/2026-09-28-gmail-outlook-extension-design.md)
+owns baseline product scope. Later owner-approved amendments and acceptance
+records below supersede its historical behavior where explicitly documented.
 
-## Capabilities and Constraints
+The current owner-approved mailbox action and recovery scope is in
+[specs/003-mail-cards-actions/spec.md](specs/003-mail-cards-actions/spec.md).
+Popup organization, settings, and visible deletion feedback are in
+[specs/004-popup-ux-settings/spec.md](specs/004-popup-ux-settings/spec.md).
+The [design system](DESIGN.md) records the shipped themes and visual decisions.
 
-Implemented popup workspace (2026-09-30; owner production acceptance pending):
-
-- Stack one full-address account header and only its messages, then the next
-  account. Empty and paused accounts retain sections; filters preserve identity.
-- Mail and Settings are separate views. Settings contains Accounts, Themes, Notifications, Sound
-  and Mail checking. Back restores Mail position; drafts survive updates.
-- Expanding a preview displays cached text without marking it read. Open retains
-  the existing extension-local read flag and exact provider message link.
-- Midnight desk, Slate workspace and Signal panel are selectable and remembered.
-  Midnight is the default for missing or invalid saved preferences.
-
-Gmail remains session-cookie Atom feeds; Outlook.com personal mail uses Microsoft
-Graph read permission. Provider requests belong to the worker; the popup reads
-cache and sends worker messages. Mail/credentials stay in the browser profile.
-No backend or analytics; provider access remains read-only in this stage.
-
-Approved staged follow-ups: first Gmail API authorization/read migration, then
-individual-message read/unread and Trash actions for both providers. These actions
-update the actual mailbox; Trash moves to Trash/Deleted Items and offers Undo.
-They will appear directly on cards. Provider write scopes, synchronization and
-recovery need their own implementation specification; the current stage has no
-read/unread or Trash/Undo buttons. Preview remains display-only in that design.
-
-## Brand Commitments
-
-Owner wants to explore a new look and likes modern interfaces. The current popup
-feels too white; colour and surface alternatives are welcome.
-Owner approved all three proposed visual themes: Midnight desk, Slate workspace
-and Signal panel. Settings must expose a Themes control. Midnight desk is the
-new-installation default; remember the user's choice. Normal-case system UI
-text and the selected palettes are implemented; DESIGN.md records production
-tokens extracted from the build. The owner dislikes the uppercase, widely spaced description lettering on the
-comparison board. Use normal-case, readable UI typography. The interactive
-previews record the approved directions; production acceptance is a separate owner check.
-
-## Evidence on Hand
-
-Established design: DESIGN.md and src/popup/. Synthetic captures and verification:
-docs/ui-workspace/ (current synthetic checks) and docs/ui-usability/ (historical).
-Prior owner acceptance: docs/acceptance/2026-09-30-popup-usability.md.
-Current popup-workspace owner acceptance remains pending.
-No real addresses or mail content should be used in design examples.
-
-## Product Principles
-
-- Make account identity clear before the user acts on mail.
-- Prioritize mail in the main view and separate configuration.
-- Treat the provider as the source of truth for requested mailbox actions.
-- Keep data in the browser profile and preserve keyboard access.
-- Present design choices and previews for owner approval before UI edits.
-
-## Owner-approved card/actions update — 2026-10-01
-
-The owner requested separate rounded email cards, bold sender and subject for
-all mail, automatic text capped at three lines, a wider popup, and read/Trash
-icons revealed on hover. Keyboard focus exposes the same controls. Full-message
-reading inside the extension is deferred; provider Open remains available.
-
-The owner explicitly authorized real mailbox writes, rejected Google Cloud/OAuth
-setup for Gmail, and accepted whole-conversation Gmail actions. This supersedes
-the read-only/staged OAuth statements above for this candidate. Gmail keeps its
-browser session; Outlook requests Mail.ReadWrite. A worker-owned ten-minute Undo
-journal survives popup close; uncertain results require checking the mailbox.
-Actual provider acceptance is pending, especially private Gmail session/Undo
-compatibility. No send, permanent-delete, backend, analytics or popup API calls.
-
-## Popup UX and global checking candidate — 2026-10-02
-
-Approved specifications and automatic build authorization supersede the prior
-visible-Undo presentation. Completed Trash has concise success feedback, with
-no Undo tray/button/countdown. The worker restore journal and uncertainty
-recovery remain. Account headings open account-hinted webmail inboxes; routing
-still needs fresh two-account acceptance. Settings adds one Mail checking form
-at the bottom of Settings, after Sound: duration, seconds/minutes/hours, explicit Save;
-1-minute default, 30-second–5-hour range, whole seconds. Saves update storage and
-the shared alarm, with rollback on failure and preserved matching alarms on wake.
-The popup stays cache-only. Unsaved settings drafts survive unrelated updates.
-Synthetic verification passed; actual candidate acceptance is pending in
-[the dated record](docs/acceptance/2026-10-02-popup-ux-settings.md). Earlier staged
-and expanded-preview descriptions above are historical and do not own current
-scope; the current preview is always visible and capped at three lines.
-
-
-## Owner-approved reversible read interaction — 2026-10-02
-
-Mark read updates the displayed card/count immediately, keeps the card while
-hovered or keyboard focused, and commits after five seconds away or immediately
-on an outside click. Mark unread during this grace period cancels the staged
-read locally, including Gmail. Provider writes begin only at commitment and
-remain silent on progress/success; errors restore recovery cards. Committed
-Gmail unread stays unavailable. Open retains provider-unchanged local-read
-semantics and immediate dismissal; extension counts use local read state.
-The owner reported smoke acceptance passed for candidate `ca193e3` on
-2026-10-02; coverage details are recorded in the dated read grace-period record.
-
-## Owner-approved visual polish — 2026-10-03
-
-The owner approved the visual-polish proposal on 2026-10-03, and it is
-implemented in `src/popup/`. Mail now uses stronger primary-color two-line
-subjects, quieter 12px sender text and regular 11px timestamps, slimmer wrapping
-account headings, softer surfaces and a separate footer for hover/focus actions.
-This supersedes the earlier bold-sender/one-line-subject visual prescription.
-Settings keeps its section order with compact account actions, one shared local
-removal note, account-specific reconnection hints and miniature theme previews.
-Midnight panel is #253948; the three themes and mailbox semantics remain.
-The footer layout also restores native Enter/Space activation of mail actions.
-Cached preview expansion already exists and is preserved; its discrepancy with
-the older no-expansion requirement is recorded in the dated acceptance record.
-Fresh real-account acceptance for this visual candidate is pending in
-`docs/acceptance/2026-10-03-visual-polish.md`.
-
-## Owner-approved unread expansion read — 2026-10-05
-
-Expanding an unread card by click, Enter or Space stages the existing
-reversible mailbox read: read styling and unread counts update immediately,
-while the card and Trash action remain available during the grace period.
-Leaving the card starts the five-second timer; hovering or keyboard focus
-pauses it, and an outside click (including another card) commits immediately.
-Mark unread or Trash cancels the staged read. Collapsing and re-expanding do
-not cancel it. Pending or uncertain mailbox actions remain locked and cannot
-be staged by expansion. This supersedes the earlier display-only expansion
-behavior. Open keeps its provider-unchanged local-read behavior. The popup
-remains cache-only; the owner reported smoke tests passed on 2026-10-05 in
-`docs/acceptance/2026-10-05-expand-marks-read.md`.
+Dated records in [docs/acceptance/](docs/acceptance/) preserve candidate-level
+verification; a past pass does not establish acceptance of a later change.
+The formatted reader passed its owner-reported smoke test on 2026-10-06 in
+[its acceptance record](docs/acceptance/2026-10-06-html-message-reader.md).
+Automatic image loading was added on 2026-10-07, and its fresh real-account
+acceptance remains pending in [the current record](docs/acceptance/2026-10-07-automatic-email-images.md).
