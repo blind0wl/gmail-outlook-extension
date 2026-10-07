@@ -84,10 +84,6 @@ export function configureMicrosoftAuth({ clientId } = {}) {
   configuredClientId = clientId;
 }
 
-export function getConfiguredClientId() {
-  return configuredClientId;
-}
-
 function resolveClientId(override) {
   // First non-blank wins: stored "" values must fall through to the
   // baked-in default instead of shadowing it ("" is not nullish).
@@ -96,10 +92,6 @@ function resolveClientId(override) {
   );
   if (!id || /^YOUR_/i.test(id)) throw new Error("microsoft auth: clientId not configured");
   return id;
-}
-
-function enqueueSessionOp(op) {
-  return sessionOp(op);
 }
 
 // Marks network-level failures so callers can tell a blip from a dead
@@ -165,10 +157,6 @@ export async function getGraphAccountIdentities(token) {
   return out;
 }
 
-export async function getGraphAccountAddress(token) {
-  return (await getGraphAccountIdentities(token))[0];
-}
-
 function ownsAddress(identities, account) {
   const want = String(account ?? "").toLowerCase();
   return (identities ?? []).some(
@@ -181,7 +169,7 @@ function ownsAddress(identities, account) {
 // session no longer holds. Runs inside the session queue, ordered against
 // removals.
 function guardedSessionWrite(record, generation, sessionKey = MS_SESSION_KEY) {
-  return enqueueSessionOp(async () => {
+  return sessionOp(async () => {
     assertCurrent(guardKey(sessionKey), generation);
     await writeSessionRecord(record, sessionKey);
     await markSignedOut(guardKey(sessionKey), false);
@@ -656,7 +644,7 @@ export async function renewGraphToken(
         // Keep the endpoint rejection instead of the generic AUTH_REQUIRED
         // classification; the recovery message still identifies auth failure.
         if (typeof err?.code === "string" && err.code) classified.code = err.code;
-        await enqueueSessionOp(async () => {
+        await sessionOp(async () => {
           assertCurrent(guardKey(key), generation);
           await evictSessionRecord(key);
         });
@@ -665,7 +653,7 @@ export async function renewGraphToken(
     }
   }
   // No refresh path: evict the rejected slot so it is never reused.
-  await enqueueSessionOp(async () => {
+  await sessionOp(async () => {
     assertCurrent(guardKey(key), generation);
     await evictSessionRecord(key);
   });
@@ -678,33 +666,7 @@ export async function renewGraphToken(
 // Silent when interactive=false: cached-or-refresh only, never a popup.
 // Interactive when true: falls back to the full sign-in flow.
 export async function getGraphToken(interactive = true, { clientId } = {}) {
-  const key = MS_SESSION_KEY;
-  const resolvedId = resolveClientId(clientId);
-  // Epoch for the whole operation, fixed before any await.
-  const generation = capture(guardKey(key));
-  try {
-    await checkSignedOut(guardKey(), interactive);
-  } catch (err) {
-    if (err?.message === "auth needs sign in") throw needsSignIn("signed-out");
-    throw asTransient(new Error("microsoft sign-out state unavailable"));
-  }
-  const cached = await readSessionRecord();
-  assertCurrent(guardKey(), generation);
-  if (isFresh(cached)) return cached.accessToken;
-  let refreshErr = null;
-  if (cached?.refreshToken) {
-    try {
-      return await tryRefresh(resolvedId, cached.refreshToken, generation);
-    } catch (e) {
-      refreshErr = e;
-    }
-  }
-  if (!interactive) {
-    if (refreshErr?.transient) throw refreshErr;
-    if (refreshErr) throw needsSignIn("refresh-failed", refreshErr);
-    throw needsSignIn("missing-record");
-  }
-  return signInMicrosoft(resolvedId, generation);
+  return getGraphTokenForAccount(undefined, interactive, { clientId });
 }
 
 // Sign out every Microsoft slot this extension writes: the legacy slot
@@ -715,7 +677,7 @@ export async function getGraphToken(interactive = true, { clientId } = {}) {
 // slot they could land in is removed.
 export async function clearGraphToken(account) {
   invalidate(account === undefined ? "outlook" : `outlook:${account}`);
-  return enqueueSessionOp(async () => {
+  return sessionOp(async () => {
     const store = sessionStore();
     if (account !== undefined) {
       await markSignedOut(`outlook:${account}`, true);

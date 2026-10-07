@@ -30,7 +30,6 @@ export function mergeMessages(items) {
   for (const item of newestFirst(byKey.values()).slice(MAX_ITEMS)) {
     byKey.delete(item.key);
   }
-  return { items: getInbox() };
 }
 
 export function setLocalRead(key) {
@@ -46,7 +45,6 @@ export function pruneCache(now) {
   for (const [key, item] of byKey) {
     if (now - item.date > EXPIRY_MS) byKey.delete(key);
   }
-  return getInbox();
 }
 
 // Only a completed bounded query is authoritative for this account.
@@ -57,7 +55,7 @@ export function reconcileAccount(acct, items, complete = true) {
       if (item.provider === acct.provider && item.account === acct.account && !present.has(key)) byKey.delete(key);
     }
   }
-  return mergeMessages(items);
+  mergeMessages(items);
 }
 
 // Provider-confirmed changes; the worker owns serialization with polling.
