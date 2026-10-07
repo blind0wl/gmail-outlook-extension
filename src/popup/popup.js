@@ -253,11 +253,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (state?.text !== undefined) {
       if (state.contentType === "html" && state.content) {
         body.appendChild(createHtmlMessage(state.content, document, {
-          loadImages: state.loadImages === true,
-          onLoadImages: function () {
-            state.loadImages = true;
-            showMessageBody(card, key);
-          },
           onEscape: function () {
             var current = cardToggles.get(key);
             if (current) { toggleCard(current.card, current.toggle, key, false); current.toggle.focus(); }

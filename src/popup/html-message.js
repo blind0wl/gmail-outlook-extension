@@ -23,14 +23,13 @@ function safeStyle(value) {
   }).join(';');
 }
 
-export function sanitizedMessage(content, document, loadImages = false) {
+export function sanitizedMessage(content, document) {
   const template = document.createElement('template');
   template.innerHTML = content;
-  // Build in the template's inert document so even opt-in image URLs cannot
-  // start a request in the extension document during sanitization.
+  // Build in the template's inert document so remote image URLs cannot start
+  // a request in the extension document during sanitization.
   const inert = template.content.ownerDocument;
   const output = inert.createElement('div');
-  let remoteImages = 0;
   function copy(node, parent) {
     if (node.nodeType === 3) { parent.appendChild(inert.createTextNode(node.textContent)); return; }
     if (node.nodeType !== 1) return;
@@ -54,15 +53,8 @@ export function sanitizedMessage(content, document, loadImages = false) {
     if (tag === 'img') {
       const src = safeMessageUrl(node.getAttribute('src'));
       if (src?.startsWith('https:')) {
-        remoteImages++;
-        if (loadImages) { clean.setAttribute('referrerpolicy', 'no-referrer'); clean.setAttribute('src', src); }
-        else {
-          const placeholder = inert.createElement('span');
-          placeholder.className = 'image-placeholder';
-          placeholder.textContent = clean.getAttribute('alt') || 'Image';
-          parent.appendChild(placeholder);
-          return;
-        }
+        clean.setAttribute('referrerpolicy', 'no-referrer');
+        clean.setAttribute('src', src);
       } else {
         // cid: attachments and insecure/unsupported image URLs stay in mailbox.
         const placeholder = inert.createElement('span');
@@ -76,31 +68,18 @@ export function sanitizedMessage(content, document, loadImages = false) {
     parent.appendChild(clean);
   }
   Array.from(template.content.childNodes).forEach(node => copy(node, output));
-  const policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src " + (loadImages ? 'https:' : "'none'") + "; form-action 'none'; base-uri 'none'";
+  const policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https:; form-action 'none'; base-uri 'none'";
   return {
-    remoteImages,
     html: '<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="' + policy + '"><style>'
       + 'html{color-scheme:light;background:#fff}body{margin:0;padding:16px;box-sizing:border-box;font:14px/1.5 Arial,sans-serif;color:#222;overflow-wrap:anywhere}*{box-sizing:border-box;max-width:100%}table{width:100%!important;min-width:0!important;table-layout:fixed}td,th{overflow-wrap:anywhere}img{max-width:100%!important;height:auto!important}pre{white-space:pre-wrap}a{color:#1558bc}.image-placeholder{display:inline-block;padding:6px 10px;border:1px dashed #bbb;border-radius:4px;color:#666;font-size:12px}'
       + '</style></head><body>' + output.innerHTML + '</body></html>',
   };
 }
 
-export function createHtmlMessage(content, document, { loadImages = false, onLoadImages, onEscape, onLink, onReading } = {}) {
-  const sanitized = sanitizedMessage(content, document, loadImages);
+export function createHtmlMessage(content, document, { onEscape, onLink, onReading } = {}) {
+  const sanitized = sanitizedMessage(content, document);
   const container = document.createElement('div');
   container.className = 'html-message';
-  if (sanitized.remoteImages && !loadImages) {
-    const tools = document.createElement('div');
-    tools.className = 'message-image-tools';
-    const label = document.createElement('span');
-    label.textContent = 'External images are hidden.';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = 'Load images';
-    button.addEventListener('click', event => { event.stopPropagation(); onLoadImages?.(); });
-    tools.append(label, button);
-    container.appendChild(tools);
-  }
   const frame = document.createElement('iframe');
   frame.className = 'message-frame';
   frame.title = 'Formatted email';
