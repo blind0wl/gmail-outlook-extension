@@ -1,8 +1,9 @@
 # Project baseline — 2026-09-30
 
 This checkpoint preserves the baseline work and its verification history.
-The current state reconciliation is recorded in `.dev/project.md` and the
-merged-fix checkpoints under `.dev/evidence/`.
+Historical merged-fix checkpoints remain under `.dev/evidence/`. Current
+setup and behavior are documented in README.md; the retired workflow state
+and templates were removed in the 2026-10-07 repository cleanup.
 
 ## Development checks
 
@@ -15,7 +16,7 @@ merged-fix checkpoints under `.dev/evidence/`.
 - CI runs the same checks with read-only permissions and SHA-pinned actions.
   Remote CI results must be checked on the submitted PR.
 - README.md covers setup, architecture, commands, limitations, and Chrome
-  acceptance. The constitution records existing agreed project principles.
+  acceptance. AGENTS.md records the current engineering rules.
 
 ## Documentation and tracker reconciliation
 
