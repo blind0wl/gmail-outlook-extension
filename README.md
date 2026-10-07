@@ -1,98 +1,91 @@
 # Gmail plus Outlook
 
-A personal-use Chrome Manifest V3 extension that checks Gmail and Outlook.com
-accounts in one popup. It has no backend or analytics. Mail previews, settings,
-and cached account data stay in the browser profile; provider requests run in the
-extension service worker.
+A personal-use Chrome extension that checks Gmail and Outlook.com in one popup.
+It has no backend or analytics. Mail previews, settings, credentials, and cached
+account data stay in the Chrome profile; provider requests run in the extension
+service worker.
 
-## Features
+## Install for personal use
 
-- Keeps mail grouped by account, with filters, unread counts, desktop alerts,
-  an optional chime, and three themes: Midnight desk, Slate workspace, and
-  Signal panel.
-- Expanding a card loads its complete message. Plain text remains selectable;
-  HTML is sanitized and shown in an isolated frame. Credential-free HTTPS
-  images load automatically. Their remote hosts receive image requests and may
-  track access; the reader sends no referrer. Links open in browser tabs.
-- Opening a message in webmail records a local read in the extension without
-  changing provider state. Expanding unread mail stages a provider read; it
-  commits after five seconds away from the card or immediately when clicking
-  elsewhere. Mark unread during that grace period cancels the write.
-- Mark read and Trash controls are available on cards. Gmail actions affect the
-  whole conversation; Outlook actions affect one message. Trash moves mail to
-  the provider's recoverable Trash folder. The extension has no send or
-  permanent-delete actions.
-- Settings manage accounts, themes, notification behavior, sound, and a shared
-  mail-check interval (one minute by default; 30 seconds to five hours).
+1. On GitHub, choose **Code → Download ZIP**, then extract the archive.
+2. Open `chrome://extensions` and turn on **Developer mode**.
+3. Choose **Load unpacked** and select the extracted folder that contains
+   `manifest.json`.
+4. Pin **Gmail plus Outlook** to the toolbar and open it to add accounts.
 
-## Load the unpacked extension
+Normal use does not require Node.js, npm, a build step, DevTools, or storage
+editing. Keep the extracted folder. To update, replace its files and click
+**Reload** for the extension in `chrome://extensions`. The public key in
+`manifest.json` keeps this extension's ID stable; do not change or remove it.
+The ID is `jholbbifabgjdjiiebpghejakkejdpdf`. Chrome keeps local extension data
+under its ID, so another extension ID has separate accounts, cache, and settings.
 
-Node.js 24 and npm are only needed for development checks. To use the extension,
-open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**,
-and select this repository root. Pin **Gmail plus Outlook** to the toolbar.
+## Connect accounts
 
-In the popup, add Gmail after signing in to it in a browser tab. Add Outlook.com
-and complete Microsoft's consent flow. Outlook uses a personal Microsoft app
-registration; registration and sign-in details are in
-[docs/manual-auth.md](docs/manual-auth.md). Work and school Microsoft accounts
-are outside the current scope.
+For Gmail, first sign in to the mailbox in a browser tab, then choose **Add
+Gmail** in the popup and enter its address. Gmail needs no separate app
+registration or consent screen. If its session expires, choose **Sign in** for
+that account.
 
-After source changes, reload the extension at `chrome://extensions`. There is
-no build step or development server. The manifest pins the unpacked extension's
-ID; see [docs/extension-identity.md](docs/extension-identity.md) for identity
-and migration details.
+Outlook.com supports personal Microsoft accounts only; work and school accounts
+are outside the current scope. The extension's default public Microsoft Entra
+application client ID is `9e67dec6-14f7-4e74-999e-ac7c1f1da358`. It is a public
+identifier, and the extension uses PKCE without a client secret. The
+registration must allow personal Microsoft accounts, public client flows, and
+delegated `User.Read`,
+`Mail.ReadWrite`, and `offline_access` permissions. Sign-in uses Microsoft's
+`consumers` authority. The registration must list this exact URI as a
+**Single-page application** redirect, not as a Web or Mobile/Desktop redirect:
 
-## Development and acceptance
-
-Use Node 24 (`.nvmrc`) and run:
-
-```sh
-npm ci
-npm run verify
+```text
+https://jholbbifabgjdjiiebpghejakkejdpdf.chromiumapp.org/
 ```
 
-`npm run verify` checks JavaScript syntax and extension identity, then runs the
-automated tests. `npm test` runs tests alone; `npm run check` runs syntax and
-identity checks alone. `npm run identity` prints the pinned extension ID and
-Microsoft redirect URI. CI runs `npm run verify`.
+The included app registration may not be available or configured for your use.
+If you cannot use it, create or use your own app registration in the
+[Microsoft Entra admin center](https://entra.microsoft.com/) with those
+settings, then replace `ENTRA_APP_ID` in `src/auth/microsoft.js` with its public
+application client ID. Never add a client secret. After setup, choose **Add
+Outlook**, enter the personal mailbox address, and accept Microsoft's consent
+screen.
 
-Automated tests use fixtures and Chrome API substitutes. They do not replace
-real-account Chrome checks. Use the [PR checklist](docs/pr-checklist.md),
-[popup checklist](tests/popup-checklist.md), and
-[manual authentication checklist](docs/manual-auth.md), then record a fresh
-dated result in `docs/acceptance/` for each feature or bug candidate.
+Outlook credentials are held in Chrome session storage and clear when the
+extension reloads or Chrome restarts. If you remain signed in to Microsoft in
+the browser, Outlook can reconnect silently. Otherwise, or if access is revoked,
+sign in to Outlook again from the popup.
 
-## Architecture and limits
+## Features and data handling
 
-The extension uses plain JavaScript modules, HTML, and CSS. It has no UI
-framework, bundler, or production npm dependencies. The
-[architecture guide](ARCHI.md) describes the worker, providers, cache, and
-popup boundary. Current product scope and owner decisions are in
-[PRODUCT.md](PRODUCT.md) and the [specifications](specs/).
-
-The popup renders cached mail and sends requests to the worker; it does not call
-mail providers. The cache holds at most 200 messages for up to seven days.
-Gmail uses an unsupported private session protocol and exposes only a bounded
-recent unread feed; Gmail mailbox actions operate on whole conversations.
-Changes to Gmail's private protocol may break access or actions. Outlook uses
-Microsoft Graph for a bounded set of recent inbox messages. A provider failure
-for one account does not prevent other accounts from working.
-
-Gmail uses the signed-in browser session. Outlook credentials are held in
-`chrome.storage.session` and clear when the extension reloads or Chrome
-restarts. If a Microsoft browser session is still active, Outlook can reconnect
-silently after restart; otherwise sign in again from Settings. Mail bodies are
-fetched when opened and retained only while the popup is open. External HTTPS
-images load from their hosts when the reader displays them. Attachment images
-and unsupported image URLs remain placeholders.
-
-Mailbox writes are limited to read/unread and recoverable Trash/restore
-operations; committed Gmail unread is unavailable. The popup has no Undo
-button: restore trashed mail in webmail. A ten-minute worker restore journal
-and saved recovery records support uncertain actions. Check the affected mail
-in webmail before acknowledging recovery with **I’ve checked**.
-The extension does not send mail, permanently delete mail, or provide search
-and archive actions. Diagnostics exclude message content and credentials.
+- Mail stays grouped by account with filters, unread counts, desktop alerts, an
+  optional chime, and Midnight desk, Slate workspace, and Signal panel themes.
+- The shared mail-check interval defaults to one minute and can be set from 30
+  seconds to five hours. Settings also control account management and
+  notification behavior.
+- Opening a message in webmail records a local read in the extension without
+  changing provider state. Expanding unread mail stages a provider read; it
+  commits after five seconds away from the card or when clicking elsewhere.
+  Marking it unread during that grace period cancels the write.
+- Expanding a card loads its complete message. Plain text remains selectable;
+  HTML is sanitized and shown in an isolated frame. Credential-free HTTPS
+  images load automatically. Their hosts receive image requests and may track
+  access; the reader sends no referrer. Links open in browser tabs.
+- The cache holds at most 200 messages for up to seven days. Message bodies are
+  fetched when opened and retained only while the popup is open.
+- Gmail uses the signed-in browser session and an unsupported private session
+  protocol. It shows a bounded recent unread feed, and Gmail actions affect the
+  whole conversation. Changes to Gmail's private protocol may break access or
+  actions.
+- Outlook uses Microsoft Graph for a bounded set of recent inbox messages.
+  Outlook actions affect one message. A failure for one account does not stop
+  other accounts from working.
+- Read/unread and recoverable Trash/restore are the only mailbox actions.
+  Trash moves mail to the provider's recoverable Trash folder. Committed Gmail
+  unread is unavailable. The popup has no Undo button; restore trashed mail in
+  webmail. For uncertain actions, a ten-minute worker restore journal and saved
+  recovery records help reconcile the result. Check affected mail in webmail
+  before acknowledging recovery with **I’ve checked**. The extension does not
+  send, permanently delete, search, or archive mail.
+- Diagnostics exclude message content and credentials.
 
 ## Acknowledgements
 
