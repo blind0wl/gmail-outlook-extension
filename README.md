@@ -58,6 +58,25 @@ sign in to Outlook again from the popup.
 
 - Mail stays grouped by account with filters, unread counts, desktop alerts, an
   optional chime, and Midnight desk, Slate workspace, and Signal panel themes.
+- Authentication emails can show a desktop **Copy code** action and a copy
+  button on the inbox card. **Settings → Notifications → Automatically copy
+  new sign-in codes** is off by default; turning it on replaces the clipboard
+  with the newest detected code in a poll. The extension asks for clipboard
+  write access only and never reads the clipboard. A successful write is
+  confirmed with “Your sign-in code is ready to paste.”
+- Detection is local and conservative: it requires authentication wording and
+  a nearby explicit code label, checks the full message when needed, and skips
+  ambiguous or older than ten-minute messages. Codes stay in session storage
+  and expire no later than ten minutes after the email timestamp. This is a
+  freshness limit, not a claim about the sender's actual code expiry. Mail
+  checks can be delayed by the selected polling interval or browser scheduling.
+- To exercise the flow without connecting an account, open **Settings → Sign-in
+  code testing**. Generate numeric, alphanumeric, body-only, ambiguous, no-code,
+  and expired fake emails, or start the 30-second sequence. They appear under
+  the separate **Demo** inbox and never enter the real mail cache or contact a
+  provider. The first sequence email appears immediately; later examples
+  arrive while Chrome is open even when the popup is closed. **Clear demo inbox**
+  also stops the sequence.
 - The shared mail-check interval defaults to one minute and can be set from 30
   seconds to five hours. Settings also control account management and
   notification behavior.
@@ -86,6 +105,14 @@ sign in to Outlook again from the popup.
   before acknowledging recovery with **I’ve checked**. The extension does not
   send, permanently delete, search, or archive mail.
 - Diagnostics exclude message content and credentials.
+
+## Run the local tests
+
+Node.js is needed only to run the unit tests. From the extension folder:
+
+```sh
+node --test test/*.test.mjs
+```
 
 ## Acknowledgements
 

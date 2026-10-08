@@ -1,7 +1,8 @@
-// Offscreen chime player. Service workers cannot play audio, so this tiny
-// document plays the bundled Checker Plus chime per "play-chime" runtime
-// message. No network, no storage reads, no logging: the message carries only a volume level,
-// never mail content.
+// Shared offscreen page for chimes and explicit clipboard writes. It never
+// reads the clipboard, stores codes, or logs message content.
+
+var PLAY_CHIME_MESSAGE = "play-chime";
+var COPY_AUTH_CODE_MESSAGE = "copy-auth-code-to-clipboard";
 
 var audio = null;
 
@@ -26,10 +27,34 @@ function playChime(level) {
   }
 }
 
+function copyCode(code) {
+  if (typeof code !== "string" || !/^[a-z0-9]{4,10}$/i.test(code)) return false;
+  var field = document.createElement("textarea");
+  field.value = code;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.top = "0";
+  field.style.left = "0";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.focus();
+  field.select();
+  var copied = false;
+  try { copied = document.execCommand("copy") === true; }
+  catch { copied = false; }
+  field.remove();
+  return copied;
+}
+
 if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
-  chrome.runtime.onMessage.addListener(function (message) {
-    if (message && message.type === "play-chime") {
+  chrome.runtime.onMessage.addListener(function (message, _sender, sendResponse) {
+    if (message && message.type === PLAY_CHIME_MESSAGE) {
       playChime(levelOf(message));
+      return false;
+    }
+    if (message && message.type === COPY_AUTH_CODE_MESSAGE) {
+      sendResponse({ ok: copyCode(message.code) });
+      return false;
     }
     return false;
   });

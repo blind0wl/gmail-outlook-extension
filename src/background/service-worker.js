@@ -49,7 +49,29 @@ import {
   isMuted,
   getSoundSettings,
   playChime,
+  copyAuthCodeToClipboard,
 } from "../notify/sound.js";
+import { processFreshMail } from "../auth-codes/pipeline.js";
+import { readAuthCodeAutoCopy, AUTH_CODE_AUTO_COPY_KEY } from "../auth-codes/settings.js";
+import {
+  savePendingAuthCode,
+  getPendingAuthCode,
+  mapNotificationToMessage,
+  messageForNotification,
+  removeNotificationMapping,
+  clearAuthCodeRecords,
+} from "../auth-codes/session.js";
+import {
+  addDemoEmails,
+  AUTH_CODE_DEMO_ALARM,
+  AUTH_CODE_DEMO_INBOX_KEY,
+  AUTH_CODE_DEMO_SEQUENCE_KEY,
+  AUTH_CODE_DEMO_SCENARIOS,
+  clearDemoInbox,
+  createDemoEmail,
+  getDemoInbox,
+  getDemoMessage,
+} from "../auth-codes/demo.js";
 
 export const ALARM_NAME = "mail-poll";
 export { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS };
@@ -74,6 +96,15 @@ function write(op) {
 }
 let pollTail = Promise.resolve();
 const offlineByKey = new Set(); // accountKey -> last fetch failed with no HTTP status while offline
+const AUTH_CODE_NOTIFICATION_PREFIX = "auth-code:";
+const DEMO_SEQUENCE_INTERVAL_SECONDS = 30;
+let demoTail = Promise.resolve();
+let demoGeneration = 0;
+function serializeDemo(op) {
+  const run = demoTail.then(op, op);
+  demoTail = run.catch(() => {});
+  return run;
+}
 
 export { accountKey };
 
@@ -543,22 +574,29 @@ async function runPoll(accounts, deps) {
   const now = deps.now ?? Date.now();
   await pruneMailActions(now);
   const newIds = [];
+  const alertJobs = [];
+  const invalidatedAuthCodes = [];
   let badge = 0;
   const settled = await Promise.all(
     accounts.map(async (acct) => {
       const key = accountKey(acct);
       const generation = accountGeneration.get(key) ?? 0;
+      let candidateMail = [];
+      let candidateCodeOnlyKeys = [];
+      let establishedBaseline = false;
       const result = await pollAccount(acct, { ...deps, now }).catch(
         (error) => ({ key, error: sanitizeError(error, acct) }),
       );
       await write(async () => {
         if (generation !== (accountGeneration.get(key) ?? 0)) return;
         const before = getInbox();
+        const beforeByKey = new Map(before.map((item) => [item.key, item]));
         const old = new Set([...(seenByKey.get(key) ?? []), ...before.map((i) => i.key)]);
         // Existing cache also establishes a baseline when upgrading.
         const baseline =
           baselineByKey.has(key) ||
           before.some((i) => accountKey(i) === key);
+        establishedBaseline = baseline;
         if (result.items !== undefined) {
           reconcileAccount(acct, result.items, result.items.complete !== false);
           baselineByKey.add(key);
@@ -573,52 +611,133 @@ async function runPoll(accounts, deps) {
           );
         }
         pruneCache(now);
-        const inbox = getInbox();
+        let inbox = getInbox();
         const fresh = inbox.filter(
           (i) => accountKey(i) === key && !old.has(i.key),
         );
         newIds.push(...fresh.map((i) => i.key));
+        const newVersions = inbox.filter((item) => {
+          if (accountKey(item) !== key || !old.has(item.key)) return false;
+          const previous = beforeByKey.get(item.key);
+          // Gmail reuses a thread key and the cache keeps `localRead` sticky.
+          // A newer message can still contain a fresh sign-in code, so inspect
+          // strictly newer unread thread versions as code-only candidates.
+          return previous && Number(item.date) > Number(previous.date);
+        });
+        const newVersionKeys = new Set(newVersions.map((item) => item.key));
+        const updated = inbox.filter((item) => {
+          if (accountKey(item) !== key || !old.has(item.key) || item.unread !== true) return false;
+          const previous = beforeByKey.get(item.key);
+          return newVersionKeys.has(item.key)
+            || (!item.localRead && previous && item.snippet !== previous.snippet);
+        });
+        if (newVersions.length) {
+          // A newer Gmail message in the same thread replaces the old code
+          // immediately, including when notifications are disabled or the
+          // thread was already opened locally.
+          const updatedKeys = new Set(newVersions.map((item) => item.key));
+          mergeMessages(newVersions.map((item) => ({
+            ...item,
+            authCodeAvailable: false,
+            authCodeExpiresAt: 0,
+          })));
+          inbox = getInbox();
+          invalidatedAuthCodes.push(...updatedKeys);
+        }
         await persistCache(inbox);
         await storeAccountEntries([acct], new Map([[key, result]]), now);
         badge = await badgeFor(accounts, deps, inbox);
-        const eligible = fresh.filter((i) => i.unread && !i.localRead);
-        const settings = await globalThis.chrome?.storage?.local?.get(
-          "skipFocusedProvider",
-        );
-        // Focused-provider suppression is opt-in: only an explicit true
-        // silences alerts for the focused provider. Default alerts even
-        // while looking at the mailbox.
-        const focused =
-          settings?.skipFocusedProvider === true
-            ? await (deps.focusedProvider ?? focusedProvider)()
-            : null;
-        if (
-          !signedOutByKey.has(key) &&
-          generation === (accountGeneration.get(key) ?? 0) &&
-          baseline &&
-          !deps.manual &&
-          acct.notify !== false &&
-          focused !== acct.provider &&
-          eligible.length &&
-          !deps.dnd
-        ) {
-          const group = { provider: acct.provider, account: acct.account, items: eligible };
-          await (deps.notify ?? sendNotification)(group, buildToast(group));
-          try {
-            const settings = await (
-              deps.readSoundSettings ?? getSoundSettings
-            )();
-            if (!isMuted(settings, [key])) {
-              await (deps.playSound ?? playChime)(settings.volume);
-            }
-          } catch {
-            /* Sound failure does not undo the cache commit. */
-          }
+        const eligible = [
+          ...fresh.filter((item) => item.unread && !item.localRead),
+          ...updated.filter((item) => !item.localRead),
+        ];
+        const codeOnly = updated.filter((item) => newVersionKeys.has(item.key) && item.localRead);
+        if (baseline) {
+          candidateMail = [...eligible, ...codeOnly];
+          candidateCodeOnlyKeys = codeOnly.map((item) => item.key);
         }
       });
+      if (
+        candidateMail.length && establishedBaseline &&
+        generation === (accountGeneration.get(key) ?? 0) &&
+        !signedOutByKey.has(key) && !deps.manual && acct.notify !== false && !deps.dnd
+      ) {
+        const settings = await globalThis.chrome?.storage?.local?.get("skipFocusedProvider");
+        const focused = settings?.skipFocusedProvider === true
+          ? await (deps.focusedProvider ?? focusedProvider)()
+          : null;
+        if (focused !== acct.provider) {
+          alertJobs.push({
+            acct,
+            key,
+            generation,
+            items: candidateMail,
+            codeOnlyKeys: new Set(candidateCodeOnlyKeys),
+          });
+        }
+      }
       return result;
     }),
   );
+  for (const key of invalidatedAuthCodes) {
+    // Session invalidation is independent of notification preferences. The
+    // cache flag was already cleared in the serialized commit, so copy actions
+    // fail safely while these session-only records are removed.
+    const ids = await clearAuthCodeRecords([key]);
+    for (const id of ids) {
+      try { await globalThis.chrome?.notifications?.clear?.(id); } catch { /* optional UI cleanup */ }
+    }
+  }
+  // Process all newly arrived messages newest-first across every account.
+  // Only the newest detected code can replace the clipboard in one poll.
+  const mailJobs = alertJobs.flatMap((job) => job.items.map((item) => ({ job, item })))
+    .sort((a, b) => Number(b.item.date) - Number(a.item.date));
+  const autoCopyEnabled = await readAuthCodeAutoCopy().catch(() => false);
+  let autoCopyAttempted = false;
+  const ordinaryByAccount = new Map();
+  const soundAccounts = new Map();
+  for (const { job, item } of mailJobs) {
+    const isCurrent = () => job.generation === (accountGeneration.get(job.key) ?? 0)
+      && !signedOutByKey.has(job.key);
+    if (!isCurrent()) continue;
+    soundAccounts.set(job.key, job);
+    let ordinaryItems = ordinaryByAccount.get(job.key);
+    if (!ordinaryItems) {
+      ordinaryItems = [];
+      ordinaryByAccount.set(job.key, ordinaryItems);
+    }
+    const result = await runAuthCodePipeline([item], {
+      provider: job.acct.provider,
+      account: job.acct.account,
+      items: [item],
+    }, {
+      ...deps,
+      autoCopyOverride: autoCopyEnabled && !autoCopyAttempted,
+      codeOnly: job.codeOnlyKeys?.has(item.key) === true,
+      isCurrent,
+      notifyMail: async () => {},
+    });
+    if (result.autoCopyAttempted) autoCopyAttempted = true;
+    if (result.ordinary.includes(item.key)) ordinaryItems.push(item);
+  }
+  for (const [key, items] of ordinaryByAccount) {
+    if (!items.length) continue;
+    const job = alertJobs.find((entry) => entry.key === key);
+    if (!job || job.generation !== (accountGeneration.get(key) ?? 0)
+      || signedOutByKey.has(key)) continue;
+    const group = { provider: job.acct.provider, account: job.acct.account, items };
+    await (deps.notify ?? sendNotification)(group, buildToast(group));
+  }
+  for (const [key, job] of soundAccounts) {
+    if (job.generation !== (accountGeneration.get(key) ?? 0) || signedOutByKey.has(key)) continue;
+    try {
+      const soundSettings = await (deps.readSoundSettings ?? getSoundSettings)();
+      if (!isMuted(soundSettings, [key]))
+        await (deps.playSound ?? playChime)(soundSettings.volume);
+    } catch {
+      /* Sound failure does not undo the cache commit. */
+    }
+  }
   const failures = settled.filter(
     (r) => r.error && !r.backedOff && !r.needsSignIn && !r.offline,
   );
@@ -707,6 +826,315 @@ export function sendNotification(group, toast) {
     message: toast.message,
   });
   return result?.catch?.(() => {}) ?? Promise.resolve();
+}
+
+function authCodeNotificationId() {
+  return `${AUTH_CODE_NOTIFICATION_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function authCodeSenderContext(item) {
+  const sender = String(item?.from ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\b[a-z0-9]{4,10}\b/gi, (token) => /\d/.test(token) ? "" : token)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+  return sender ? `From ${sender}` : `${item.provider} mailbox`;
+}
+
+async function createAuthCodeNotification(item, { copied, expiresAt, isCurrent = () => true }) {
+  const notifications = globalThis.chrome?.notifications;
+  if (!notifications?.create || !isCurrent()) return;
+  const id = authCodeNotificationId();
+  const title = `${item.account} (${item.provider === "demo" ? "local demo" : item.provider})`;
+  const details = {
+    type: "basic",
+    silent: true,
+    iconUrl: notificationIconUrl(),
+    title,
+    message: copied
+      ? "Your sign-in code is ready to paste."
+      : "A sign-in code is ready. Choose Copy code to copy it.",
+    contextMessage: authCodeSenderContext(item),
+    buttons: [{ title: copied ? "Copy again" : "Copy code" }],
+  };
+  try {
+    await mapNotificationToMessage(id, item.key, expiresAt);
+    if (!isCurrent()) {
+      await removeNotificationMapping(id);
+      return;
+    }
+    await notifications.create(id, details);
+    if (!isCurrent()) {
+      await notifications.clear?.(id);
+      await removeNotificationMapping(id);
+    }
+  } catch {
+    await removeNotificationMapping(id).catch(() => {});
+    // A popup card still exposes Copy code if the platform omits this toast.
+  }
+}
+
+async function updateAuthCodeNotification(id, copied) {
+  try {
+    await globalThis.chrome?.notifications?.update?.(id, {
+      message: copied
+        ? "Your sign-in code is ready to paste."
+        : "Could not copy the sign-in code. Try again from the inbox.",
+      buttons: copied ? [{ title: "Copy again" }] : [{ title: "Try again" }],
+    });
+  } catch {
+    /* The inbox still shows the current copy action. */
+  }
+}
+
+async function setAuthCodeAvailable(item, expiresAt, available = true) {
+  if (item.provider === "demo") {
+    const demos = await getDemoInbox();
+    const next = demos.map((entry) => entry.key === item.key
+      ? available
+        ? { ...entry, authCodeAvailable: true, authCodeExpiresAt: expiresAt }
+        : { ...entry, authCodeAvailable: false, authCodeExpiresAt: 0 }
+      : entry);
+    await globalThis.chrome?.storage?.local?.set({ [AUTH_CODE_DEMO_INBOX_KEY]: next });
+    return;
+  }
+  await write(async () => {
+    const current = getInbox().find((entry) => entry.key === item.key);
+    if (!current) return;
+    mergeMessages([available
+      ? { ...current, authCodeAvailable: true, authCodeExpiresAt: expiresAt }
+      : { ...current, authCodeAvailable: false, authCodeExpiresAt: 0 }]);
+    await persistCache(getInbox());
+  });
+}
+
+async function runAuthCodePipeline(items, group, deps = {}) {
+  if (!items?.length) return { detected: [], ordinary: [] };
+  const isCurrent = deps.isCurrent ?? (() => true);
+  const autoCopy = typeof deps.autoCopyOverride === "boolean"
+    ? deps.autoCopyOverride
+    : await readAuthCodeAutoCopy().catch(() => false);
+  return processFreshMail(items, {
+    now: deps.now,
+    autoCopy,
+    codeOnly: deps.codeOnly === true,
+    saveCode: async (key, code, expiresAt, now, version) => {
+      if (!isCurrent()) return false;
+      const saved = await savePendingAuthCode(key, code, expiresAt, now, version);
+      if (!isCurrent()) {
+        await clearAuthCodeRecords([key]);
+        return false;
+      }
+      return saved;
+    },
+    onCodeAvailable: async (key, _available) => {
+      if (!isCurrent()) return;
+      const item = items.find((entry) => entry.key === key);
+      if (item) {
+        // The notification metadata is non-secret; the actual code remains
+        // in storage.session only.
+        const record = await getPendingAuthCode(key);
+        if (!isCurrent()) return;
+        await setAuthCodeAvailable(item, record?.expiresAt ?? Date.now());
+      }
+    },
+    copyCode: async (code) => isCurrent() && copyAuthCodeToClipboard(code, { isCurrent }),
+    notifyCode: (item, result) => createAuthCodeNotification(item, { ...result, isCurrent }),
+    notifyMail: async (ordinary) => {
+      if (!ordinary.length) return;
+      if (deps.notifyMail) return deps.notifyMail(ordinary);
+      const noticeGroup = { provider: group.provider, account: group.account, items: ordinary };
+      await (deps.notify ?? sendNotification)(noticeGroup, buildToast(noticeGroup));
+    },
+    fetchBody: async (item) => {
+      if (item.provider === "demo") {
+        const demo = await getDemoMessage(item.key);
+        return demo ? { ok: true, content: demo.demoBody, contentType: "text" } : { ok: false };
+      }
+      return handleMessageBody({ key: item.key }, deps);
+    },
+  });
+}
+
+export async function handleCopyAuthCode(key, deps = {}) {
+  await ready;
+  let item = getInbox().find((entry) => entry.key === key);
+  if (!item) item = await getDemoMessage(key);
+  if (!item) return { ok: false, code: "message-unavailable" };
+  if (item.authCodeAvailable !== true || Number(item.authCodeExpiresAt) <= (deps.now ?? Date.now()))
+    return { ok: false, code: "code-unavailable" };
+  const expectedVersion = String(Number(item.date) || 0);
+  const demoVersion = demoGeneration;
+  let isCurrent = () => true;
+  if (item.provider !== "demo") {
+    const accounts = await loadAccounts();
+    const acct = accounts.find((entry) => accountKey(entry) === accountKey(item));
+    if (!acct || !isEnabled(acct) || signedOutByKey.has(accountKey(acct)))
+      return { ok: false, code: "account-unavailable" };
+    const generation = accountGeneration.get(accountKey(acct)) ?? 0;
+    isCurrent = () => {
+      const latest = getInbox().find((entry) => entry.key === key);
+      return generation === (accountGeneration.get(accountKey(acct)) ?? 0)
+        && !signedOutByKey.has(accountKey(acct))
+        && latest?.authCodeAvailable === true
+        && Number(latest.authCodeExpiresAt) > (deps.now ?? Date.now())
+        && String(Number(latest.date) || 0) === expectedVersion;
+    };
+  } else {
+    isCurrent = () => demoVersion === demoGeneration;
+  }
+  const record = await getPendingAuthCode(key, deps.now ?? Date.now());
+  if (!isCurrent()) return { ok: false, code: "account-unavailable" };
+  if (!record) {
+    await setAuthCodeAvailable(item, 0, false).catch(() => {});
+    return { ok: false, code: "code-expired" };
+  }
+  const latest = item.provider === "demo"
+    ? await getDemoMessage(key)
+    : getInbox().find((entry) => entry.key === key);
+  if (!latest || latest.authCodeAvailable !== true
+    || Number(latest.authCodeExpiresAt) <= (deps.now ?? Date.now())
+    || String(Number(latest.date) || 0) !== expectedVersion
+    || String(record.version) !== expectedVersion || !isCurrent())
+    return { ok: false, code: "code-unavailable" };
+  const copied = deps.copyCode
+    ? await deps.copyCode(record.code)
+    : await copyAuthCodeToClipboard(record.code, { isCurrent });
+  return copied
+    ? { ok: true }
+    : { ok: false, code: "clipboard-unavailable" };
+}
+
+export async function handleAuthCodeNotificationButton(notificationId, buttonIndex) {
+  if (buttonIndex !== 0 || !notificationId?.startsWith(AUTH_CODE_NOTIFICATION_PREFIX)) return;
+  const key = await messageForNotification(notificationId);
+  if (!key) {
+    await updateAuthCodeNotification(notificationId, false);
+    return;
+  }
+  const result = await handleCopyAuthCode(key);
+  await updateAuthCodeNotification(notificationId, result.ok);
+  if (result.ok) await showAuthCodeCopyConfirmation(key);
+}
+
+async function showAuthCodeCopyConfirmation(key) {
+  const item = getInbox().find((entry) => entry.key === key) ?? await getDemoMessage(key);
+  if (!item) return;
+  try {
+    await globalThis.chrome?.notifications?.create?.(authCodeNotificationId(), {
+      type: "basic",
+      silent: true,
+      iconUrl: notificationIconUrl(),
+      title: `${item.account} (${item.provider === "demo" ? "local demo" : item.provider})`,
+      message: "Your sign-in code is ready to paste.",
+      contextMessage: authCodeSenderContext(item),
+    });
+  } catch {
+    /* Clipboard success still stands if native notifications are unavailable. */
+  }
+}
+
+export async function handleAuthCodeNotificationClick(notificationId) {
+  if (!notificationId?.startsWith(AUTH_CODE_NOTIFICATION_PREFIX)) return;
+  const key = await messageForNotification(notificationId);
+  if (!key) return;
+  const result = await handleCopyAuthCode(key);
+  await updateAuthCodeNotification(notificationId, result.ok);
+  if (result.ok) await showAuthCodeCopyConfirmation(key);
+}
+
+async function clearAuthCodesForAccount(acct) {
+  const items = getInbox().filter((item) => accountKey(item) === accountKey(acct));
+  const ids = await clearAuthCodeRecords(items.map((item) => item.key));
+  await write(async () => {
+    for (const item of items)
+      mergeMessages([{ ...item, authCodeAvailable: false, authCodeExpiresAt: 0 }]);
+    await persistCache(getInbox());
+  });
+  for (const id of ids) {
+    try { await globalThis.chrome?.notifications?.clear?.(id); } catch { /* optional UI cleanup */ }
+  }
+}
+
+async function processDemoArrival(items) {
+  if (!items.length) return;
+  // The shared helper reads the same setting and routes body lookup through
+  // the local demo store.
+  await runAuthCodePipeline(items, {
+    provider: "demo",
+    account: "Local auth code demo",
+  });
+}
+
+export function handleDemoGenerate(scenario = "numeric", deps = {}) {
+  return serializeDemo(async () => {
+  await ready;
+  if (!AUTH_CODE_DEMO_SCENARIOS.includes(scenario)) return { ok: false, code: "invalid-scenario" };
+  const item = createDemoEmail(scenario, deps);
+  await addDemoEmails([item]);
+  await processDemoArrival([item]);
+  return { ok: true, key: item.key };
+  });
+}
+
+async function runDemoSequenceTickUnlocked() {
+  const store = globalThis.chrome?.storage?.local;
+  const data = await store?.get(AUTH_CODE_DEMO_SEQUENCE_KEY);
+  const sequence = data?.[AUTH_CODE_DEMO_SEQUENCE_KEY];
+  if (!sequence || !Array.isArray(sequence.scenarios) || sequence.index >= sequence.scenarios.length) {
+    await globalThis.chrome?.alarms?.clear?.(AUTH_CODE_DEMO_ALARM);
+    await store?.remove?.(AUTH_CODE_DEMO_SEQUENCE_KEY);
+    return;
+  }
+  const scenario = sequence.scenarios[sequence.index];
+  const item = createDemoEmail(scenario);
+  await addDemoEmails([item]);
+  await processDemoArrival([item]);
+  const next = { ...sequence, index: sequence.index + 1 };
+  if (next.index >= next.scenarios.length) {
+    await globalThis.chrome?.alarms?.clear?.(AUTH_CODE_DEMO_ALARM);
+    await store?.remove?.(AUTH_CODE_DEMO_SEQUENCE_KEY);
+  } else {
+    await store?.set?.({ [AUTH_CODE_DEMO_SEQUENCE_KEY]: next });
+    await globalThis.chrome?.alarms?.create?.(AUTH_CODE_DEMO_ALARM, {
+      delayInMinutes: DEMO_SEQUENCE_INTERVAL_SECONDS / 60,
+    });
+  }
+}
+
+export function handleDemoSequence(scenarios = AUTH_CODE_DEMO_SCENARIOS) {
+  return serializeDemo(async () => {
+  await ready;
+  const safe = Array.isArray(scenarios)
+    ? scenarios.filter((scenario) => AUTH_CODE_DEMO_SCENARIOS.includes(scenario)).slice(0, 20)
+    : [];
+  if (!safe.length) return { ok: false, code: "invalid-sequence" };
+  await globalThis.chrome?.storage?.local?.set({
+    [AUTH_CODE_DEMO_SEQUENCE_KEY]: { scenarios: safe, index: 0 },
+  });
+  await runDemoSequenceTickUnlocked();
+  return { ok: true, remaining: Math.max(0, safe.length - 1) };
+  });
+}
+
+export function handleDemoSequenceTick() {
+  return serializeDemo(runDemoSequenceTickUnlocked);
+}
+
+export function handleDemoClear() {
+  return serializeDemo(async () => {
+  await ready;
+  demoGeneration++;
+  const items = await clearDemoInbox();
+  const ids = await clearAuthCodeRecords(items.map((item) => item.key));
+  for (const id of ids) {
+    try { await globalThis.chrome?.notifications?.clear?.(id); } catch { /* optional UI cleanup */ }
+  }
+  await globalThis.chrome?.alarms?.clear?.(AUTH_CODE_DEMO_ALARM);
+  await globalThis.chrome?.storage?.local?.remove?.(AUTH_CODE_DEMO_SEQUENCE_KEY);
+  return { ok: true, cleared: items.length };
+  });
 }
 
 function defaultSetBadge(count) {
@@ -800,6 +1228,23 @@ async function ensureAlarm() {
   await alarms.create(ALARM_NAME, { delayInMinutes: periodInMinutes, periodInMinutes });
 }
 
+async function ensureDemoSequenceAlarm() {
+  const alarms = globalThis.chrome?.alarms;
+  const store = globalThis.chrome?.storage?.local;
+  if (!alarms?.create || !store?.get) return;
+  const data = await store.get(AUTH_CODE_DEMO_SEQUENCE_KEY);
+  const sequence = data?.[AUTH_CODE_DEMO_SEQUENCE_KEY];
+  if (!sequence || !Array.isArray(sequence.scenarios) || sequence.index >= sequence.scenarios.length)
+    return;
+  if (await alarms.get?.(AUTH_CODE_DEMO_ALARM)) return;
+  try {
+    await alarms.create(AUTH_CODE_DEMO_ALARM, { delayInMinutes: DEMO_SEQUENCE_INTERVAL_SECONDS / 60 });
+  } catch {
+    try { await alarms.create(AUTH_CODE_DEMO_ALARM, { delayInMinutes: 1 }); }
+    catch { /* The sequence remains saved for a later worker startup. */ }
+  }
+}
+
 // Preference saves have their own queue: a slow mailbox poll must not block
 // scheduling, and overlapping settings transactions must not undo each other.
 let settingsTail = Promise.resolve();
@@ -847,6 +1292,7 @@ async function init() {
   await hydrateAccountState();
   await pruneMailActions();
   try { await ensureAlarm(); } catch { /* Later initialization or Save can repair scheduling; mail stays usable. */ }
+  try { await ensureDemoSequenceAlarm(); } catch { /* A later startup can resume a saved debug sequence. */ }
 }
 
 export const ready = init();
@@ -1066,6 +1512,12 @@ export async function handleManualRefresh(accounts, deps = {}) {
 
 export async function handleMessageBody(msg, deps = {}) {
   await ready;
+  if (String(msg.key ?? "").startsWith("demo:")) {
+    const demo = await getDemoMessage(msg.key);
+    return demo
+      ? { ok: true, content: demo.demoBody, contentType: "text" }
+      : { ok: false, code: "message-unavailable" };
+  }
   const accounts = await loadAccounts();
   const item = getInbox().find(item => item.key === msg.key);
   const acct = accounts.find(acct => item && accountKey(acct) === accountKey(item));
@@ -1105,6 +1557,15 @@ export async function handleMessageBody(msg, deps = {}) {
 export async function handleMessage(msg, deps = {}) {
   await ready;
   if (msg.type === "message-body") return handleMessageBody(msg, deps);
+  if (msg.type === "copy-auth-code") return handleCopyAuthCode(msg.key, deps);
+  if (msg.type === "demo-generate") return handleDemoGenerate(msg.scenario, deps);
+  if (msg.type === "demo-sequence") return handleDemoSequence(msg.scenarios);
+  if (msg.type === "demo-clear") return handleDemoClear();
+  if (msg.type === "set-auth-code-auto-copy") {
+    const enabled = msg.enabled === true;
+    await globalThis.chrome?.storage?.local?.set({ [AUTH_CODE_AUTO_COPY_KEY]: enabled });
+    return { ok: true, enabled };
+  }
   if (msg.type === "set-poll-interval") return savePollInterval(msg.pollIntervalMs);
   if (msg.type === "refresh") {
     const result = await handleManualRefresh(await loadAccounts(), deps);
@@ -1164,6 +1625,7 @@ export async function handleMessage(msg, deps = {}) {
   accountGeneration.set(key, (accountGeneration.get(key) ?? 0) + 1);
   signedOutByKey.add(key);
   markNeedsSignIn(acct);
+  await clearAuthCodesForAccount(acct);
   // Invalidate provider operations immediately, before waiting for the writer.
   // Gmail keeps no credentials (session cookie transport), so sign-out
   // only stops polling; Outlook clears its session slots.
@@ -1204,11 +1666,24 @@ if (typeof chrome !== "undefined") {
   chrome.alarms?.onAlarm?.addListener((alarm) => {
     if (alarm?.name === ALARM_NAME)
       void loadAccounts().then((accounts) => handleAlarm(accounts));
+    else if (alarm?.name === AUTH_CODE_DEMO_ALARM)
+      void handleDemoSequenceTick();
+  });
+  chrome.notifications?.onButtonClicked?.addListener((id, buttonIndex) => {
+    void handleAuthCodeNotificationButton(id, buttonIndex);
+  });
+  chrome.notifications?.onClicked?.addListener((id) => {
+    void handleAuthCodeNotificationClick(id);
   });
   chrome.runtime?.onMessage?.addListener((msg, _sender, sendResponse) => {
     if (
       ![
         "message-body",
+        "copy-auth-code",
+        "demo-generate",
+        "demo-sequence",
+        "demo-clear",
+        "set-auth-code-auto-copy",
         "set-poll-interval",
         "refresh",
         "mark-read",
