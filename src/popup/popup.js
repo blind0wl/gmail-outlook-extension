@@ -26,6 +26,10 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
   var themeWrites = 0;
   var themeSelection = 0;
   var items = [];
+  var demoItems = [];
+  var AUTH_CODE_DEMO_INBOX_KEY = "authCodeDemoInbox";
+  var AUTH_CODE_AUTO_COPY_KEY = "authCodeAutoCopy";
+  var authCodeAutoCopy = false;
   // Configured accounts from the same storage key the worker polls
   // (`accounts`), so per-account chime toggles exist even with an empty
   // mail cache. Settings keys stay `provider:account`.
@@ -132,8 +136,9 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
 
   var pendingOpened = new Set();
   async function markRead(key) {
-    var item = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; });
+    var item = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; }) || demoItems.find(function (item) { return item.key === key; });
     if (!item) return;
+    if (item.provider === "demo") return;
     var previousItem = { ...item };
     item.localRead = true;
     mailFeedback.delete(key);
@@ -339,6 +344,7 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
   function visibleItems() {
     var sorted = displayedItems().sort(function (a, b) { return b.date - a.date; });
     if (filter === "all") return sorted;
+    if (filter === "demo") return sorted.filter(function (item) { return item.provider === "demo"; });
     return sorted.filter(function (item) { return item.provider === filter; });
   }
 
@@ -348,6 +354,7 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
   }
   function renderHeader() {
     var keys = new Set(configuredAccounts.map(accountKey));
+    if (demoItems.length) keys.add("demo:local-demo");
     var scoped = displayedItems().filter(function (item) { return keys.has(accountKey(item)); });
     var unread = unreadCount(scoped);
     var el = document.getElementById("unread-count");
@@ -359,6 +366,10 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
   function renderPills() {
     var buttons = document.querySelectorAll(".pills button");
     for (var i = 0; i < buttons.length; i++) {
+      if (buttons[i].getAttribute("data-filter") === "demo") {
+        buttons[i].hidden = demoItems.length === 0;
+        if (buttons[i].hidden && filter === "demo") filter = "all";
+      }
       var active = buttons[i].getAttribute("data-filter") === filter;
       buttons[i].setAttribute("aria-pressed", active ? "true" : "false");
     }
@@ -430,7 +441,7 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
   function stageRead(key) {
     if (stagedReads.has(key) || pendingMailActions.has(key) || ["pending", "uncertain"].includes(mailActions[key]?.state)) return;
     var item = mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; });
-    if (!item) return;
+    if (!item || item.provider === "demo") return;
     mailFeedback.delete(key);
     delete mailErrors[key];
     stagedReads.set(key, { item: { ...item }, timer: null });
@@ -467,6 +478,8 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
       if (feedback && feedback.action === "unread") return { ...item, unread: true, localRead: false };
       return mailFeedback.has(item.key) ? { ...item, unread: false, localRead: false } : item;
     });
+    // Demo messages are local fixtures and stay visible when opened.
+    projected.push(...demoItems);
     // The worker may remove/cache-read mail before reporting an uncertain result.
     // Retain a recovery card without writing optimistic state into storage.
     var projectedKeys = new Set(projected.map(function (item) { return item.key; }));
@@ -549,7 +562,20 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
       record.openedTag.remove();
       record.openedTag = null;
     }
-    ["open", "read", "trash"].forEach(function (action) { updateMailButton(record.buttons[action], item, action); });
+    ["open", "read", "trash"].forEach(function (action) {
+      var button = record.buttons[action];
+      button.hidden = item.provider === "demo";
+      updateMailButton(button, item, action);
+    });
+    if (record.copyButton) {
+      var copyAvailable = item.authCodeAvailable === true
+        && Number(item.authCodeExpiresAt) > Date.now();
+      record.copyRow.hidden = !copyAvailable;
+      record.copyButton.hidden = !copyAvailable;
+      record.copyButton.disabled = !copyAvailable;
+      record.copyButton.title = "Copy the detected sign-in code";
+      record.copyButton.setAttribute("aria-label", "Copy sign-in code from " + (item.subject || "this message"));
+    }
     var error = mailErrors[item.key];
     if (error && !record.error) {
       record.error = document.createElement("p");
@@ -576,6 +602,10 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
   async function actOnMail(key, action, snapshot) {
     if (pendingMailActions.has(key)) return;
     var actionItem = snapshot || mailFeedback.get(key)?.item || items.find(function (item) { return item.key === key; }) || mailActions[key]?.item;
+    if (actionItem?.provider === "demo") {
+      setStatus("Demo emails stay local. Use Clear demo inbox to remove them.", "ok");
+      return;
+    }
     var unconfirmedMessage = "The result could not be confirmed. Check this action in your mailbox, then choose “I’ve checked” to unlock it. Other mail is still available.";
     pendingMailActions.add(key);
     delete mailErrors[key];
@@ -699,6 +729,8 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
     var index = 0;
     var shown = visibleItems();
     var sections = configuredAccounts.filter(function (acct) { return filter === "all" || acct.provider === filter; });
+    if (demoItems.length && (filter === "all" || filter === "demo"))
+      sections.push({ provider: "demo", account: "local-demo", demoLabel: "Local auth code demo", enabled: true });
     var sectionKeys = new Set(sections.map(accountKey));
     var configuredKeys = new Set(configuredAccounts.map(accountKey));
     var mailByAccount = new Map();
@@ -713,9 +745,11 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
     });
     var preserveLayout = Boolean(activeReaderKey);
     empty.hidden = sections.length !== 0;
-    empty.textContent = configuredAccounts.length ? "No accounts match this filter." : "No accounts yet. Open Settings to connect Gmail or Outlook.";
+    empty.textContent = configuredAccounts.length || demoItems.length
+      ? "No messages match this filter."
+      : "No accounts yet. Open Settings to connect Gmail or Outlook, or create local test emails.";
     var setupCta = document.getElementById("empty-setup");
-    if (setupCta) setupCta.hidden = configuredAccounts.length !== 0;
+    if (setupCta) setupCta.hidden = configuredAccounts.length !== 0 || demoItems.length !== 0;
     accountSections.forEach(function (group, key) {
       if (sectionKeys.has(key)) return;
       if (!configuredKeys.has(key)) {
@@ -758,7 +792,7 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
       top.className = "account-heading-top";
       var badge = document.createElement("span");
       badge.className = "badge";
-      badge.textContent = acct.provider === "outlook" ? "Outlook" : "Gmail";
+      badge.textContent = acct.provider === "demo" ? "Demo" : acct.provider === "outlook" ? "Outlook" : "Gmail";
       var mail = mailByAccount.get(acctKey) || [];
       // Freshness comes from the worker-persisted per-account stamp, so a
       // failed or paused account can never display a fresh check time.
@@ -780,7 +814,7 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
       }
       top.append(count);
       var address = document.createElement("h2");
-      address.textContent = acct.account;
+      address.textContent = acct.demoLabel || acct.account;
       address.id = "account-heading-" + index++;
       group.setAttribute("aria-labelledby", address.id);
       var inboxUrl = accountInboxUrl(acct);
@@ -953,6 +987,30 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
           });
           icons.appendChild(button);
         });
+        var copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.className = "card-icon card-copy-code";
+        copyButton.textContent = "Copy code";
+        copyButton.hidden = true;
+        copyButton.addEventListener("click", async function (event) {
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          copyButton.disabled = true;
+          try {
+            var result = await chrome.runtime.sendMessage({ type: "copy-auth-code", key: item.key });
+            if (result?.ok) setStatus("Sign-in code copied and ready to paste.", "ok");
+            else if (result?.code === "code-expired") setStatus("This sign-in code expired. Wait for a new email.", "error");
+            else setStatus("Could not copy the sign-in code. Try again.", "error");
+          } catch {
+            setStatus("Could not copy the sign-in code. Try again.", "error");
+          } finally {
+            copyButton.disabled = false;
+          }
+        });
+        var copyRow = document.createElement("div");
+        copyRow.className = "auth-code-copy-row";
+        copyRow.hidden = true;
+        copyRow.appendChild(copyButton);
         var time = document.createElement("span");
         time.className = "card-time";
         topline.appendChild(time);
@@ -973,10 +1031,11 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
         body.setAttribute("role", "region");
         body.setAttribute("aria-label", "Full message");
         card.appendChild(body);
+        card.appendChild(copyRow);
         var record = { card: card, toggle: toggle,
           sender: sender, subjectElement: subject, snippet: snippet, time: time, topline: topline,
           body: body, dot: null, openedTag: null,
-          buttons: mailButtons, error: null };
+          buttons: mailButtons, copyButton: copyButton, copyRow: copyRow, error: null };
         cardToggles.set(item.key, record);
         if (expandedKeys.has(item.key)) showMessageBody(card, item.key);
         toggle.addEventListener("click", function (event) {
@@ -1097,6 +1156,7 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
     var readerKeys = new Set([...stagedReads.keys(), ...messageBodies.keys(), ...expandedKeys]);
     readerKeys.forEach(function (key) {
       var item = cardToggles.get(key)?.item || currentMailItem(key);
+      if (item?.provider === "demo") return;
       var account = item && configuredAccounts.find(function (acct) { return accountKey(acct) === accountKey(item); });
       if (!account || account.enabled === false) {
         pauseStagedRead(key);
@@ -1127,6 +1187,8 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
     var store = storageLocal();
     if (!store) {
       items = [];
+      demoItems = [];
+      authCodeAutoCopy = false;
       configuredAccounts = [];
       accountState = {};
       mailActions = {};
@@ -1134,7 +1196,7 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
       render();
       return;
     }
-    var keys = [CACHE_KEY, ACCOUNTS_KEY, ACCOUNT_STATE_KEY, "mailActions", SOUND_SETTINGS_KEY];
+    var keys = [CACHE_KEY, ACCOUNTS_KEY, ACCOUNT_STATE_KEY, "mailActions", SOUND_SETTINGS_KEY, AUTH_CODE_DEMO_INBOX_KEY, AUTH_CODE_AUTO_COPY_KEY];
     var revisions = new Map(keys.map(function (key) { return [key, storageRevision(key)]; }));
     var actionRevision = mailActionsRevision;
     Promise.resolve(store.get(keys)).then(function (data) {
@@ -1142,6 +1204,14 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
         var cached = data?.[CACHE_KEY];
         items = Array.isArray(cached) ? cached : [];
       }
+      if (storageRevision(AUTH_CODE_DEMO_INBOX_KEY) === revisions.get(AUTH_CODE_DEMO_INBOX_KEY)) {
+        var demos = data?.[AUTH_CODE_DEMO_INBOX_KEY];
+        demoItems = Array.isArray(demos) ? demos : [];
+      }
+      if (storageRevision(AUTH_CODE_AUTO_COPY_KEY) === revisions.get(AUTH_CODE_AUTO_COPY_KEY))
+        authCodeAutoCopy = data?.[AUTH_CODE_AUTO_COPY_KEY] === true;
+      var autoCopyToggle = document.getElementById("auth-code-auto-copy");
+      if (autoCopyToggle) autoCopyToggle.checked = authCodeAutoCopy;
       if (storageRevision(ACCOUNTS_KEY) === revisions.get(ACCOUNTS_KEY)) {
         var accounts = data?.[ACCOUNTS_KEY];
         configuredAccounts = Array.isArray(accounts) ? accounts.map(normalizeAccount) : [];
@@ -1270,6 +1340,43 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
     focusedToggle.addEventListener("change", function () {
       void storageLocal()?.set({skipFocusedProvider: focusedToggle.checked});
     });
+    var authCodeAutoCopyToggle = document.getElementById("auth-code-auto-copy");
+    authCodeAutoCopyToggle.checked = authCodeAutoCopy;
+    authCodeAutoCopyToggle.addEventListener("change", function () {
+      authCodeAutoCopy = authCodeAutoCopyToggle.checked;
+      void storageLocal()?.set({ [AUTH_CODE_AUTO_COPY_KEY]: authCodeAutoCopy });
+    });
+    var demoStatus = document.getElementById("auth-code-demo-status");
+    document.getElementById("auth-code-demo-generate").addEventListener("click", async function () {
+      demoStatus.textContent = "Creating a local test email…";
+      try {
+        var generated = await chrome.runtime.sendMessage({
+          type: "demo-generate",
+          scenario: document.getElementById("auth-code-demo-scenario").value,
+        });
+        demoStatus.textContent = generated?.ok
+          ? "Fake email added to the Demo inbox."
+          : "Could not create the test email. Try again.";
+      } catch { demoStatus.textContent = "Could not create the test email. Try again."; }
+    });
+    document.getElementById("auth-code-demo-sequence").addEventListener("click", async function () {
+      demoStatus.textContent = "Starting the local arrival sequence…";
+      try {
+        var sequence = await chrome.runtime.sendMessage({ type: "demo-sequence" });
+        demoStatus.textContent = sequence?.ok
+          ? "First fake email added. More arrive every 30 seconds while Chrome is open; the popup can close. Clear demo inbox stops the sequence."
+          : "Could not start the sequence. Try again.";
+      } catch { demoStatus.textContent = "Could not start the sequence. Try again."; }
+    });
+    document.getElementById("auth-code-demo-clear").addEventListener("click", async function () {
+      demoStatus.textContent = "Clearing local test emails…";
+      try {
+        var cleared = await chrome.runtime.sendMessage({ type: "demo-clear" });
+        demoStatus.textContent = cleared?.ok
+          ? "Demo inbox cleared."
+          : "Could not clear the demo inbox. Try again.";
+      } catch { demoStatus.textContent = "Could not clear the demo inbox. Try again."; }
+    });
     var addForm = document.getElementById("add-account-form");
     var addTitle = document.getElementById("add-account-title");
     var addEmail = document.getElementById("add-account-email");
@@ -1390,13 +1497,22 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
         if (changes.pollIntervalMs) pollSettings.changed(changes.pollIntervalMs.newValue);
         if (changes[THEME_KEY] && !themeWrites) applyTheme(changes[THEME_KEY].newValue);
 
-        var renderAll = Boolean(changes[CACHE_KEY] || changes[ACCOUNTS_KEY]);
+        var renderAll = Boolean(changes[CACHE_KEY] || changes[ACCOUNTS_KEY] || changes[AUTH_CODE_DEMO_INBOX_KEY]);
         var renderStatusOnly = false;
         var renderActions = false;
         var renderSoundOnly = Boolean(changes[SOUND_SETTINGS_KEY]);
         if (changes[CACHE_KEY]) {
           var next = changes[CACHE_KEY].newValue;
           items = Array.isArray(next) ? next : [];
+        }
+        if (changes[AUTH_CODE_DEMO_INBOX_KEY]) {
+          var demos = changes[AUTH_CODE_DEMO_INBOX_KEY].newValue;
+          demoItems = Array.isArray(demos) ? demos : [];
+        }
+        if (changes[AUTH_CODE_AUTO_COPY_KEY]) {
+          authCodeAutoCopy = changes[AUTH_CODE_AUTO_COPY_KEY].newValue === true;
+          var setting = document.getElementById("auth-code-auto-copy");
+          if (setting) setting.checked = authCodeAutoCopy;
         }
         if (changes[ACCOUNTS_KEY]) {
           var accounts = changes[ACCOUNTS_KEY].newValue;

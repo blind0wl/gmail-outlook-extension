@@ -16,6 +16,7 @@
     <button type="button" data-filter="all" aria-pressed="true">All</button>
     <button type="button" data-filter="gmail" aria-pressed="false">Gmail</button>
     <button type="button" data-filter="outlook" aria-pressed="false">Outlook</button>
+    <button type="button" data-filter="demo" aria-pressed="false" hidden>Demo</button>
   </nav>
   <main>
     <ul id="mail-undo" aria-label="Mailbox recovery" hidden></ul>
@@ -68,6 +69,27 @@
   <section aria-labelledby="notifications-title">
     <h2 id="notifications-title">Notifications</h2>
     <label class="check-row"><input id="skip-focused" type="checkbox"> <span>Pause alerts while a provider tab is focused</span></label>
+    <label class="check-row"><input id="auth-code-auto-copy" type="checkbox"> <span>Automatically copy new sign-in codes</span></label>
+    <p class="form-note">When enabled, the newest detected code replaces your clipboard. The code is copied only after a successful detection.</p>
+  </section>
+  <section class="auth-code-demo" aria-labelledby="auth-code-demo-title">
+    <h2 id="auth-code-demo-title">Sign-in code testing</h2>
+    <p>Generate local fake emails in the Demo inbox. They never contact Gmail or Outlook. The sequence starts now, then adds an example every 30 seconds while Chrome is open; you can close the popup.</p>
+    <label for="auth-code-demo-scenario">Example email</label>
+    <select id="auth-code-demo-scenario">
+      <option value="numeric">Numeric code</option>
+      <option value="alphanumeric">Letters and numbers</option>
+      <option value="body-only">Code in full message</option>
+      <option value="ambiguous">Two possible codes</option>
+      <option value="non-code">No code</option>
+      <option value="expired">Expired code</option>
+    </select>
+    <div class="auth-code-demo-actions">
+      <button id="auth-code-demo-generate" type="button">Generate email</button>
+      <button id="auth-code-demo-sequence" type="button">Start 30 sec sequence</button>
+      <button id="auth-code-demo-clear" type="button">Clear demo inbox</button>
+    </div>
+    <p id="auth-code-demo-status" role="status"></p>
   </section>
   <section id="sound-settings" aria-label="Sound settings">
     <h2>Sound</h2>

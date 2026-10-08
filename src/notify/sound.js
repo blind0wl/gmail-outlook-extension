@@ -26,6 +26,7 @@ export const OFFSCREEN_DOCUMENT_PATH = "src/notify/offscreen.html";
 
 // Message type the offscreen document listens for. Volume-only payload.
 export const PLAY_CHIME_MESSAGE = "play-chime";
+export const COPY_AUTH_CODE_MESSAGE = "copy-auth-code-to-clipboard";
 
 // Clamp to 0..1. Non-numeric input falls back to the default volume.
 export function clampVolume(level) {
@@ -113,22 +114,50 @@ export function soundControlKeys(configured, cached) {
   return keys;
 }
 
+let offscreenCreation = null;
+
+async function offscreenDocumentExists(offscreen) {
+  try {
+    if (typeof offscreen?.hasDocument === "function")
+      return await offscreen.hasDocument();
+  } catch {
+    // Older Chrome versions expose getContexts instead.
+  }
+  try {
+    const runtime = globalThis.chrome?.runtime;
+    if (typeof runtime?.getContexts === "function") {
+      const contexts = await runtime.getContexts({
+        contextTypes: ["OFFSCREEN_DOCUMENT"],
+        documentUrls: [runtime.getURL(OFFSCREEN_DOCUMENT_PATH)],
+      });
+      return contexts.length > 0;
+    }
+  } catch {
+    /* Creation below is still the authoritative check. */
+  }
+  return false;
+}
+
 async function ensureOffscreenDocument() {
   const offscreen = globalThis.chrome?.offscreen;
-  // No offscreen API (older Chrome, tests): still try sendMessage; the
-  // catch in playChime keeps polling safe.
   if (!offscreen) return false;
-  try {
-    if (await offscreen.hasDocument?.()) return true;
-    await offscreen.createDocument({
-      url: OFFSCREEN_DOCUMENT_PATH,
-      reasons: ["AUDIO_PLAYBACK"],
-      justification: "Play a short chime when automatic polls find new mail.",
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  if (offscreenCreation) return offscreenCreation;
+  offscreenCreation = (async () => {
+    if (await offscreenDocumentExists(offscreen)) return true;
+    try {
+      await offscreen.createDocument({
+        url: OFFSCREEN_DOCUMENT_PATH,
+        reasons: ["AUDIO_PLAYBACK", "CLIPBOARD"],
+        justification: "Play a short mail chime and copy a sign-in code when requested.",
+      });
+      return true;
+    } catch {
+      // Two simultaneous callers can race to create the one shared page.
+      return offscreenDocumentExists(offscreen);
+    }
+  })();
+  try { return await offscreenCreation; }
+  finally { offscreenCreation = null; }
 }
 
 // Ask the offscreen document to play one short chime. Carries only the
@@ -150,6 +179,25 @@ export async function playChime(volume) {
     await ensureOffscreenDocument();
     await runtime.sendMessage({ type: PLAY_CHIME_MESSAGE, volume: clampVolume(level) });
     return true;
+  } catch {
+    return false;
+  }
+}
+
+// The offscreen document uses the extension clipboardWrite permission and
+// execCommand's confirmed boolean result. No clipboard read is requested.
+export async function copyAuthCodeToClipboard(code, { isCurrent = () => true } = {}) {
+  if (typeof code !== "string" || !/^[a-z0-9]{4,10}$/i.test(code)) return false;
+  const runtime = globalThis.chrome?.runtime;
+  if (!runtime?.sendMessage) return false;
+  try {
+    if (!(await ensureOffscreenDocument())) return false;
+    if (!isCurrent()) return false;
+    const result = await runtime.sendMessage({
+      type: COPY_AUTH_CODE_MESSAGE,
+      code,
+    });
+    return result?.ok === true;
   } catch {
     return false;
   }

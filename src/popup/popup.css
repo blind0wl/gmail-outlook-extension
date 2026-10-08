@@ -114,6 +114,11 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .card-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 28px; padding: 6px; background: transparent; border: 1px solid transparent; border-radius: 7px; color: var(--muted); }
 .card-icon:hover:not([aria-disabled="true"]) { background: var(--hover); color: var(--text); border-color: transparent; }
 .card-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.card-copy-code { width: auto; padding-inline: 9px; color: var(--accent); font-size: 11px; white-space: nowrap; }
+.card-copy-code[hidden] { display: none; }
+.auth-code-copy-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+.auth-code-copy-row[hidden] { display: none; }
+.auth-code-copy-row .card-copy-code { min-height: 28px; }
 .card-trash:hover:not([aria-disabled="true"]) { color: var(--danger); }
 .card-icon-active:not([aria-disabled="true"]) { background: var(--accent-soft); color: var(--accent); }
 .card-icon-active:hover:not([aria-disabled="true"]) { background: var(--accent-soft); color: var(--accent); }
@@ -220,6 +225,14 @@ input[type="checkbox"]:checked::before { transform: translateX(14px); background
 .poll-presets button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .poll-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
 .poll-controls input, .poll-controls select { min-width: 0; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--control); color: var(--text); font: inherit; }
+.auth-code-demo > label { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.auth-code-demo > select { width: 100%; margin-top: 5px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--control); color: var(--text); font: inherit; }
+.auth-code-demo > p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.auth-code-demo-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.auth-code-demo-actions button { font-size: 12px; }
+#auth-code-demo-generate { color: var(--on-accent); background: var(--accent); border-color: transparent; }
+#auth-code-demo-status { margin: 8px 0 0; color: var(--accent); }
+#auth-code-demo-status:empty { display: none; }
 .poll-controls input { font-variant-numeric: tabular-nums; caret-color: var(--accent); }
 #poll-help { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
 #poll-error { color: var(--danger); }
