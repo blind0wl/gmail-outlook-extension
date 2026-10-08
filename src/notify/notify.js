@@ -1,5 +1,5 @@
 // Notification helpers plus the storage persistence bridge.
-// Pure logic (diff, counts, toast shaping) lives here so it is testable
+// Pure logic (counts, toast shaping) lives here so it is testable
 // under Node. The chrome.* calls are isolated in persistCache/hydrateCache
 // and degrade to no-ops where chrome does not exist (Node tests, which
 // stub globalThis.chrome with an in-memory double instead).
@@ -10,28 +10,9 @@ import { mergeMessages, getInbox } from "../store/cache.js";
 export const CACHE_KEY = "mailCache";
 export const ACCOUNT_STATE_KEY = "accountState";
 
-// Keys present in newKeys that were not in oldKeys, in newKeys order.
-export function diffNewIds(oldKeys, newKeys) {
-  const seen = new Set(oldKeys);
-  return newKeys.filter((k) => !seen.has(k));
-}
-
 // Server-unread items the user has not read locally.
 export function unreadCount(items) {
   return items.filter((i) => i.unread && !i.localRead).length;
-}
-
-// One entry per provider+account, preserving first-seen order.
-export function groupByAccount(items) {
-  const groups = new Map();
-  for (const item of items) {
-    const key = `${item.provider}:${item.account}`;
-    if (!groups.has(key)) {
-      groups.set(key, { provider: item.provider, account: item.account, items: [] });
-    }
-    groups.get(key).items.push(item);
-  }
-  return [...groups.values()];
 }
 
 // One grouped toast per account: single subject, or count plus latest.

@@ -1,5 +1,5 @@
 // Sound settings plus the offscreen chime bridge.
-// Pure logic (shouldPlay, volume clamp, mute checks) lives here so it is
+// Pure logic (volume clamp, mute checks) lives here so it is
 // testable under Node. The chrome.* calls are isolated in
 // get/set helpers and playChime and degrade to safe no-ops where chrome
 // does not exist (Node tests stub globalThis.chrome with an in-memory
@@ -27,18 +27,6 @@ export const OFFSCREEN_DOCUMENT_PATH = "src/notify/offscreen.html";
 // Message type the offscreen document listens for. Volume-only payload.
 export const PLAY_CHIME_MESSAGE = "play-chime";
 
-// True only for an automatic poll with new mail and nothing silencing it.
-// manual: refresh triggered by the user (Task 5 never chimes there).
-// muted: master switch or every new-mail account muted per account.
-// dnd: OS do-not-disturb, where reported (no stable MV3 API, so callers
-// pass through whatever signal they have; default is undisturbed=false).
-export function shouldPlay({ manual, muted, dnd } = {}) {
-  if (manual) return false;
-  if (muted) return false;
-  if (dnd) return false;
-  return true;
-}
-
 // Clamp to 0..1. Non-numeric input falls back to the default volume.
 export function clampVolume(level) {
   if (typeof level !== "number" || Number.isNaN(level)) {
@@ -61,7 +49,7 @@ function storageLocal() {
   return globalThis.chrome?.storage?.local;
 }
 
-function withDefaults(stored) {
+export function normalizeSoundSettings(stored) {
   return {
     masterMuted: stored?.masterMuted ?? DEFAULT_SOUND_SETTINGS.masterMuted,
     volume: clampVolume(stored?.volume ?? DEFAULT_SOUND_SETTINGS.volume),
@@ -72,14 +60,14 @@ function withDefaults(stored) {
 // Read persisted settings merged over defaults. No-op defaults without chrome.
 export async function getSoundSettings() {
   const store = storageLocal();
-  if (!store) return withDefaults(undefined);
+  if (!store) return normalizeSoundSettings(undefined);
   const data = await store.get(SOUND_SETTINGS_KEY);
-  return withDefaults(data?.[SOUND_SETTINGS_KEY]);
+  return normalizeSoundSettings(data?.[SOUND_SETTINGS_KEY]);
 }
 
 async function saveSettings(settings) {
   const store = storageLocal();
-  const merged = withDefaults(settings);
+  const merged = normalizeSoundSettings(settings);
   if (!store) return merged;
   await store.set({ [SOUND_SETTINGS_KEY]: merged });
   return merged;

@@ -38,7 +38,6 @@ import {
 } from "../store/cache.js";
 import {
   unreadCount,
-  groupByAccount,
   buildToast,
   sanitizeError,
   persistCache,
@@ -47,7 +46,6 @@ import {
   readAccountState,
 } from "../notify/notify.js";
 import {
-  shouldPlay,
   isMuted,
   getSoundSettings,
   playChime,
@@ -78,10 +76,6 @@ let pollTail = Promise.resolve();
 const offlineByKey = new Set(); // accountKey -> last fetch failed with no HTTP status while offline
 
 export { accountKey };
-
-export function clampInterval(ms) {
-  return Math.min(MAX_POLL_MS, Math.max(MIN_POLL_MS, ms ?? DEFAULT_POLL_MS));
-}
 
 export function isEnabled(acct) {
   return acct.enabled !== false;
@@ -357,14 +351,14 @@ async function focusedProvider() {
   return null;
 }
 
-async function badgeFor(accounts, deps = {}) {
+async function badgeFor(accounts, deps = {}, inbox = getInbox()) {
   const enabled = new Set(
     accounts
       .filter((a) => isEnabled(a) && !signedOutByKey.has(accountKey(a)))
       .map(accountKey),
   );
   const count = unreadCount(
-    getInbox().filter((i) => enabled.has(accountKey(i))),
+    inbox.filter((i) => enabled.has(accountKey(i))),
   );
   await (deps.setBadge ?? defaultSetBadge)(count);
   return count;
@@ -374,8 +368,9 @@ export async function handleMarkRead(key, accounts, deps = {}) {
   await ready;
   return write(async () => {
     setLocalRead(key);
-    await persistCache(getInbox());
-    return { ok: true, badge: await badgeFor(accounts, deps) };
+    const inbox = getInbox();
+    await persistCache(inbox);
+    return { ok: true, badge: await badgeFor(accounts, deps, inbox) };
   });
 }
 
@@ -506,9 +501,10 @@ export async function handleMailboxAction(msg, deps = {}) {
         const replacement = { ...item, key: item.provider + ":" + encodeURIComponent(item.account) + ":" + result.id };
         if (msg.action === "undo") delete replacement.webLink;
         applyMailboxChange(msg.key, msg.action, replacement);
-        await persistCache(getInbox());
+        const inbox = getInbox();
+        await persistCache(inbox);
         await saveJournal(latest);
-        await badgeFor(accounts, deps);
+        await badgeFor(accounts, deps, inbox);
       });
       return current() ? { ok: true } : { ok: false, code: "check-mailbox" };
     } catch (error) {
@@ -526,8 +522,9 @@ export async function handleMailboxAction(msg, deps = {}) {
           // Remove only the verified absent card; keep the journal lock since
           // unread-feed absence does not establish a successful Trash move.
           applyMailboxChange(msg.key, "trash");
-          await persistCache(getInbox());
-          await badgeFor(accounts, deps);
+          const inbox = getInbox();
+          await persistCache(inbox);
+          await badgeFor(accounts, deps, inbox);
         });
       }
       return { ok: false, code: error.uncertain ? "check-mailbox" : error.code ?? "unavailable" };
@@ -556,14 +553,12 @@ async function runPoll(accounts, deps) {
       );
       await write(async () => {
         if (generation !== (accountGeneration.get(key) ?? 0)) return;
-        const old = new Set([
-          ...(seenByKey.get(key) ?? []),
-          ...getInbox().map((i) => i.key),
-        ]);
+        const before = getInbox();
+        const old = new Set([...(seenByKey.get(key) ?? []), ...before.map((i) => i.key)]);
         // Existing cache also establishes a baseline when upgrading.
         const baseline =
           baselineByKey.has(key) ||
-          getInbox().some((i) => accountKey(i) === key);
+          before.some((i) => accountKey(i) === key);
         if (result.items !== undefined) {
           reconcileAccount(acct, result.items, result.items.complete !== false);
           baselineByKey.add(key);
@@ -578,13 +573,14 @@ async function runPoll(accounts, deps) {
           );
         }
         pruneCache(now);
-        const fresh = getInbox().filter(
+        const inbox = getInbox();
+        const fresh = inbox.filter(
           (i) => accountKey(i) === key && !old.has(i.key),
         );
         newIds.push(...fresh.map((i) => i.key));
-        await persistCache(getInbox());
+        await persistCache(inbox);
         await storeAccountEntries([acct], new Map([[key, result]]), now);
-        badge = await badgeFor(accounts, deps);
+        badge = await badgeFor(accounts, deps, inbox);
         const eligible = fresh.filter((i) => i.unread && !i.localRead);
         const settings = await globalThis.chrome?.storage?.local?.get(
           "skipFocusedProvider",
@@ -606,19 +602,13 @@ async function runPoll(accounts, deps) {
           eligible.length &&
           !deps.dnd
         ) {
-          for (const group of groupByAccount(eligible))
-            await (deps.notify ?? sendNotification)(group, buildToast(group));
+          const group = { provider: acct.provider, account: acct.account, items: eligible };
+          await (deps.notify ?? sendNotification)(group, buildToast(group));
           try {
             const settings = await (
               deps.readSoundSettings ?? getSoundSettings
             )();
-            if (
-              shouldPlay({
-                manual: false,
-                muted: isMuted(settings, [key]),
-                dnd: false,
-              })
-            ) {
+            if (!isMuted(settings, [key])) {
               await (deps.playSound ?? playChime)(settings.volume);
             }
           } catch {

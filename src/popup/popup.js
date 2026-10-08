@@ -14,7 +14,7 @@ import { THEME_KEY, DEFAULT_THEME, validTheme, loadTheme, saveTheme } from "./th
 import { normalizeAccount, accountKey } from "../store/accounts.js";
 import { threadUrl, accountInboxUrl } from "./links.js";
 import { accountStatusLabel } from "../notify/notify.js";
-import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
+import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControlKeys } from "../notify/sound.js";
 
 (function () {
   "use strict";
@@ -40,9 +40,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   // Sound settings mirror the worker's storage shape
   // ({ masterMuted, volume, mutedAccounts }) so both sides agree.
   var sound = { masterMuted: false, volume: 0.5, mutedAccounts: {} };
+  var storageRevisions = new Map();
 
   function storageLocal() {
     return globalThis.chrome && chrome.storage ? chrome.storage.local : null;
+  }
+
+  function storageRevision(key) {
+    return storageRevisions.get(key) || 0;
   }
 
   function isUnread(item) {
@@ -83,7 +88,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (actionKey && pendingAccountActions.has(actionKey)) return;
     if (actionKey) {
       pendingAccountActions.add(actionKey);
-      renderAccounts();
       renderStatus();
     }
     if (button) {
@@ -120,7 +124,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     } finally {
       if (actionKey) {
         pendingAccountActions.delete(actionKey);
-        renderAccounts();
         renderStatus();
       }
       if (button) button.disabled = false;
@@ -343,17 +346,14 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
   function unreadCount(list) {
     return list.filter(isUnread).length;
   }
-  function countText(list) {
-    return unreadCount(list) + " unread";
-  }
-
   function renderHeader() {
     var keys = new Set(configuredAccounts.map(accountKey));
     var scoped = displayedItems().filter(function (item) { return keys.has(accountKey(item)); });
+    var unread = unreadCount(scoped);
     var el = document.getElementById("unread-count");
-    el.textContent = unreadCount(scoped) > 0 ? String(unreadCount(scoped)) : "";
-    el.title = unreadCount(scoped) + " unread";
-    el.setAttribute("aria-label", unreadCount(scoped) + " unread");
+    el.textContent = unread > 0 ? String(unread) : "";
+    el.title = unread + " unread";
+    el.setAttribute("aria-label", unread + " unread");
   }
 
   function renderPills() {
@@ -469,13 +469,18 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     });
     // The worker may remove/cache-read mail before reporting an uncertain result.
     // Retain a recovery card without writing optimistic state into storage.
+    var projectedKeys = new Set(projected.map(function (item) { return item.key; }));
     mailFeedback.forEach(function (feedback, key) {
-      if (feedback.action === "failed" && !pendingOpened.has(key) && !projected.some(function (item) { return item.key === key; }))
+      if (feedback.action === "failed" && !pendingOpened.has(key) && !projectedKeys.has(key)) {
         projected.push({ ...feedback.item });
+        projectedKeys.add(key);
+      }
     });
     stagedReads.forEach(function (staged, key) {
-      if (!projected.some(function (item) { return item.key === key; }))
+      if (!projectedKeys.has(key)) {
         projected.push({ ...staged.item, unread: false, localRead: false });
+        projectedKeys.add(key);
+      }
     });
     return projected;
   }
@@ -555,6 +560,18 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       if (error) record.error.textContent = error;
       else { record.error.remove(); record.error = null; }
     }
+  }
+  function activateCardToggle(event, card, toggle, key, keyboard) {
+    if (keyboard) {
+      keyboardMode = true;
+      event.preventDefault();
+    }
+    var current = currentMailItem(key);
+    if (!current) return;
+    commitOtherReads(current.key);
+    var expanded = toggleCard(card, toggle, current.key);
+    if (expanded && isUnread(current)) stageRead(current.key);
+    if (expanded) void loadMessageBody(current.key);
   }
   async function actOnMail(key, action, snapshot) {
     if (pendingMailActions.has(key)) return;
@@ -683,6 +700,13 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     var shown = visibleItems();
     var sections = configuredAccounts.filter(function (acct) { return filter === "all" || acct.provider === filter; });
     var sectionKeys = new Set(sections.map(accountKey));
+    var configuredKeys = new Set(configuredAccounts.map(accountKey));
+    var mailByAccount = new Map();
+    shown.forEach(function (item) {
+      var key = accountKey(item);
+      if (!mailByAccount.has(key)) mailByAccount.set(key, []);
+      mailByAccount.get(key).push(item);
+    });
     var activeReaderKey = Array.from(expandedKeys).find(function (key) {
       var record = cardToggles.get(key);
       return record?.card?.isConnected && sectionKeys.has(accountKey(record.item || currentMailItem(key) || {}));
@@ -694,7 +718,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (setupCta) setupCta.hidden = configuredAccounts.length !== 0;
     accountSections.forEach(function (group, key) {
       if (sectionKeys.has(key)) return;
-      if (!configuredAccounts.some(function (acct) { return accountKey(acct) === key; })) {
+      if (!configuredKeys.has(key)) {
         group.querySelectorAll(".card").forEach(function (card) {
           var mailKey = card.getAttribute("data-key");
           pauseStagedRead(mailKey);
@@ -735,17 +759,18 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
       var badge = document.createElement("span");
       badge.className = "badge";
       badge.textContent = acct.provider === "outlook" ? "Outlook" : "Gmail";
-      var mail = shown.filter(function (item) { return accountKey(item) === accountKey(acct); });
+      var mail = mailByAccount.get(acctKey) || [];
       // Freshness comes from the worker-persisted per-account stamp, so a
       // failed or paused account can never display a fresh check time.
       var acctState = { ...(accountState[accountKey(acct)] || {}) };
       if (typeof navigator !== "undefined" && navigator.onLine === false && !acctState.needsSignIn) acctState.offline = true;
       var count = document.createElement("span");
       count.className = "account-count";
-      count.textContent = String(unreadCount(mail));
-      count.title = countText(mail);
-      count.setAttribute("aria-label", countText(mail));
-      if (!unreadCount(mail)) count.dataset.zero = "";
+      var unread = unreadCount(mail);
+      count.textContent = String(unread);
+      count.title = unread + " unread";
+      count.setAttribute("aria-label", unread + " unread");
+      if (!unread) count.dataset.zero = "";
       top.append(badge);
       if (acct.enabled !== false && acctState.checkedAt && !acctState.needsSignIn && !acctState.offline && !acctState.backedOff && !acctState.stale && acctState.status === undefined) {
         var checked = document.createElement("span");
@@ -857,11 +882,8 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           updateCard(existing, item);
           return;
         }
-        var read = !isUnread(item);
-
         var card = document.createElement("li");
-        card.className = "card" + (read ? " read" : "");
-        card.setAttribute("data-key", item.key);
+        card.className = "card";
         card.addEventListener("mouseenter", function () {
           hoveredCards.add(item.key);
           pauseStagedRead(item.key);
@@ -874,14 +896,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         card.addEventListener("focusout", function () {
           queueMicrotask(function () { scheduleStagedRead(item.key); });
         });
-        if (!read) {
-          var dot = document.createElement("span");
-          dot.className = "unread-dot";
-          dot.setAttribute("role", "img");
-          dot.setAttribute("aria-label", "Unread");
-          card.appendChild(dot);
-        }
-
         // The toggle owns sender/subject/snippet; icon and Open buttons
         // stay siblings so nesting stays valid. Clicking elsewhere on the
         // card delegates to the toggle; expansion stages unread mail for the
@@ -892,11 +906,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         toggle.className = "card-toggle";
         toggle.setAttribute("role", "button");
         toggle.setAttribute("tabindex", "0");
-        toggle.dataset.subject = item.subject || "(no subject)";
-        toggle.setAttribute("aria-expanded", String(expandedKeys.has(item.key)));
-        toggle.setAttribute("aria-label", (expandedKeys.has(item.key) ? "Collapse: " : "Expand: ") + (item.subject || "(no subject)"));
-        if (expandedKeys.has(item.key)) card.classList.add("expanded");
-
         var top = document.createElement("span");
         top.className = "card-top";
         var topline = document.createElement("span");
@@ -904,7 +913,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
 
         var sender = document.createElement("span");
         sender.className = "card-sender";
-        sender.textContent = item.from || "Unknown sender";
         topline.appendChild(sender);
 
         // The footer reserves stable action space without shortening sender
@@ -922,7 +930,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           var isOpen = action === "open";
           button.dataset.mailAction = action;
           button.appendChild(actionIcon(action));
-          updateMailButton(button, item, action);
           mailButtons[action] = button;
           button.addEventListener("click", function (event) {
             event.stopPropagation();
@@ -948,25 +955,15 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         });
         var time = document.createElement("span");
         time.className = "card-time";
-        time.textContent = formatTime(item.date);
-        var openedTag = null;
-        if (item.unread === true && item.localRead === true) {
-          var openedTag = document.createElement("span");
-          openedTag.className = "opened-tag";
-          openedTag.textContent = "Opened here";
-          topline.appendChild(openedTag);
-        }
         topline.appendChild(time);
         top.appendChild(topline);
         toggle.appendChild(top);
         var subject = document.createElement("span");
         subject.className = "card-subject";
-        subject.textContent = item.subject || "(no subject)";
         toggle.appendChild(subject);
 
         var snippet = document.createElement("span");
         snippet.className = "card-snippet";
-        snippet.textContent = item.snippet || "";
         toggle.appendChild(snippet);
         card.appendChild(toggle);
         card.appendChild(icons);
@@ -976,34 +973,18 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
         body.setAttribute("role", "region");
         body.setAttribute("aria-label", "Full message");
         card.appendChild(body);
-        var record = { card: card, toggle: toggle, subjectLabel: item.subject || "(no subject)", item: item,
+        var record = { card: card, toggle: toggle,
           sender: sender, subjectElement: subject, snippet: snippet, time: time, topline: topline,
-          body: body, dot: card.querySelector(".unread-dot"), openedTag: openedTag,
+          body: body, dot: null, openedTag: null,
           buttons: mailButtons, error: null };
         cardToggles.set(item.key, record);
         if (expandedKeys.has(item.key)) showMessageBody(card, item.key);
-        toggle.addEventListener("click", function () {
-          // stageRead rerenders the list synchronously. Commit other staged
-          // cards first so this click cannot be lost when the target is moved
-          // out of the live document before the document click listener runs.
-          var current = currentMailItem(item.key);
-          if (!current) return;
-          commitOtherReads(current.key);
-          var expanded = toggleCard(card, toggle, current.key);
-          if (expanded && isUnread(current)) stageRead(current.key);
-          if (expanded) void loadMessageBody(current.key);
+        toggle.addEventListener("click", function (event) {
+          activateCardToggle(event, card, toggle, item.key, false);
         });
         toggle.addEventListener("keydown", function (event) {
-          if (event.key === "Enter" || event.key === " ") {
-            keyboardMode = true;
-            event.preventDefault();
-            var current = currentMailItem(item.key);
-            if (!current) return;
-            commitOtherReads(current.key);
-            var expanded = toggleCard(card, toggle, current.key);
-            if (expanded && isUnread(current)) stageRead(current.key);
-            if (expanded) void loadMessageBody(current.key);
-          }
+          if (event.key === "Enter" || event.key === " ")
+            activateCardToggle(event, card, toggle, item.key, true);
         });
         card.addEventListener("keydown", function (event) {
           if (event.key === "Escape" && card.classList.contains("expanded")) toggleCard(card, toggle, item.key, false);
@@ -1017,14 +998,7 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
           }
         }
         messageList.insertBefore(card, nextCard);
-        if (pendingMailActions.has(item.key)) card.setAttribute("aria-busy", "true");
-        if (mailErrors[item.key]) {
-          var error = document.createElement("p");
-          error.className = "card-error";
-          error.textContent = mailErrors[item.key];
-          card.appendChild(error);
-          record.error = error;
-        }
+        updateCard(record, item);
         if (focusedKey === item.key) {
           var restore = focusedToggle ? toggle : card.querySelector('[data-mail-action="' + focusedAction + '"]') || card.querySelector('[data-mail-action="open"]') || toggle;
           restore.focus();
@@ -1105,27 +1079,6 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     if (focusedKey && !list.contains(document.activeElement)) master.focus();
   }
 
-  function loadSoundAccounts() {
-    var store = storageLocal();
-    if (!store) {
-      configuredAccounts = [];
-      renderSound();
-      return;
-    }
-    Promise.resolve(store.get(ACCOUNTS_KEY)).then(function (data) {
-      var list = data ? data[ACCOUNTS_KEY] : null;
-      configuredAccounts = Array.isArray(list) ? list.map(normalizeAccount) : [];
-      render();
-    });
-  }
-
-  function loadSound() {
-    Promise.resolve(getSoundSettings()).then(function (next) {
-      sound = next;
-      renderSound();
-    });
-  }
-
   function render() {
     renderAccounts();
     renderHeader();
@@ -1140,35 +1093,72 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     renderList();
   }
 
-  function loadStatus() {
-    var store = storageLocal();
-    if (!store) {
-      accountState = {};
-      renderStatus();
-      return;
-    }
-    Promise.resolve(store.get(ACCOUNT_STATE_KEY)).then(function (data) {
-      var next = data ? data[ACCOUNT_STATE_KEY] : null;
-      accountState = next && typeof next === "object" ? next : {};
-      renderStatus();
+  function clearUnavailableReaders() {
+    var readerKeys = new Set([...stagedReads.keys(), ...messageBodies.keys(), ...expandedKeys]);
+    readerKeys.forEach(function (key) {
+      var item = cardToggles.get(key)?.item || currentMailItem(key);
+      var account = item && configuredAccounts.find(function (acct) { return accountKey(acct) === accountKey(item); });
+      if (!account || account.enabled === false) {
+        pauseStagedRead(key);
+        stagedReads.delete(key);
+        hoveredCards.delete(key);
+        purgeMessageBody(key);
+      }
     });
   }
 
+  function clearSignedOutReaders() {
+    var discardedBody = false;
+    var readerKeys = new Set([...messageBodies.keys(), ...expandedKeys]);
+    readerKeys.forEach(function (key) {
+      var item = cardToggles.get(key)?.item || currentMailItem(key);
+      if (item && accountState[accountKey(item)]?.signedOut) {
+        discardedBody = true;
+        pauseStagedRead(key);
+        stagedReads.delete(key);
+        hoveredCards.delete(key);
+        purgeMessageBody(key);
+      }
+    });
+    return discardedBody;
+  }
+
   function load() {
-    void syncMailActions();
     var store = storageLocal();
     if (!store) {
       items = [];
+      configuredAccounts = [];
+      accountState = {};
+      mailActions = {};
+      sound = normalizeSoundSettings();
       render();
       return;
     }
-    // Thread links carry the account address themselves, so only the mail
-    // cache is needed. Storage reads only, no network.
-    Promise.resolve(store.get(CACHE_KEY)).then(function (data) {
-      var cached = data ? data[CACHE_KEY] : null;
-      items = Array.isArray(cached) ? cached : [];
+    var keys = [CACHE_KEY, ACCOUNTS_KEY, ACCOUNT_STATE_KEY, "mailActions", SOUND_SETTINGS_KEY];
+    var revisions = new Map(keys.map(function (key) { return [key, storageRevision(key)]; }));
+    var actionRevision = mailActionsRevision;
+    Promise.resolve(store.get(keys)).then(function (data) {
+      if (storageRevision(CACHE_KEY) === revisions.get(CACHE_KEY)) {
+        var cached = data?.[CACHE_KEY];
+        items = Array.isArray(cached) ? cached : [];
+      }
+      if (storageRevision(ACCOUNTS_KEY) === revisions.get(ACCOUNTS_KEY)) {
+        var accounts = data?.[ACCOUNTS_KEY];
+        configuredAccounts = Array.isArray(accounts) ? accounts.map(normalizeAccount) : [];
+      }
+      if (storageRevision(ACCOUNT_STATE_KEY) === revisions.get(ACCOUNT_STATE_KEY)) {
+        var state = data?.[ACCOUNT_STATE_KEY];
+        accountState = state && typeof state === "object" ? state : {};
+      }
+      if (storageRevision("mailActions") === revisions.get("mailActions") && actionRevision === mailActionsRevision) {
+        mailActions = data?.mailActions || {};
+      }
+      if (storageRevision(SOUND_SETTINGS_KEY) === revisions.get(SOUND_SETTINGS_KEY))
+        sound = normalizeSoundSettings(data?.[SOUND_SETTINGS_KEY]);
+      clearUnavailableReaders();
+      clearSignedOutReaders();
       render();
-    });
+    }).catch(function () { render(); });
   }
 
   function showView(settings) {
@@ -1393,68 +1383,49 @@ import { getSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundControl
     }
     if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === "local" && changes) {
-          if (changes.pollIntervalMs) pollSettings.changed(changes.pollIntervalMs.newValue);
-          if (changes.mailActions) {
-            mailActionsRevision++;
-            mailActions = changes.mailActions.newValue || {};
-            renderList();
-            renderRecovery();
-          }
-          if (changes[THEME_KEY] && !themeWrites) applyTheme(changes[THEME_KEY].newValue);
-          if (changes[CACHE_KEY]) {
-            var next = changes[CACHE_KEY].newValue;
-            items = Array.isArray(next) ? next : [];
-            settleMailFeedback();
-            render();
-          }
-          if (changes[SOUND_SETTINGS_KEY]) {
-            var snext = changes[SOUND_SETTINGS_KEY].newValue;
-            if (snext) {
-              sound = snext;
-              renderSound();
-            }
-          }
-          if (changes[ACCOUNTS_KEY]) {
-            var anext = changes[ACCOUNTS_KEY].newValue;
-            configuredAccounts = Array.isArray(anext) ? anext.map(normalizeAccount) : [];
-            var readerKeys = new Set([...stagedReads.keys(), ...messageBodies.keys(), ...expandedKeys]);
-            readerKeys.forEach(function (key) {
-              var item = cardToggles.get(key)?.item || currentMailItem(key);
-              var account = item && configuredAccounts.find(function (acct) { return accountKey(acct) === accountKey(item); });
-              if (!account || account.enabled === false) {
-                pauseStagedRead(key);
-                stagedReads.delete(key);
-                hoveredCards.delete(key);
-                purgeMessageBody(key);
-              }
-            });
-            render();
-          }
-          if (changes[ACCOUNT_STATE_KEY]) {
-            var stnext = changes[ACCOUNT_STATE_KEY].newValue;
-            accountState = stnext && typeof stnext === "object" ? stnext : {};
-            var discardedBody = false;
-            var signedOutReaderKeys = new Set([...messageBodies.keys(), ...expandedKeys]);
-            signedOutReaderKeys.forEach(function (key) {
-              var item = cardToggles.get(key)?.item || currentMailItem(key);
-              if (item && accountState[accountKey(item)]?.signedOut) {
-                discardedBody = true;
-                pauseStagedRead(key);
-                stagedReads.delete(key);
-                hoveredCards.delete(key);
-                purgeMessageBody(key);
-              }
-            });
-            if (discardedBody) render();
-            else renderStatus();
-          }
+        if (area !== "local" || !changes) return;
+        Object.keys(changes).forEach(function (key) {
+          storageRevisions.set(key, storageRevision(key) + 1);
+        });
+        if (changes.pollIntervalMs) pollSettings.changed(changes.pollIntervalMs.newValue);
+        if (changes[THEME_KEY] && !themeWrites) applyTheme(changes[THEME_KEY].newValue);
+
+        var renderAll = Boolean(changes[CACHE_KEY] || changes[ACCOUNTS_KEY]);
+        var renderStatusOnly = false;
+        var renderActions = false;
+        var renderSoundOnly = Boolean(changes[SOUND_SETTINGS_KEY]);
+        if (changes[CACHE_KEY]) {
+          var next = changes[CACHE_KEY].newValue;
+          items = Array.isArray(next) ? next : [];
+        }
+        if (changes[ACCOUNTS_KEY]) {
+          var accounts = changes[ACCOUNTS_KEY].newValue;
+          configuredAccounts = Array.isArray(accounts) ? accounts.map(normalizeAccount) : [];
+        }
+        if (changes[ACCOUNT_STATE_KEY]) {
+          var state = changes[ACCOUNT_STATE_KEY].newValue;
+          accountState = state && typeof state === "object" ? state : {};
+          renderStatusOnly = true;
+        }
+        if (changes["mailActions"]) {
+          mailActionsRevision++;
+          mailActions = changes["mailActions"].newValue || {};
+          renderActions = true;
+        }
+        if (changes[SOUND_SETTINGS_KEY]) sound = normalizeSoundSettings(changes[SOUND_SETTINGS_KEY].newValue);
+        if (changes[CACHE_KEY]) settleMailFeedback();
+        if (changes[ACCOUNTS_KEY]) clearUnavailableReaders();
+        if (changes[ACCOUNT_STATE_KEY] && clearSignedOutReaders()) renderAll = true;
+
+        if (renderAll) render();
+        else {
+          if (renderStatusOnly) renderStatus();
+          else if (renderActions) renderList();
+          if (renderActions) renderRecovery();
+          if (renderSoundOnly) renderSound();
         }
       });
     }
-    loadSound();
-    loadSoundAccounts();
-    loadStatus();
     load();
   }
 

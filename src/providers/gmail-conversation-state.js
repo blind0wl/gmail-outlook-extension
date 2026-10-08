@@ -6,7 +6,7 @@ import { parseFeed } from './gmail.js';
 const validId = id => typeof id === 'string' && /^[a-f0-9]+$/i.test(id);
 const unknown = () => ({ recognized: false });
 
-function parseExactConversation(text, id) {
+function parseExactConversation(text, id, includeRows = false) {
   if (!validId(id)) return unknown();
   const decoded = decodeGmailReply(text);
   if (decoded.issue || decoded.payloads.length !== 1) return unknown();
@@ -35,13 +35,14 @@ function parseExactConversation(text, id) {
     if (!expected.has(memberId) || seen.has(memberId)) return unknown();
     seen.add(memberId);
   }
-  return {
+  const state = {
     recognized: true, conversationId: summary[1].toLowerCase(), memberIds: [...seen], messages: count,
     allTrash: members.every(row => row[9].includes('^k') && !row[9].includes('^i')),
     allInbox: members.every(row => row[9].includes('^i') && !row[9].includes('^k')),
     allRead: members.every(row => !row[9].includes('^u')),
     allUnread: members.every(row => row[9].includes('^u')),
   };
+  return includeRows ? { ...state, rows: payload[0] } : state;
 }
 
 export function parseGmailConversationState(text, id) {
@@ -91,8 +92,9 @@ export async function readGmailConversationMembers(account, session, id) {
 }
 
 export function parseGmailMessageBody(text, id) {
-  if (!parseExactConversation(text, id).recognized) return unknown();
-  const rows = decodeGmailReply(text).payloads[0][0];
+  const parsed = parseExactConversation(text, id, true);
+  if (!parsed.recognized) return unknown();
+  const rows = parsed.rows;
   const members = rows.filter(row => row[0] === 'ms');
   // Atom entries usually identify a member; a conversation target uses the
   // summary's latest member. Never concatenate unrelated conversation mail.
