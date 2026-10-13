@@ -83,7 +83,9 @@ sign in to Outlook again from the popup.
 - Opening a message in webmail records a local read in the extension without
   changing provider state. Expanding unread mail stages a provider read; it
   commits after five seconds away from the card or when clicking elsewhere.
-  Marking it unread during that grace period cancels the write.
+  Marking it unread during that grace period cancels the write. Clicking
+  **Mark as Read** sends the provider change immediately, so closing the popup
+  does not discard it.
 - Expanding a card loads its complete message. Plain text remains selectable;
   HTML is sanitized and shown in an isolated frame. Credential-free HTTPS
   images load automatically. Their hosts receive image requests and may track

@@ -449,6 +449,24 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
     renderList();
     scheduleStagedRead(key);
   }
+  function activateMailAction(key, action, button) {
+    var current = currentMailItem(key);
+    if (!current) return;
+    commitOtherReads(current.key);
+    if (button.getAttribute("aria-disabled") === "true") return;
+    if (action === "open") {
+      if (stagedReads.has(current.key)) cancelStagedRead(current.key);
+      void markRead(current.key);
+      openUrl(threadUrl(current));
+    } else if (action === "read" && stagedReads.has(current.key) && !isUnread(current)) {
+      cancelStagedRead(current.key);
+    } else {
+      // Explicit reads must reach the worker while the popup is still alive.
+      // Only automatic reads on expansion use the reversible grace period.
+      if (stagedReads.has(current.key)) cancelStagedRead(current.key);
+      void actOnMail(current.key, action === "read" && !isUnread(current) ? "unread" : action, current);
+    }
+  }
   function settleMailFeedback() {
     mailFeedback.forEach(function (feedback, key) {
       var current = items.find(function (item) { return item.key === key; });
@@ -957,33 +975,15 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
         ["open", "read", "trash"].forEach(function (action) {
           var button = document.createElement("button");
           button.type = "button";
-          // The read control is a toggle: unread mail sends read, mail marked
-          // read here can be cancelled before commitment. Gmail reversal is
-          // local during that grace period; provider unread remains blocked.
-          var isToggle = action === "read";
-          var isOpen = action === "open";
+          // Automatic reads can be cancelled during their grace period;
+          // an explicit read click sends the provider action immediately.
           button.dataset.mailAction = action;
           button.appendChild(actionIcon(action));
           mailButtons[action] = button;
           button.addEventListener("click", function (event) {
             event.stopPropagation();
             if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-            var current = currentMailItem(item.key);
-            if (!current) return;
-            commitOtherReads(current.key);
-            if (button.getAttribute("aria-disabled") === "true") return;
-            if (isOpen) {
-              if (stagedReads.has(current.key)) cancelStagedRead(current.key);
-              void markRead(current.key);
-              openUrl(threadUrl(current));
-            } else if (isToggle && stagedReads.has(current.key) && !isUnread(current)) {
-              cancelStagedRead(current.key);
-            } else if (isToggle && isUnread(current)) {
-              stageRead(current.key);
-            } else {
-              if (stagedReads.has(current.key)) cancelStagedRead(current.key);
-              void actOnMail(current.key, isToggle ? "unread" : action, current);
-            }
+            activateMailAction(item.key, action, button);
           });
           icons.appendChild(button);
         });
