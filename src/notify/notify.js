@@ -15,13 +15,44 @@ export function unreadCount(items) {
   return items.filter((i) => i.unread && !i.localRead).length;
 }
 
-// One grouped toast per account: single subject, or count plus latest.
+// One grouped toast per account, with sender and enough preview for context.
+// Native notification layout (including wrapping) belongs to the desktop.
+function notificationText(value) {
+  return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function previewLines(value) {
+  const text = notificationText(value);
+  if (!text) return [];
+  // Four readable preview lines; wrap at word boundaries and mark omitted text.
+  const lines = [];
+  let remaining = text;
+  while (remaining && lines.length < 4) {
+    if (remaining.length <= 64) {
+      lines.push(remaining);
+      break;
+    }
+    const space = remaining.lastIndexOf(" ", 64);
+    const end = space > 0 ? space : 64;
+    lines.push(remaining.slice(0, end));
+    remaining = remaining.slice(end).trimStart();
+    if (lines.length === 4 && remaining) lines[3] += "…";
+  }
+  return lines;
+}
+
 export function buildToast(group) {
   const n = group.items.length;
-  const latest = group.items[0]?.subject || "(no subject)";
+  const item = group.items[0];
+  const latest = notificationText(item?.subject) || "(no subject)";
+  const sender = notificationText(item?.from);
   return {
     title: `${group.account} (${group.provider})`,
-    message: n === 1 ? latest : `${n} new messages — latest: ${latest}`,
+    message: [
+      n === 1 ? latest : `${n} new messages — latest: ${latest}`,
+      ...(sender ? [`From: ${sender}`] : []),
+      ...previewLines(item?.snippet),
+    ].join("\n"),
   };
 }
 
