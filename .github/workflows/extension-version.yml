@@ -1,0 +1,61 @@
+name: Extension version
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: extension-version-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  ensure-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse an unbumped fork pull request
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          echo "::error::Fork pull requests cannot be auto-bumped. Change the version in manifest.json before opening the pull request."
+          exit 1
+
+      - name: Check out the pull request branch
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Compare the base and head versions
+        id: compare
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          base_version=$(git show "origin/${BASE_REF}:manifest.json" | node -e 'let text=""; process.stdin.on("data", (chunk) => text += chunk).on("end", () => console.log(JSON.parse(text).version))')
+          head_version=$(node scripts/version.mjs show)
+          echo "base=${base_version}" >> "$GITHUB_OUTPUT"
+          echo "head=${head_version}" >> "$GITHUB_OUTPUT"
+          if [ "$base_version" = "$head_version" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set the version for this pull request
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && steps.compare.outputs.changed == 'false' }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          node scripts/version.mjs bump --pr "$PR_NUMBER"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git commit -m "chore: bump extension version for PR #${PR_NUMBER}"
+          git push origin "HEAD:${HEAD_REF}"
