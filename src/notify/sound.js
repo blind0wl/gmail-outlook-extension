@@ -116,6 +116,17 @@ export function soundControlKeys(configured, cached) {
 
 let offscreenCreation = null;
 
+// Offscreen creation and messaging are platform calls with no built-in
+// deadline. A stalled one must not hold the poll cycle or a copy request.
+function withDeadline(promise, ms, fallback) {
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([Promise.resolve(promise).catch(() => fallback), deadline])
+    .finally(() => clearTimeout(timer));
+}
+
 async function offscreenDocumentExists(offscreen) {
   try {
     if (typeof offscreen?.hasDocument === "function")
@@ -145,11 +156,11 @@ async function ensureOffscreenDocument() {
   offscreenCreation = (async () => {
     if (await offscreenDocumentExists(offscreen)) return true;
     try {
-      await offscreen.createDocument({
+      await withDeadline(offscreen.createDocument({
         url: OFFSCREEN_DOCUMENT_PATH,
         reasons: ["AUDIO_PLAYBACK", "CLIPBOARD"],
         justification: "Play a short mail chime and copy a sign-in code when requested.",
-      });
+      }), 4_000, null);
       return true;
     } catch {
       // Two simultaneous callers can race to create the one shared page.
@@ -177,7 +188,7 @@ export async function playChime(volume) {
   }
   try {
     await ensureOffscreenDocument();
-    await runtime.sendMessage({ type: PLAY_CHIME_MESSAGE, volume: clampVolume(level) });
+    await withDeadline(runtime.sendMessage({ type: PLAY_CHIME_MESSAGE, volume: clampVolume(level) }), 4_000, null);
     return true;
   } catch {
     return false;
@@ -193,10 +204,10 @@ export async function copyAuthCodeToClipboard(code, { isCurrent = () => true } =
   try {
     if (!(await ensureOffscreenDocument())) return false;
     if (!isCurrent()) return false;
-    const result = await runtime.sendMessage({
+    const result = await withDeadline(runtime.sendMessage({
       type: COPY_AUTH_CODE_MESSAGE,
       code,
-    });
+    }), 4_000, null);
     return result?.ok === true;
   } catch {
     return false;

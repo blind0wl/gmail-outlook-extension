@@ -1,6 +1,6 @@
 import { readGmailMessageBody } from "../providers/gmail-conversation-state.js";
 import { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS, normalizePollInterval, validPollInterval } from "../store/poll-settings.js";
-import { gmailSession, mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
+import { gmailReadSession, clearGmailSessionCache, mutateGmailConversation, mutateOutlookMessage, inspectOutlookMessage } from "../providers/mail-actions.js";
 import { inspectGmailTrash } from "../providers/gmail-trash-verification.js";
 import { messageIdOf } from "../popup/links.js";
 // Service worker entry. Owns polling, cache writes, badge, and toasts.
@@ -77,6 +77,10 @@ export const ALARM_NAME = "mail-poll";
 export { DEFAULT_POLL_MS, MIN_POLL_MS, MAX_POLL_MS };
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 10 * 60_000;
+// One slow account must not hold the code pipeline for every other account
+// past the ten-minute freshness window. Provider fetches already time out at
+// fifteen seconds; this is the outer bound for token and storage waits.
+const POLL_ACCOUNT_TIMEOUT_MS = 30_000;
 
 // Account shape: { provider: "gmail"|"outlook", account: "a@b.c", enabled? }.
 // Absent `enabled` means enabled.
@@ -95,6 +99,16 @@ function write(op) {
   return run;
 }
 let pollTail = Promise.resolve();
+let pollInFlight = null;
+let pollQueued = null;
+
+function withDeadline(promise, ms, onTimeout) {
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(onTimeout()), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
 const offlineByKey = new Set(); // accountKey -> last fetch failed with no HTTP status while offline
 const AUTH_CODE_NOTIFICATION_PREFIX = "auth-code:";
 const DEMO_SEQUENCE_INTERVAL_SECONDS = 30;
@@ -358,11 +372,31 @@ export async function pollAccount(acct, deps) {
 // per account with new mail (never on manual refresh), persist the cache.
 // Returns a summary; never throws.
 export function pollAll(accounts, deps = {}) {
-  // Serialize complete poll cycles. Account commits use the shared writer,
-  // so a slow account cannot block mark-read or completed accounts.
+  if (pollInFlight) {
+    // An alarm that lands during a slow cycle must not queue another full
+    // cycle behind it. The in-flight cycle already covers the same mailbox.
+    if (!deps.manual) return pollInFlight;
+    // A person asked for a refresh. Run exactly one follow-up after the
+    // current cycle, even when several refreshes arrive together.
+    if (!pollQueued) {
+      const after = () => {
+        pollQueued = null;
+        return pollAll(accounts, deps);
+      };
+      pollQueued = pollInFlight.then(after, after);
+      pollQueued.catch(() => {});
+    }
+    return pollQueued;
+  }
   const run = pollTail.then(() => runPoll(accounts, deps));
   pollTail = run.catch(() => {});
-  return run;
+  const settled = run.then(
+    (value) => { pollInFlight = null; return value; },
+    (error) => { pollInFlight = null; throw error; },
+  );
+  pollInFlight = settled;
+  settled.catch(() => {});
+  return settled;
 }
 
 async function focusedProvider() {
@@ -584,8 +618,12 @@ async function runPoll(accounts, deps) {
       let candidateMail = [];
       let candidateCodeOnlyKeys = [];
       let establishedBaseline = false;
-      const result = await pollAccount(acct, { ...deps, now }).catch(
-        (error) => ({ key, error: sanitizeError(error, acct) }),
+      const result = await withDeadline(
+        pollAccount(acct, { ...deps, now }).catch(
+          (error) => ({ key, error: sanitizeError(error, acct) }),
+        ),
+        POLL_ACCOUNT_TIMEOUT_MS,
+        () => ({ key, error: { code: "poll-timeout", reason: "timeout" } }),
       );
       await write(async () => {
         if (generation !== (accountGeneration.get(key) ?? 0)) return;
@@ -818,14 +856,25 @@ function notificationIconUrl() {
 export function sendNotification(group, toast) {
   const chromeNotify = globalThis.chrome?.notifications;
   if (!chromeNotify) return Promise.resolve();
-  const result = chromeNotify.create(`${accountKey(group)}:${Date.now()}`, {
-    type: "basic",
-    silent: true,
-    iconUrl: notificationIconUrl(),
-    title: toast.title,
-    message: toast.message,
-  });
-  return result?.catch?.(() => {}) ?? Promise.resolve();
+  let result;
+  try {
+    result = chromeNotify.create(`${accountKey(group)}:${Date.now()}`, {
+      type: "basic",
+      silent: true,
+      iconUrl: notificationIconUrl(),
+      title: toast.title,
+      message: toast.message,
+    });
+  } catch {
+    return Promise.resolve();
+  }
+  // The platform notification service can stall without resolving. It is UI,
+  // never part of the mail or code pipeline, so bound it and move on.
+  return withDeadline(
+    Promise.resolve(result).catch(() => {}),
+    4_000,
+    null,
+  );
 }
 
 function authCodeNotificationId() {
@@ -864,7 +913,7 @@ async function createAuthCodeNotification(item, { copied, expiresAt, isCurrent =
       await removeNotificationMapping(id);
       return;
     }
-    await notifications.create(id, details);
+    await withDeadline(notifications.create(id, details), 4_000, null);
     if (!isCurrent()) {
       await notifications.clear?.(id);
       await removeNotificationMapping(id);
@@ -877,12 +926,12 @@ async function createAuthCodeNotification(item, { copied, expiresAt, isCurrent =
 
 async function updateAuthCodeNotification(id, copied) {
   try {
-    await globalThis.chrome?.notifications?.update?.(id, {
+    await withDeadline(globalThis.chrome?.notifications?.update?.(id, {
       message: copied
         ? "Your sign-in code is ready to paste."
         : "Could not copy the sign-in code. Try again from the inbox.",
       buttons: copied ? [{ title: "Copy again" }] : [{ title: "Try again" }],
-    });
+    }), 4_000, null);
   } catch {
     /* The inbox still shows the current copy action. */
   }
@@ -1140,12 +1189,16 @@ export function handleDemoClear() {
 function defaultSetBadge(count) {
   const action = globalThis.chrome?.action;
   if (!action) return Promise.resolve();
-  return Promise.all([
-    action.setBadgeText({ text: count > 0 ? String(count) : "" }),
-    action.setBadgeBackgroundColor({ color: "#1a73e8" }),
-  ])
-    .then(() => {})
-    .catch(() => {});
+  let pending;
+  try {
+    pending = Promise.all([
+      action.setBadgeText({ text: count > 0 ? String(count) : "" }),
+      action.setBadgeBackgroundColor({ color: "#1a73e8" }),
+    ]);
+  } catch {
+    return Promise.resolve();
+  }
+  return withDeadline(pending.then(() => {}).catch(() => {}), 4_000, null);
 }
 
 // ---- real token wiring (Task 6 flows, silent from the worker) ----
@@ -1530,9 +1583,12 @@ export async function handleMessageBody(msg, deps = {}) {
     let body;
     if (deps.readBody) body = await deps.readBody(acct, id);
     else if (acct.provider === "gmail") {
-      const session = await gmailSession(acct.account);
+      const session = await gmailReadSession(acct.account);
       if (!current()) return { ok: false, code: "sign-in" };
       body = await readGmailMessageBody(acct.account, session, id);
+      // A cached session key can go stale after a Gmail session rotation. Drop
+      // it so Retry resolves a fresh slot and key instead of repeating this one.
+      if (!body) clearGmailSessionCache(acct.account);
     } else {
       const tokens = buildTokenProvider(accounts);
       let token = await tokens.getToken(acct);
@@ -1615,6 +1671,7 @@ export async function handleMessage(msg, deps = {}) {
   const acct = accounts.find((a) => accountKey(a) === key);
   if (!acct) return { ok: false };
   if (msg.type === "add-account" || msg.type === "sign-in") {
+    clearGmailSessionCache(acct.account);
     const result = await handleSignIn(accounts, acct, deps);
     return {
       ok: !result.error && !result.needsSignIn && !result.offline,
@@ -1623,6 +1680,7 @@ export async function handleMessage(msg, deps = {}) {
     };
   }
   accountGeneration.set(key, (accountGeneration.get(key) ?? 0) + 1);
+  clearGmailSessionCache(acct.account);
   signedOutByKey.add(key);
   markNeedsSignIn(acct);
   await clearAuthCodesForAccount(acct);
