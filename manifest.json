@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gmail plus Outlook",
-  "version": "0.1.0",
+  "version": "0.1.43",
   "description": "One popup for Gmail and Outlook.com mail, local only.",
   "permissions": [
     "identity",
