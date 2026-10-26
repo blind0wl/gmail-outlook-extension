@@ -50,8 +50,27 @@ export async function mutateOutlookMessage(token, id, action, folder = 'inbox', 
   } catch { throw new MailActionError('check-mailbox', undefined, true); }
 }
 
-// Gmail's private session protocol is deliberately isolated. Resolve slots
-// afresh on every operation; never use a cached slot across browser sign-ins.
+// Gmail's private session protocol is deliberately isolated. Writes resolve
+// slots afresh; read-only body fetches may reuse the last verified session for
+// a minute so opening a second message does not repeat the slot and key reads.
+const READ_SESSION_TTL_MS = 60_000;
+const readSessions = new Map();
+
+export function clearGmailSessionCache(account) {
+  if (account === undefined) readSessions.clear();
+  else readSessions.delete(String(account).toLowerCase());
+}
+
+export async function gmailReadSession(account) {
+  const key = String(account).toLowerCase();
+  const cached = readSessions.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.session;
+  if (cached) readSessions.delete(key);
+  const session = await gmailSession(account);
+  readSessions.set(key, { session, expiresAt: Date.now() + READ_SESSION_TTL_MS });
+  return session;
+}
+
 export async function gmailSession(account, forUndo = false) {
   let unavailable = false;
   for (let slot = 0; slot < 10; slot++) {

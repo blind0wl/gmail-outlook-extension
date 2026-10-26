@@ -272,6 +272,17 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
         }));
       } else body.textContent = state.text || "This message has no text content.";
     } else {
+      // The inbox cache already holds the preview. Show it immediately so the
+      // open feels instant while the provider body is still in flight.
+      if (state?.loading) {
+        var previewItem = currentMailItem(key);
+        if (previewItem?.snippet) {
+          var preview = document.createElement("p");
+          preview.className = "body-preview";
+          preview.textContent = previewItem.snippet;
+          body.appendChild(preview);
+        }
+      }
       var status = document.createElement("p");
       status.setAttribute("role", "status");
       status.textContent = state?.loading ? "Loading full message…" : "Could not load the full message.";

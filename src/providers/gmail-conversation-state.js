@@ -59,7 +59,7 @@ async function read(url) {
   return response.text();
 }
 
-async function readConversation(account, session, id, parse) {
+async function readConversation(account, session, id, parse, { verifyOwnership = true } = {}) {
   if (!validId(id)) return null;
   try {
     // GmailJS documents the old exact-conversation format and cs/ms fields:
@@ -72,6 +72,11 @@ async function readConversation(account, session, id, parse) {
     });
     const state = parse(await read(url), id);
     if (!state.recognized) return null;
+    // The session that carries the slot and ik key was ownership-checked by
+    // gmailSession/gmailReadSession. A body read is a GET with no mutation, so
+    // verifying the account again here only adds a round trip to the open path.
+    // Mailbox mutations keep both checks.
+    if (!verifyOwnership) return state;
     const slot = Number(/\/u\/(\d+)\//.exec(session.base)[1]);
     const ownership = parseFeed(await read(session.base + 'feed/atom'), slot);
     if (ownership.account !== account.toLowerCase()) return null;
@@ -87,8 +92,8 @@ export async function verifyGmailConversationState(account, session, id, action)
   return !!state && (action === 'trash' ? state.allTrash : action === 'undo' ? state.allInbox : action === 'unread' ? state.allUnread : state.allRead);
 }
 
-export async function readGmailConversationMembers(account, session, id) {
-  return readConversation(account, session, id, parseExactConversation);
+export async function readGmailConversationMembers(account, session, id, options) {
+  return readConversation(account, session, id, parseExactConversation, options);
 }
 
 export function parseGmailMessageBody(text, id) {
@@ -108,5 +113,7 @@ export function parseGmailMessageBody(text, id) {
 }
 
 export async function readGmailMessageBody(account, session, id) {
-  return readConversation(account, session, id, parseGmailMessageBody);
+  return readConversation(account, session, id, parseGmailMessageBody, {
+    verifyOwnership: false,
+  });
 }
