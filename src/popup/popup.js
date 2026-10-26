@@ -1296,6 +1296,10 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
   }
 
   function init() {
+    var versionNode = document.getElementById("extension-version");
+    if (versionNode && globalThis.chrome?.runtime?.getManifest) {
+      versionNode.textContent = "Version " + chrome.runtime.getManifest().version;
+    }
     // Reconcile hover from live pointer targets after cache renders replace cards.
     document.addEventListener("pointermove", function (event) {
       var key = event.target?.closest?.('.card')?.dataset.key;

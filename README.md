@@ -110,11 +110,26 @@ sign in to Outlook again from the popup.
 
 ## Run the local tests
 
-Node.js is needed only to run the unit tests. From the extension folder:
+Node.js is needed only to run the unit tests and the version script. From the
+extension folder:
 
 ```sh
 node --test test/*.test.mjs
 ```
+
+## Versioning
+
+Every pull request changes the `version` in `manifest.json`. The **Extension
+version** workflow sets it to `<major>.<minor>.<pull request number>` when a
+pull request is opened without a version change. A version set by hand is left
+alone. For a local branch, run:
+
+```sh
+node scripts/version.mjs bump --pr <number>
+```
+
+The popup shows the version at the bottom of Settings, and Chrome shows it on
+the extension card.
 
 ## Acknowledgements
 
