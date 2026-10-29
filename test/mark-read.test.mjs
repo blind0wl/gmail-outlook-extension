@@ -23,7 +23,7 @@ function popup(items, sendMessage) {
     renderHeader = renderList = renderRecovery = function () {};
     syncMailActions = async function () {};
     setStatus = function () {};
-    globalThis.popup = { activateMailAction, stageRead, displayedItems,
+    globalThis.popup = { activateMailAction, stageRead, displayedItems, toggleCard,
       stagedReads, pendingMailActions, mailErrors };
   `;
   vm.runInContext(popupSource.replace(/^import .*;\n/gm, "").replace(/\}\)\(\);\s*$/, hooks + "})();"), context);
@@ -86,6 +86,27 @@ test("automatic staged reads can still be cancelled without a provider write", (
   assert.equal(ui.timers.size, 0);
   assert.equal(ui.displayedItems()[0].unread, true);
   assert.equal(requests.length, 0);
+});
+
+test("collapsing an opened email sends its staged read", () => {
+  const item = messages[0];
+  const requests = [];
+  const ui = popup([item], (request) => { requests.push(request); return new Promise(() => {}); });
+  const classes = new Set();
+  const card = { classList: {
+    contains: (name) => classes.has(name),
+    remove: (name) => classes.delete(name),
+    toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)),
+  } };
+  const toggle = { dataset: {}, setAttribute() {} };
+  ui.toggleCard(card, toggle, item.key, true);
+  ui.stageRead(item.key);
+  assert.equal(requests.length, 0);
+  ui.toggleCard(card, toggle, item.key, false);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].action, "read");
+  assert.equal(ui.stagedReads.size, 0);
+  assert.equal(ui.displayedItems().length, 0);
 });
 
 test("worker completes and persists explicit reads after the popup is discarded", async () => {

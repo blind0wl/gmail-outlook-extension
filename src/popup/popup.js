@@ -349,6 +349,8 @@ import { normalizeSoundSettings, setMuted, setVolume, SOUND_SETTINGS_KEY, soundC
     cardToggles.set(key, record);
     card.classList.toggle("expanded", on);
     toggle.setAttribute("aria-expanded", String(on));
+    // Collapsing an opened email finishes reading it.
+    if (!on) commitStagedRead(key);
     return on;
   }
 
