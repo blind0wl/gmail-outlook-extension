@@ -19,7 +19,11 @@
     "https://login.microsoftonline.com/*"
   ],
   "action": {
-    "default_popup": "src/popup/popup.html"
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "src/icons/toolbar-16.png",
+      "32": "src/icons/toolbar-32.png"
+    }
   },
   "icons": {
     "16": "src/notify/icon.png",
