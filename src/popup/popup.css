@@ -112,6 +112,14 @@ input::placeholder { color: var(--muted); opacity: 1; }
 .card-icons { position: absolute; top: 5px; right: 6px; display: flex; gap: 1px; padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); visibility: hidden; }
 .card.read .card-icons { background: var(--bg); }
 .card:hover .card-icons, .card:focus-within .card-icons { visibility: visible; }
+/* While reading, actions stay pinned to the top of the list as the email scrolls. */
+.card.expanded { display: grid; grid-template-rows: repeat(4, auto); }
+.card.expanded > * { grid-column: 1; }
+.card.expanded .card-toggle { grid-row: 1; }
+.card.expanded .card-body { grid-row: 2; }
+.card.expanded .auth-code-copy-row { grid-row: 3; }
+.card.expanded .card-error { grid-row: 4; }
+.card.expanded .card-icons { grid-row: 1 / -1; position: sticky; top: 4px; z-index: 1; align-self: start; justify-self: end; margin: -6px -8px 0 0; visibility: visible; }
 .card-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; min-height: 28px; padding: 6px; background: transparent; border: 1px solid transparent; border-radius: 7px; color: var(--muted); }
 .card-icon:hover:not([aria-disabled="true"]) { background: var(--hover); color: var(--text); border-color: transparent; }
 .card-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
