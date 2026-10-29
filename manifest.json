@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gmail plus Outlook",
-  "version": "0.1.44",
+  "version": "0.1.45",
   "description": "One popup for Gmail and Outlook.com mail, local only.",
   "permissions": [
     "identity",
@@ -19,7 +19,11 @@
     "https://login.microsoftonline.com/*"
   ],
   "action": {
-    "default_popup": "src/popup/popup.html"
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "src/icons/toolbar-16.png",
+      "32": "src/icons/toolbar-32.png"
+    }
   },
   "icons": {
     "16": "src/notify/icon.png",
