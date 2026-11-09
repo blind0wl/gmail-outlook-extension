@@ -10,7 +10,7 @@ export function safeMessageUrl(value) {
   } catch { return null; }
 }
 
-function safeStyle(value) {
+export function safeStyle(value) {
   return value.split(';').flatMap(declaration => {
     const colon = declaration.indexOf(':');
     if (colon < 0) return [];
@@ -18,7 +18,8 @@ function safeStyle(value) {
     const value = declaration.slice(colon + 1).trim();
     // Keep typography/table styling, never URLs, escapes, positioning or code.
     if (!STYLES.has(name) || !/^[#\w\s.,()%+\-"']+$/.test(value)
-      || /url|expression|image|var\s*\(|behavior/i.test(value)) return [];
+      || /url|expression|image|var\s*\(|behavior/i.test(value)
+      || /\d\s*[sld]?v(?:h|w|min|max|b|i)\b/i.test(value)) return [];
     return [name + ':' + value];
   }).join(';');
 }
